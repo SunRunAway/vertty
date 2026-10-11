@@ -48,6 +48,14 @@ enum GitProbe {
         }
     }
 
+    /// The repository's `origin` remote URL, as configured.
+    static func origin(_ path: String) -> String? {
+        guard FileManager.default.fileExists(atPath: path),
+              let r = Proc.run("/usr/bin/git", ["-C", path, "config", "--get", "remote.origin.url"], timeout: 5),
+              r.status == 0 else { return nil }
+        return r.stdout.nonEmpty
+    }
+
     private static func realpath(_ path: String) -> String {
         (path as NSString).standardizingPath.withCString { cpath in
             guard let resolved = Darwin.realpath(cpath, nil) else { return (path as NSString).standardizingPath }

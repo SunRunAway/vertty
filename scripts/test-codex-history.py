@@ -27,6 +27,11 @@ support = root / "support"
 snapshot = root / "snapshot"
 for directory in (home, project, support, snapshot):
     directory.mkdir()
+origin = "https://example.com/fixture.git"
+subprocess.run(["git", "init", "-q", str(project)], check=True)
+subprocess.run(["git", "-C", str(project), "remote", "add", "origin", origin], check=True)
+# An existing Codex worktree folder that `git worktree list` no longer knows about.
+(home / "worktrees" / "ab12" / project.name).mkdir(parents=True)
 
 db_path = home / "state_5.sqlite"
 with sqlite3.connect(db_path) as db:
@@ -34,11 +39,30 @@ with sqlite3.connect(db_path) as db:
     db.execute("""CREATE TABLE threads (
         id TEXT PRIMARY KEY, cwd TEXT, name TEXT, title TEXT, git_branch TEXT,
         updated_at INTEGER, rollout_path TEXT, archived INTEGER, source TEXT,
-        thread_source TEXT, preview TEXT)""")
-    for index in range(2):
-        db.execute("INSERT INTO threads VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'cli', 'user', 'prompt')",
-                   (str(uuid.uuid4()), str(project), f"Codex fixture {index}", "prompt", "main",
-                    int(time.time()) - index, str(root / f"rollout-{index}.jsonl")))
+        thread_source TEXT, preview TEXT, git_origin_url TEXT)""")
+    # Two sessions in the project, two of its repository in removed worktrees (one
+    # in Codex's own worktree folder), and two that belong elsewhere.
+    fixtures = [
+        (project, "Codex fixture 0", origin), (project, "Codex fixture 1", origin),
+        (home / "worktrees" / "ab12" / project.name, "Codex worktree fixture", origin),
+        (root / "removed-worktree", "Removed worktree fixture", origin),
+        (project / "sub", "Subdirectory fixture", origin),
+        (root / "other-removed", "Other repository fixture", "https://example.com/other.git"),
+    ]
+    ids = [str(uuid.uuid4()) for _ in fixtures]
+    for index, (cwd, name, url) in enumerate(fixtures):
+        db.execute("INSERT INTO threads VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'cli', 'user', 'prompt', ?)",
+                   (ids[index], str(cwd), name, "prompt", "main", int(time.time()) - index,
+                    str(root / f"rollout-{index}.jsonl"), url))
+with sqlite3.connect(home / "thread_history_1.sqlite") as history:
+    history.execute("""CREATE TABLE thread_items (
+        thread_id TEXT, turn_id TEXT, item_id TEXT, rollout_ordinal INTEGER,
+        created_at_ms INTEGER, item_json TEXT, item_type TEXT)""")
+    for index, text in [(1, "first ask"), (1, 'find the "Needle"\nhere'), (3, 'a "needle" in a removed worktree'),
+                        (5, 'a "needle" elsewhere')]:
+        item = {"type": "userMessage", "content": [{"type": "text", "text": text}]}
+        history.execute("INSERT INTO thread_items VALUES (?, 't', ?, ?, 0, ?, 'userMessage')",
+                        (ids[index], str(uuid.uuid4()), len(text), json.dumps(item, ensure_ascii=False)))
 (support / "state.json").write_text(json.dumps({
     "projects": [{"id": str(uuid.uuid4()), "name": "Fixture", "path": str(project), "expanded": True}],
     "tabs": [],
@@ -67,6 +91,16 @@ with log_path.open("w") as log:
         wait_for(lambda: all(f"Codex fixture {i}" in state() for i in range(2)),
                  "initial Codex history not loaded")
         print("PASS initial history", flush=True)
+        listed = state().split("history[Fixture]: ", 1)[1].split("\n", 1)[0]
+        assert "Codex worktree fixture" in listed and "Removed worktree fixture" in listed, listed
+        assert "Subdirectory fixture" not in listed and "Other repository fixture" not in listed, listed
+        print("PASS removed worktrees of the repository listed", flush=True)
+        (snapshot / "input.txt").write_text('search "needle"\n')
+        wait_for(lambda: 'prompts[Fixture] "needle":' in state(), "prompt search not run")
+        prompts = state().split('prompts[Fixture] "needle": ', 1)[1].split("\n", 1)[0]
+        assert f'{ids[1]}=find the [\"Needle\"] here' in prompts, prompts
+        assert ids[3] in prompts and ids[5] not in prompts and ids[0] not in prompts, prompts
+        print("PASS prompt search", flush=True)
         # No explicit refresh: WAL writes must reach both history and an open search.
         (snapshot / "input.txt").write_text("search\n")
         wait_for(lambda: "search[Fixture]:" in state(), "search not loaded")

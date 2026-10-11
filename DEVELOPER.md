@@ -23,8 +23,14 @@ Codex 每张卡片跑的是 `vhostty-codex -c tui.terminal_title=…`（新建�
 - Codex 不能预先指定会话 ID，而且 TUI 只是共享后台服务（daemon）的客户端，进程上看不出它在跑哪个会话。所以 Vhostty 用 `-c` 把卡片里 Codex 的终端标题设成 `["activity","thread-title","thread-id"]`，卡片从自己的终端标题里读 ID：`thread-id` 被截成前 29 个字符加 `...`，一直都在；会话还没起名时，`thread-title` 显示完整 ID。
 - Codex 在发出第一条消息时才保存会话，没保存的会话不能 `codex resume`。所以读到的 ID（或前缀）先记在 `codexThreadID`，等 Codex 的会话索引 `~/.codex/state_<n>.sqlite` 的 `threads` 表里有且只有一个会话以它开头，才把那个会话的完整 ID 作为卡片的会话 ID。在 Codex 里用 `/new`、`/resume` 换了会话，标题里的 ID 变了，卡片也跟着换。
 - 不注入 Codex hooks（Codex 的 hooks 要用户手动信任，而且在 daemon 里运行，拿不到卡片的环境变量）。状态来自终端标题：有转圈就是工作中。启动和恢复时 Codex 也会转一会儿，这一段不算一轮工作。
-- 历史会话、标题、分支也来自 `threads` 表（只列用户自己发起的会话，不含子代理、自动化和已归档的）。
+- 历史会话、标题、分支也来自 `threads` 表（只列用户自己发起的会话，不含子代理、自动化和已归档的）。除了 cwd 是项目目录或现存 worktree 的会话，同一仓库（`git_origin_url` 和项目的 origin 一致）里 worktree 已删除的会话也算：cwd 在 Codex 自己的 worktree 目录 `$CODEX_HOME/worktrees/<id>/<项目目录名>` 下，或者 cwd 已经不存在。项目的子目录算别的项目，不计入。
 - Codex 的数据目录是 `CODEX_HOME`（默认 `~/.codex`）。卡片里的 Codex 由交互式登录 shell 启动，所以 Vhostty 启动时也用 `$SHELL -l -i -c` 读这个变量。
+
+### 历史会话的范围和搜索
+
+Claude 的历史来自项目自己的会话记录目录、`git worktree list` 里每个 worktree 的目录，以及所有 `<项目编码>--claude-worktrees-*` 目录：Claude Code 自己的 worktree（`<项目>/.claude/worktrees/<名字>`）删掉后，里面的会话仍能从项目目录 `claude --resume`。Codex 的范围见上一节。
+
+搜索匹配标题、会话 ID 和用户发过的提示词，范围就是这个项目的会话列表（打开的卡片和历史）。提示词不缓存，每次搜索直接读：Claude 读 `~/.claude/history.jsonl`（Ctrl+R 用的提示词历史，含粘贴的原文），Codex 查 `thread_history_<n>.sqlite` 里 `userMessage` 的文本。只靠提示词命中的会话下面多显示一行匹配片段。
 
 ### 历史刷新
 

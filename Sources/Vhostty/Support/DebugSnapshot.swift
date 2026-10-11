@@ -110,7 +110,7 @@ final class DebugSnapshot {
             if line == "search" || line.hasPrefix("search "), let project = store.currentProject ?? store.projects.first {
                 // search [text]: open the current project's session search with this query.
                 store.openSearch(project)
-                store.searchQuery[project.id] = String(line.dropFirst(7))
+                store.setSearchQuery(String(line.dropFirst(7)), for: project)
                 continue
             }
             if line == "endsearch", let project = store.currentProject ?? store.projects.first {
@@ -181,6 +181,11 @@ final class DebugSnapshot {
         for (pid, items) in store.searchHistory {
             let name = store.project(pid)?.name ?? "?"
             lines.append("search[\(name)]: " + items.prefix(5).map(\.title).joined(separator: " / "))
+        }
+        for (pid, matches) in store.promptMatches {
+            let name = store.project(pid)?.name ?? "?"
+            lines.append("prompts[\(name)] \(matches.query): " + matches.sessions.sorted { $0.key < $1.key }
+                .map { "\($0.key)=\($0.value.before)[\($0.value.match)]\($0.value.after.prefix(40))" }.joined(separator: " / "))
         }
         try? lines.joined(separator: "\n").write(to: directory.appendingPathComponent("state.txt"), atomically: true, encoding: .utf8)
     }

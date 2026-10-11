@@ -20,6 +20,8 @@ final class AppStore: ObservableObject {
     @Published var searchQuery: [UUID: String] = [:]
     /// Every past session of a project being searched (history above is capped).
     @Published var searchHistory: [UUID: [SessionSummary]] = [:]
+    /// Sessions of a project whose typed prompts contain the query, by session id.
+    @Published private(set) var promptMatches: [UUID: PromptMatches] = [:]
     @Published var sidebarVisible = true
     @Published var sidebarWidth: CGFloat = 300
     /// Height fraction of the bottom shell panel (shared by all sessions).
@@ -37,6 +39,8 @@ final class AppStore: ObservableObject {
     private var historyRefreshPending = false
     private var saveWork: DispatchWorkItem?
     private let infoQueue = DispatchQueue(label: "vhostty.info", qos: .utility)
+    private let searchQueue = DispatchQueue(label: "vhostty.search", qos: .userInitiated)
+    private var promptSearchWork: [UUID: DispatchWorkItem] = [:]
     private var refreshing: Set<UUID> = []
     /// The Claude process last seen running in each tab (see refreshLiveSessions).
     private var livePIDs: [UUID: pid_t] = [:]
@@ -833,6 +837,7 @@ final class AppStore: ObservableObject {
                     self.history[id] = Array(items.prefix(40))
                     if searching.contains(id), self.searchQuery[id] != nil {
                         self.searchHistory[id] = items
+                        self.searchPrompts(id)
                     }
                 }
                 self.historyRefreshing = false
@@ -869,6 +874,7 @@ final class AppStore: ObservableObject {
             DispatchQueue.main.async {
                 guard let self, self.searchQuery[id] != nil else { return }
                 self.searchHistory[id] = all
+                self.searchPrompts(id)
             }
         }
     }
@@ -876,6 +882,49 @@ final class AppStore: ObservableObject {
     func closeSearch(_ project: Project) {
         searchQuery.removeValue(forKey: project.id)
         searchHistory.removeValue(forKey: project.id)
+        promptSearchWork.removeValue(forKey: project.id)?.cancel()
+        promptMatches.removeValue(forKey: project.id)
+    }
+
+    func setSearchQuery(_ query: String, for project: Project) {
+        searchQuery[project.id] = query
+        searchPrompts(project.id, after: 0.15)
+    }
+
+    /// The typed prompt `sessionID` matched the project's current query with, if any.
+    func promptMatch(_ project: Project, sessionID: String) -> PromptSnippet? {
+        guard let matches = promptMatches[project.id], matches.query == searchQuery[project.id]?.nonEmpty else { return nil }
+        return matches.sessions[sessionID]
+    }
+
+    /// Searches the typed prompts of the project's sessions (open and past) for its
+    /// query, off the main thread. Results for an outdated query are dropped.
+    private func searchPrompts(_ id: UUID, after delay: TimeInterval = 0) {
+        promptSearchWork.removeValue(forKey: id)?.cancel()
+        guard let query = searchQuery[id]?.nonEmpty else {
+            promptMatches.removeValue(forKey: id)
+            return
+        }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.promptSearchWork.removeValue(forKey: id)
+            var claude = Set<String>(), codex = Set<String>()
+            let open = self.tabs.filter { $0.projectID == id }.map { (kind: $0.kind, id: $0.sessionID) }
+            let past = (self.searchHistory[id] ?? self.history[id] ?? []).map { (kind: $0.kind, id: $0.id) }
+            for session in open + past where !session.id.isEmpty {
+                if session.kind == .claude { claude.insert(session.id) } else { codex.insert(session.id) }
+            }
+            self.searchQueue.async {
+                let sessions = Transcript.promptMatches(query, sessionIDs: claude)
+                    .merging(CodexThreads.promptMatches(query, threadIDs: codex)) { first, _ in first }
+                DispatchQueue.main.async {
+                    guard self.searchQuery[id]?.nonEmpty == query else { return }
+                    self.promptMatches[id] = PromptMatches(query: query, sessions: sessions)
+                }
+            }
+        }
+        promptSearchWork[id] = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     /// Matches a session by title or session id, case-insensitively.
@@ -909,4 +958,10 @@ final class AppStore: ObservableObject {
     var liveSessionCount: Int {
         tabs.filter { $0.surface.map { !$0.processExited } ?? false }.count
     }
+}
+
+/// Prompt search results of one query: matching session ids and their snippets.
+struct PromptMatches {
+    let query: String
+    let sessions: [String: PromptSnippet]
 }

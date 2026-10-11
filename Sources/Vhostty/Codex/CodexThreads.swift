@@ -23,11 +23,14 @@ enum CodexThreads {
     }
 
     /// The newest state database (the number goes up with Codex's schema).
-    static func database() -> URL? {
+    static func database() -> URL? { newest("state_") }
+
+    /// The newest database named <prefix><n>.sqlite in CODEX_HOME.
+    private static func newest(_ prefix: String) -> URL? {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: home.path)) ?? []
         let best = names.compactMap { name -> (Int, String)? in
-            guard name.hasPrefix("state_"), name.hasSuffix(".sqlite"),
-                  let n = Int(name.dropFirst(6).dropLast(7)) else { return nil }
+            guard name.hasPrefix(prefix), name.hasSuffix(".sqlite"),
+                  let n = Int(name.dropFirst(prefix.count).dropLast(7)) else { return nil }
             return (n, name)
         }.max { $0.0 < $1.0 }
         return best.map { home.appendingPathComponent($0.1) }
@@ -63,11 +66,40 @@ enum CodexThreads {
             SELECT \(columns) FROM threads
             WHERE \(interactive) AND preview <> '' AND cwd IN (\(marks))
             ORDER BY updated_at DESC LIMIT ?
-            """, dirs + [min(limit, Int(Int32.max))]) else { return nil }
-        return rows.compactMap { t in
+            """, dirs + [min(limit, Int(Int32.max))]),
+              let gone = removedWorktreeThreads(projectPath, dirs: dirs) else { return nil }
+        let threads = (rows + gone).sorted { $0.modified > $1.modified }.prefix(limit)
+        return threads.compactMap { t in
             guard let title = t.title ?? t.firstPrompt else { return nil }
             return SessionSummary(id: t.id, title: title, modified: t.modified,
                                   path: URL(fileURLWithPath: t.rolloutPath), kind: .codex)
+        }
+    }
+
+    /// Sessions of the project's repository (same origin) whose worktree is gone from
+    /// `git worktree list`: those in Codex's own worktrees ($CODEX_HOME/worktrees/<id>/<project
+    /// folder name>), and those whose directory no longer exists. A subdirectory of the
+    /// project is another project, so it never counts.
+    private static func removedWorktreeThreads(_ projectPath: String, dirs: [String]) -> [Thread]? {
+        guard let origin = GitProbe.origin(projectPath) else { return [] }
+        var base = origin
+        while base.hasSuffix("/") { base.removeLast() }
+        if base.hasSuffix(".git") { base.removeLast(4) }
+        let marks = dirs.map { _ in "?" }.joined(separator: ",")
+        guard let rows = query("""
+            SELECT \(columns) FROM threads
+            WHERE \(interactive) AND preview <> '' AND git_origin_url IN (?, ?) AND cwd NOT IN (\(marks))
+            """, [base, base + ".git"] + dirs) else { return nil }
+        let worktrees = home.appendingPathComponent("worktrees").path + "/"
+        let name = (projectPath as NSString).lastPathComponent
+        let insides = [projectPath, realpath(projectPath)].map { $0 + "/" }
+        return rows.filter { t in
+            guard !insides.contains(where: t.cwd.hasPrefix) else { return false }
+            if t.cwd.hasPrefix(worktrees) {
+                let rest = t.cwd.dropFirst(worktrees.count).split(separator: "/")
+                if rest.count == 2 && rest[1] == name { return true }
+            }
+            return !FileManager.default.fileExists(atPath: t.cwd)
         }
     }
 
@@ -83,15 +115,86 @@ enum CodexThreads {
         URL(fileURLWithPath: path).resolvingSymlinksInPath().path
     }
 
+    // MARK: - Prompt search
+
+    /// For each of these threads with a user message containing `query`, the first
+    /// such message, from the thread history database Codex keeps beside the state one.
+    /// The raw JSON is filtered first (fast), then the text parts of what's left.
+    static func promptMatches(_ query: String, threadIDs: Set<String>) -> [String: PromptSnippet] {
+        guard !threadIDs.isEmpty,
+              let ids = try? JSONSerialization.data(withJSONObject: Array(threadIDs)),
+              let messages = rows(newest("thread_history_"), """
+                SELECT i.thread_id, MIN(i.rollout_ordinal), json_extract(part.value, '$.text')
+                FROM thread_items AS i, json_each(i.item_json, '$.content') AS part
+                WHERE i.item_type = 'userMessage' AND i.thread_id IN (SELECT value FROM json_each(?))
+                  AND i.item_json LIKE ? ESCAPE '\\' AND json_extract(part.value, '$.text') LIKE ? ESCAPE '\\'
+                GROUP BY i.thread_id
+                """, [String(decoding: ids, as: UTF8.self),
+                      "%" + likeEscaped(jsonEscaped(query)) + "%", "%" + likeEscaped(query) + "%"], { stmt in
+                    text(stmt, 0).map { ($0, text(stmt, 2) ?? "") }
+                })
+        else { return [:] }
+        var result: [String: PromptSnippet] = [:]
+        for (id, text) in messages {
+            result[id] = PromptSnippet(text, query: query)
+        }
+        return result
+    }
+
+    /// The query as it appears inside a JSON string written by Codex (serde_json).
+    private static func jsonEscaped(_ s: String) -> String {
+        var out = ""
+        for u in s.unicodeScalars {
+            switch u {
+            case "\"": out += "\\\""
+            case "\\": out += "\\\\"
+            case "\n": out += "\\n"
+            case "\r": out += "\\r"
+            case "\t": out += "\\t"
+            case _ where u.value < 0x20: out += String(format: "\\u%04x", u.value)
+            default: out.unicodeScalars.append(u)
+            }
+        }
+        return out
+    }
+
+    private static func likeEscaped(_ s: String) -> String {
+        var out = ""
+        for c in s {
+            if c == "\\" || c == "%" || c == "_" { out.append("\\") }
+            out.append(c)
+        }
+        return out
+    }
+
     // MARK: - SQLite
 
     private static let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
+    private static func text(_ stmt: OpaquePointer?, _ col: Int32) -> String? {
+        sqlite3_column_text(stmt, col).map { String(cString: $0) }
+    }
+
     private static func query(_ sql: String, _ binds: [Any]) -> [Thread]? {
-        guard let url = database() else { return [] }
+        rows(database(), sql, binds) { stmt in
+            guard let id = text(stmt, 0) else { return nil }
+            return Thread(
+                id: id,
+                cwd: text(stmt, 1) ?? "",
+                title: text(stmt, 2)?.nonEmpty,
+                firstPrompt: text(stmt, 3).flatMap(oneLine),
+                branch: text(stmt, 4)?.nonEmpty,
+                modified: Date(timeIntervalSince1970: TimeInterval(sqlite3_column_int64(stmt, 5))),
+                rolloutPath: text(stmt, 6) ?? "")
+        }
+    }
+
+    /// Runs a read-only query on a Codex database; a missing database has no rows.
+    private static func rows<T>(_ url: URL?, _ sql: String, _ binds: [Any], _ row: (OpaquePointer?) -> T?) -> [T]? {
+        guard let url else { return [] }
         var db: OpaquePointer?
         defer { sqlite3_close(db) }
-        func failed() -> [Thread]? {
+        func failed() -> [T]? {
             NSLog("Vhostty: Codex state query failed: %@", String(cString: sqlite3_errmsg(db)))
             return nil
         }
@@ -113,23 +216,12 @@ enum CodexThreads {
                 sqlite3_bind_text(stmt, Int32(i + 1), "\(value)", -1, transient)
             }
         }
-        var rows: [Thread] = []
+        var rows: [T] = []
         while true {
             let status = sqlite3_step(stmt)
             if status == SQLITE_DONE { return rows }
             guard status == SQLITE_ROW else { return failed() }
-            func text(_ col: Int32) -> String? {
-                sqlite3_column_text(stmt, col).map { String(cString: $0) }
-            }
-            guard let id = text(0) else { continue }
-            rows.append(Thread(
-                id: id,
-                cwd: text(1) ?? "",
-                title: text(2)?.nonEmpty,
-                firstPrompt: text(3).flatMap(oneLine),
-                branch: text(4)?.nonEmpty,
-                modified: Date(timeIntervalSince1970: TimeInterval(sqlite3_column_int64(stmt, 5))),
-                rolloutPath: text(6) ?? ""))
+            if let value = row(stmt) { rows.append(value) }
         }
     }
 

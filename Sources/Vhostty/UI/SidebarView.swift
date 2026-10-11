@@ -53,6 +53,12 @@ private struct ProjectSection: View {
 
     private let historyLimit = 5
 
+    /// The typed prompt a session matches the search by, when its title or id doesn't.
+    private func prompt(_ title: String, _ id: String) -> PromptSnippet? {
+        let query = store.searchQuery[project.id] ?? ""
+        return AppStore.matches(query, title: title, sessionID: id) ? nil : store.promptMatch(project, sessionID: id)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             ProjectRow(store: store, project: project)
@@ -60,10 +66,10 @@ private struct ProjectSection: View {
                 let query = store.searchQuery[project.id]
                 let searching = !(query ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 let open = store.tabs(of: project).filter {
-                    AppStore.matches(query ?? "", title: $0.title, sessionID: $0.sessionID)
+                    AppStore.matches(query ?? "", title: $0.title, sessionID: $0.sessionID) || store.promptMatch(project, sessionID: $0.sessionID) != nil
                 }
                 let closed = store.closedHistory(for: project).filter {
-                    AppStore.matches(query ?? "", title: $0.title, sessionID: $0.id)
+                    AppStore.matches(query ?? "", title: $0.title, sessionID: $0.id) || store.promptMatch(project, sessionID: $0.id) != nil
                 }
                 let showAll = searching || store.showAllHistory.contains(project.id)
 
@@ -72,7 +78,13 @@ private struct ProjectSection: View {
                 }
 
                 ForEach(open) { tab in
-                    SessionCard(tab: tab, store: store, draggingID: $draggingID)
+                    VStack(alignment: .leading, spacing: 2) {
+                        SessionCard(tab: tab, store: store, draggingID: $draggingID)
+                        if let snippet = prompt(tab.title, tab.sessionID) {
+                            PromptSnippetLine(snippet: snippet)
+                                .padding(.leading, 27)
+                        }
+                    }
                 }
                 .padding(.leading, 6)
 
@@ -87,7 +99,8 @@ private struct ProjectSection: View {
                                 .padding(.bottom, 2)
                         }
                         ForEach(closed.prefix(showAll ? closed.count : historyLimit)) { summary in
-                            HistoryRow(store: store, project: project, summary: summary)
+                            HistoryRow(store: store, project: project, summary: summary,
+                                       snippet: prompt(summary.title, summary.id))
                         }
                         if closed.count > historyLimit {
                             Button {
@@ -204,7 +217,7 @@ private struct ProjectRow: View {
     }
 }
 
-/// Filters a project's sessions by title or session id. Esc or ✕ closes it.
+/// Filters a project's sessions by title, typed prompt or session id. Esc or ✕ closes it.
 private struct SessionSearchField: View {
     @ObservedObject var store: AppStore
     let project: Project
@@ -215,9 +228,9 @@ private struct SessionSearchField: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
-            TextField("Title or Session ID", text: Binding(
+            TextField("Title, Prompt or Session ID", text: Binding(
                 get: { store.searchQuery[project.id] ?? "" },
-                set: { store.searchQuery[project.id] = $0 }
+                set: { store.setSearchQuery($0, for: project) }
             ))
             .textFieldStyle(.plain)
             .font(.system(size: 12.5))
@@ -244,31 +257,56 @@ private struct HistoryRow: View {
     @ObservedObject var store: AppStore
     let project: Project
     let summary: SessionSummary
+    var snippet: PromptSnippet?
     @State private var hover = false
 
     var body: some View {
-        HStack(spacing: 8) {
-            AgentIcon(kind: summary.kind, size: 11)
-                .opacity(0.7)
-                .frame(width: 14)
-            Text(summary.title)
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            Spacer(minLength: 4)
-            Text(RelativeTime.short(summary.modified))
-                .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
-                .opacity(hover ? 1 : 0.8)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                AgentIcon(kind: summary.kind, size: 11)
+                    .opacity(0.7)
+                    .frame(width: 14)
+                Text(summary.title)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Text(RelativeTime.short(summary.modified))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .opacity(hover ? 1 : 0.8)
+            }
+            .frame(height: 27)
+            if let snippet {
+                PromptSnippetLine(snippet: snippet)
+                    .padding(.leading, 22)
+                    .padding(.bottom, 5)
+            }
         }
         .padding(.leading, 12)
         .padding(.trailing, 8)
-        .frame(height: 27)
         .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(hover ? 0.05 : 0)))
         .contentShape(Rectangle())
         .onHover { hover = $0 }
         .onTapGesture { store.resumeSession(summary, in: project) }
         .help("Resume \(summary.kind.name) session: \(summary.title)")
+    }
+}
+
+/// The typed prompt a session matched a search with, the match in bold.
+private struct PromptSnippetLine: View {
+    let snippet: PromptSnippet
+
+    var body: some View {
+        var match = AttributedString(snippet.match)
+        match.font = .system(size: 11.5, weight: .semibold)
+        match.foregroundColor = .secondary
+        return Text(AttributedString(snippet.before) + match + AttributedString(snippet.after))
+            .font(.system(size: 11.5))
+            .foregroundStyle(.tertiary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .help(snippet.before + snippet.match + snippet.after)
     }
 }
 

@@ -26,6 +26,23 @@ struct SessionSummary: Identifiable, Hashable {
     var kind: AgentKind = .claude
 }
 
+/// One line of a prompt around the first case-insensitive match of a search query.
+struct PromptSnippet: Hashable {
+    let before: String
+    let match: String
+    let after: String
+
+    init?(_ text: String, query: String) {
+        let line = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        guard let range = line.range(of: query, options: .caseInsensitive, locale: .current) else { return nil }
+        // Little context before the match, so the match stays visible in the narrow sidebar.
+        let start = line.index(range.lowerBound, offsetBy: -10, limitedBy: line.startIndex) ?? line.startIndex
+        before = (start > line.startIndex ? "…" : "") + line[start..<range.lowerBound]
+        match = String(line[range])
+        after = String(line[range.upperBound...].prefix(160))
+    }
+}
+
 enum Transcript {
     static let projectsDir = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/projects")
 
@@ -144,10 +161,18 @@ enum Transcript {
     /// Transcript directories for a project: its own, plus those of every worktree
     /// of its repository (`git worktree list`, like Ctrl+W in Claude Code's /resume).
     /// A session's transcript moves to a worktree's directory once it enters it.
+    /// Claude Code's own worktrees (<project>/.claude/worktrees/<name>) count even
+    /// after they're removed: their sessions still resume from the project.
     static func transcriptDirs(projectPath: String) -> [URL] {
-        var names = [encode(projectPath)]
+        let own = encode(projectPath)
+        var names = [own]
         for path in GitProbe.worktrees(projectPath) where !names.contains(encode(path)) {
             names.append(encode(path))
+        }
+        let claudeWorktrees = own + "--claude-worktrees-"
+        let all = (try? FileManager.default.contentsOfDirectory(atPath: projectsDir.path)) ?? []
+        for name in all.sorted() where name.hasPrefix(claudeWorktrees) && !names.contains(name) {
+            names.append(name)
         }
         return names.map { projectsDir.appendingPathComponent($0) }
     }
@@ -174,6 +199,28 @@ enum Transcript {
             result.append(SessionSummary(
                 id: url.deletingPathExtension().lastPathComponent,
                 title: title, modified: date, path: url))
+        }
+        return result
+    }
+
+    // MARK: - Prompt search
+
+    /// Claude Code's prompt history (what Ctrl+R searches): every prompt typed,
+    /// with its session id and any pasted text.
+    static let promptHistory = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/history.jsonl")
+
+    /// For each of these sessions with a typed prompt containing `query`, the first such prompt.
+    static func promptMatches(_ query: String, sessionIDs: Set<String>) -> [String: PromptSnippet] {
+        guard !sessionIDs.isEmpty, let data = try? Data(contentsOf: promptHistory) else { return [:] }
+        var result: [String: PromptSnippet] = [:]
+        for line in data.split(separator: UInt8(ascii: "\n")) {
+            guard let obj = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any],
+                  let id = obj["sessionId"] as? String, sessionIDs.contains(id), result[id] == nil else { continue }
+            var texts = [obj["display"] as? String]
+            if let pasted = obj["pastedContents"] as? [String: Any] {
+                texts += pasted.sorted { $0.key < $1.key }.map { ($0.value as? [String: Any])?["content"] as? String }
+            }
+            result[id] = texts.lazy.compactMap { $0.flatMap { PromptSnippet($0, query: query) } }.first
         }
         return result
     }
