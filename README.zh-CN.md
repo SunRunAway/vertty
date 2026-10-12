@@ -30,7 +30,7 @@ Vhostty 是一个 macOS 原生终端，专门用来同时跑好几个 Claude Cod
   - 蓝点 = 在后台干完了、你还没看
   - 空心圆 = 未启动
 - **后台通知**：通知直接用 agent 自带的终端通知（Claude Code 和 Codex 在 Ghostty 里都会发 OSC 9），所以会遵守你在 Claude 或 Codex 里的通知设置。会话没被选中或窗口在后台时，Vhostty 把它转成 macOS 系统通知，点击会跳到对应会话。Claude 一般在干完活、等你约 60 秒后才发通知；卡片上的蓝点和 Dock 角标则会立即更新（Claude 靠 Claude Code 的 hooks，Codex 靠它的终端标题）。
-- **历史会话**：每个项目下面列出最近的 Claude 和 Codex 会话，点一下就用 `claude --resume` 或 `codex resume` 恢复。worktree 删掉以后，里面的会话也还在列表里。搜索按钮可以按标题、会话 ID 或你发过的提示词找会话。会话文件变化时，历史列表和打开的搜索结果会自动刷新，并保留每五分钟一次的兜底扫描。
+- **历史会话**：每个项目下面列出最近的 Claude 和 Codex 会话，点一下就用 `claude --resume` 或 `codex resume` 恢复。worktree 删掉以后，里面的会话也还在列表里。历史默认显示 5 条，每点一次“显示更多”追加 10 条，直到全部显示；折叠项目后恢复为 5 条。搜索按钮可以按标题、会话 ID 或你发过的提示词找会话。会话文件变化时，历史列表和打开的搜索结果会自动刷新，并保留每五分钟一次的兜底扫描。
 - **自动保存**：退出时保存所有会话卡片。下次打开时，点哪个卡片才恢复哪个会话，不会一次性启动一堆 agent。
 - **底部终端**：每个会话都能在 agent 下面拉出一个普通 shell（⌘J、⌃`，或标题栏右侧的按钮），目录跟 agent 当前所在目录一致。两块之间的分隔条可以拖动，面板开关状态会随会话保存。
 - **复用 Ghostty 配置**：直接读取你的 Ghostty 配置（字体、主题、快捷键），在 `~/.config/ghostty/config` 或 `~/Library/Application Support/com.mitchellh.ghostty/config`。

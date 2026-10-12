@@ -51,8 +51,6 @@ private struct ProjectSection: View {
     let project: Project
     @State private var draggingID: UUID?
 
-    private let historyLimit = 5
-
     /// The typed prompt a session matches the search by, when its title or id doesn't.
     private func prompt(_ title: String, _ id: String) -> PromptSnippet? {
         let query = store.searchQuery[project.id] ?? ""
@@ -71,7 +69,7 @@ private struct ProjectSection: View {
                 let closed = store.closedHistory(for: project).filter {
                     AppStore.matches(query ?? "", title: $0.title, sessionID: $0.id) || store.promptMatch(project, sessionID: $0.id) != nil
                 }
-                let showAll = searching || store.showAllHistory.contains(project.id)
+                let visibleCount = searching ? closed.count : store.historyVisibleCount(for: project)
 
                 if query != nil {
                     SessionSearchField(store: store, project: project)
@@ -98,15 +96,15 @@ private struct ProjectSection: View {
                                 .padding(.top, 4)
                                 .padding(.bottom, 2)
                         }
-                        ForEach(closed.prefix(showAll ? closed.count : historyLimit)) { summary in
+                        ForEach(closed.prefix(visibleCount)) { summary in
                             HistoryRow(store: store, project: project, summary: summary,
                                        snippet: prompt(summary.title, summary.id))
                         }
-                        if closed.count > historyLimit {
+                        if closed.count > visibleCount {
                             Button {
-                                if showAll { store.showAllHistory.remove(project.id) } else { store.showAllHistory.insert(project.id) }
+                                store.showMoreHistory(project)
                             } label: {
-                                Text(showAll ? "Show Less" : "Show More" as LocalizedStringKey)
+                                Text("Show More")
                                     .font(.system(size: 12.5))
                                     .foregroundStyle(.tertiary)
                                     .padding(.leading, 16)

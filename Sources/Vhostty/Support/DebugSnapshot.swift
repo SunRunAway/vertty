@@ -117,6 +117,14 @@ final class DebugSnapshot {
                 store.closeSearch(project)
                 continue
             }
+            if line == "morehistory", let project = store.currentProject ?? store.projects.first {
+                store.showMoreHistory(project)
+                continue
+            }
+            if line == "toggleproject", let project = store.currentProject ?? store.projects.first {
+                store.toggleExpanded(project)
+                continue
+            }
             if line == "refreshhistory" {
                 store.refreshHistory()
                 continue
@@ -177,6 +185,11 @@ final class DebugSnapshot {
         for (pid, items) in store.history {
             let name = store.project(pid)?.name ?? "?"
             lines.append("history[\(name)]: " + items.prefix(5).map(\.title).joined(separator: " / "))
+        }
+        for project in store.projects {
+            let closed = store.closedHistory(for: project)
+            let count = store.historyVisibleCount(for: project)
+            lines.append("pagination[\(project.name)]: visible=\(min(count, closed.count)) more=\(closed.count > count) expanded=\(project.expanded)")
         }
         for (pid, items) in store.searchHistory {
             let name = store.project(pid)?.name ?? "?"

@@ -143,6 +143,25 @@ with log_path.open("w") as log:
             db.execute("DELETE FROM threads")
         wait_for(lambda: "Codex fixture" not in state(), "successful empty result retained stale history")
         print("PASS successful empty result clears history", flush=True)
+        (snapshot / "input.txt").write_text("endsearch\n")
+        wait_for(lambda: not (snapshot / "input.txt").exists(), "search not closed")
+        with sqlite3.connect(db_path) as db:
+            for index in range(57):
+                db.execute("INSERT INTO threads VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'cli', 'user', 'prompt', ?)",
+                           (str(uuid.uuid4()), str(project), f"Page {index}", "prompt", "main",
+                            int(time.time()) - index, str(root / f"page-{index}.jsonl"), origin))
+        def pagination(count, more, expanded=True):
+            expected = f"pagination[Fixture]: visible={count} more={str(more).lower()} expanded={str(expanded).lower()}"
+            wait_for(lambda: expected in state(), expected)
+        pagination(5, True)
+        for count in (15, 25, 35, 45, 55, 57):
+            (snapshot / "input.txt").write_text("morehistory\n")
+            pagination(count, count < 57)
+        (snapshot / "input.txt").write_text("toggleproject\n")
+        pagination(5, True, False)
+        (snapshot / "input.txt").write_text("toggleproject\n")
+        pagination(5, True)
+        print("PASS pagination beyond 40, final partial page, collapse/reopen reset", flush=True)
     finally:
         db.close()
         if blocker is not None:

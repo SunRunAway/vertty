@@ -15,7 +15,7 @@ final class AppStore: ObservableObject {
     /// The built-in default kind, picked on first launch from which agents are installed.
     @Published private(set) var detectedKind: AgentKind?
     @Published var history: [UUID: [SessionSummary]] = [:]
-    @Published var showAllHistory: Set<UUID> = []
+    @Published var historyVisibleCounts: [UUID: Int] = [:]
     /// Per-project session search: present while the search field is open.
     @Published var searchQuery: [UUID: String] = [:]
     /// Every past session of a project being searched (history above is capped).
@@ -211,7 +211,17 @@ final class AppStore: ObservableObject {
     }
 
     func toggleExpanded(_ project: Project) {
+        historyVisibleCounts.removeValue(forKey: project.id)
         updateProject(project.id) { $0.expanded.toggle() }
+    }
+
+    func historyVisibleCount(for project: Project) -> Int {
+        historyVisibleCounts[project.id] ?? 5
+    }
+
+    func showMoreHistory(_ project: Project) {
+        historyVisibleCounts[project.id] = historyVisibleCount(for: project) + 10
+        refreshHistory()
     }
 
     func moveProject(from source: IndexSet, to destination: Int) {
@@ -825,16 +835,20 @@ final class AppStore: ObservableObject {
         historyRefreshing = true
         let snapshot = projects
         let searching = Set(searchQuery.keys)
+        // Keep one extra closed session so the sidebar knows whether more remain.
+        let limits = Dictionary(uniqueKeysWithValues: snapshot.map {
+            ($0.id, max(40, historyVisibleCount(for: $0) + tabs.count + 1))
+        })
         infoQueue.async { [weak self] in
             var result: [UUID: [SessionSummary]] = [:]
             for p in snapshot {
-                result[p.id] = Self.history(projectPath: p.path, limit: searching.contains(p.id) ? .max : 40)
+                result[p.id] = Self.history(projectPath: p.path, limit: searching.contains(p.id) ? .max : limits[p.id]!)
             }
             DispatchQueue.main.async {
                 guard let self else { return }
                 // Failed reads preserve the last good normal and search snapshots.
                 for (id, items) in result where self.project(id) != nil {
-                    self.history[id] = Array(items.prefix(40))
+                    self.history[id] = items
                     if searching.contains(id), self.searchQuery[id] != nil {
                         self.searchHistory[id] = items
                         self.searchPrompts(id)

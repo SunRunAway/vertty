@@ -85,6 +85,7 @@ build/Vhostty.app/Contents/MacOS/Vhostty
 | `select <UUID>` | 切换到这个会话 |
 | `new` / `new claude` / `new codex` | 新建默认类型 / Claude / Codex 会话 |
 | `search [文字]` / `endsearch` | 打开当前项目的会话搜索并填入文字 / 关闭搜索 |
+| `morehistory` / `toggleproject` | 当前项目追加 10 条历史 / 折叠或展开项目 |
 | `refreshhistory` | 立即刷新历史列表 |
 | `toggleshell` | 开关当前会话的底部终端 |
 | `focus claude` / `focus shell` | 聚焦上面 / 下面的终端 |
