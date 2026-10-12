@@ -45,8 +45,9 @@ Claude 的历史来自项目自己的会话记录目录、`git worktree list` �
 | 标题 | Claude 写到终端标题的内容（`✳ xxx` / `◑ xxx`）；也会读会话记录 `~/.claude/projects/*/<id>.jsonl` 里的 `custom-title` / `ai-title` |
 | 状态 | Claude Code hooks：`UserPromptSubmit` / `PostToolUse` → 工作中，`Notification` → 等你确认，`Stop` → 完成。终端标题前面的状态符号（`✳` 空闲，其他转圈符号表示工作中）作为补充 |
 | 系统通知 | Claude Code 自己发出的终端通知（OSC 9/777），由 Vhostty 转成 macOS 通知 |
-| 分支 / worktree | 对 Claude 当前的 cwd 执行 `git rev-parse`，cwd 来自 hooks |
-| PR | 用 `gh pr view <branch>` 查当前分支对应的 PR；查不到时，用会话记录里的 `pr-link` |
+| 分支 | 会话自身记录的分支：Claude transcript 的 `gitBranch`，Codex `threads` 的 `git_branch`。不读取共享工作目录的当前 HEAD，避免其他会话切分支覆盖旧卡片 |
+| worktree | 对会话 cwd 执行 `git rev-parse`，并结合 Claude 的 `worktree-state` |
+| PR | 用 `gh pr view <branch>` 查会话记录的功能分支对应的 PR（查不到则留空）；会话回到 main/master 等非功能分支后，用其记录里的 `pr-link` |
 
 hooks 事件的传递路径：`vhostty-hook`（App 里自带的一个小程序）通过 Unix socket，把事件转发给 App。
 
@@ -94,6 +95,8 @@ build/Vhostty.app/Contents/MacOS/Vhostty
 按键和文字只会发给用 `to` / `toshell` 明确指定的会话。
 
 `make app` 后运行 `python3 scripts/test-codex-history.py`，可在临时状态目录和数据库里验证 Codex 历史在最后一个数据库写连接关闭、数据库暂时被锁、恢复和真正清空时的行为；测试不会启动终端会话，并按 PID 停止自己的 App 实例。
+
+`python3 scripts/test-session-branches.py` 用临时 HOME、仓库、会话记录及模拟的 agent/gh，验证共享工作区切分支不会覆盖其他会话的分支和 PR，同时检查会话自身换分支、回到 master 时的 PR 更新。测试按 PID 停止自己的 App 实例。
 
 ## 发布
 

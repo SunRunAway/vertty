@@ -751,13 +751,17 @@ final class AppStore: ObservableObject {
                 cwd = wt.path
             }
             let git = GitProbe.probe(cwd) ?? (cwd != project.path ? GitProbe.probe(project.path) : nil)
+            // HEAD belongs to the checkout, which multiple sessions can share.
+            // Only the session's own recorded branch can identify its work; polling
+            // HEAD here would move idle/restored cards to another session's PR.
+            let branch = info?.gitBranch?.nonEmpty
             // On a feature branch the card shows that branch's PR, or none yet. The
             // transcript's pr-link is a PR the session opened earlier (maybe from
             // another worktree), so it only stands in once the session is off its
             // feature branches, e.g. back on master.
-            let featureBranch = git.flatMap { GitProbe.isFeatureBranch($0.branch) ? $0 : nil }
+            let featureBranch = branch.flatMap { GitProbe.isFeatureBranch($0) ? $0 : nil }
             let linkedPR = featureBranch == nil ? info?.prNumber : nil
-            let pr = featureBranch.flatMap { GitProbe.pullRequest(toplevel: $0.toplevel, branch: $0.branch) }
+            let pr = featureBranch.flatMap { GitProbe.pullRequest(toplevel: git?.toplevel ?? project.path, branch: $0) }
                 ?? linkedPR.flatMap { n in
                     GitProbe.pullRequest(ref: info?.prURL ?? String(n), cwd: git?.toplevel ?? project.path)
                 }
@@ -776,11 +780,7 @@ final class AppStore: ObservableObject {
                 tab.transcript = info
                 self.updateTitle(tab)
 
-                if let git {
-                    if tab.branch != git.branch { tab.branch = git.branch }
-                } else if let b = info?.gitBranch, b != "HEAD", tab.branch == nil {
-                    tab.branch = b
-                }
+                if let branch, tab.branch != branch { tab.branch = branch }
 
                 var worktree: String?
                 if let git, let linked = git.linkedWorktree {
@@ -802,7 +802,7 @@ final class AppStore: ObservableObject {
                     tab.prNumber = n
                     tab.prURL = info?.prURL
                     tab.prState = nil
-                } else if git != nil {
+                } else if branch != nil {
                     tab.prNumber = nil
                     tab.prURL = nil
                     tab.prState = nil

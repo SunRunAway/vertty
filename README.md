@@ -21,7 +21,7 @@ The interface follows your system language (English or Simplified Chinese).
 - **Projects on the left**: each project is bound to a directory.
 - **Session cards under each project**: each session is one Claude Code or Codex terminal. A card has 4 lines:
   1. The session title, with a status icon and a Claude or Codex icon in front. Claude's title comes from its auto-generated title or `/rename`, Codex's from its thread title
-  2. The current branch
+  2. The branch last recorded by that session (other sessions switching branches in the same checkout do not change it)
   3. The worktree name, or 「主工作区」 (main worktree) when not in a worktree
   4. The PR number, e.g. `#123`, colored by state: open green / merged purple / closed red. Click it to open the PR in your browser
 - **New session**: `cd`s into the project directory and starts `claude` or `codex`. A project's ⋯ menu has both; "Set Default Session" picks, per project, which one ⌘T and the ✎ button start; a project that hasn't picked one uses the global default (see [Configuration](#configuration)). When the agent exits, the terminal stays in your shell. A new Codex session is matched to its card once you send its first message. Inside Vhostty, Codex's terminal title is set by Vhostty (it reads the session id from there), so your `tui.terminal_title` setting doesn't apply in its cards.
