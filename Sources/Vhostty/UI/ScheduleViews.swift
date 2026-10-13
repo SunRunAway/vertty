@@ -150,17 +150,10 @@ private struct ScheduleTaskRow: View {
             }
             Spacer(minLength: 8)
             if !task.isDeleted {
-                HStack(spacing: 2) {
-                    IconButton(systemName: "play", help: "Run Now") { store.runScheduleNow(task.id) }
+                HStack(spacing: 4) {
+                    IconButton(systemName: "play", help: "Run Now", large: true) { store.runScheduleNow(task.id) }
                         .disabled(schedules.openRun(of: task.id) != nil || store.project(task.projectID) == nil)
-                    Menu {
-                        ScheduleActions(store: store, schedules: schedules, task: task)
-                    } label: {
-                        Image(systemName: "ellipsis").font(.system(size: 12.5, weight: .medium)).frame(width: 24, height: 22)
-                    }
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
-                    .fixedSize()
+                    IconMenu(large: true) { ScheduleActions(store: store, schedules: schedules, task: task) }
                 }
                 .opacity(hover || selected ? 1 : 0)
             }
@@ -294,14 +287,7 @@ struct SchedulePanelView: View {
                     IconButton(systemName: "arrow.clockwise", help: "Resume") { schedules.setEnabled(task.id, true) }
                         .disabled(store.project(task.projectID) == nil || !task.timing.canResume)
                 }
-                Menu {
-                    ScheduleActions(store: store, schedules: schedules, task: task)
-                } label: {
-                    Image(systemName: "ellipsis").font(.system(size: 12.5, weight: .medium)).frame(width: 24, height: 22)
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
+                IconMenu { ScheduleActions(store: store, schedules: schedules, task: task) }
             }
             IconButton(systemName: "xmark", help: "Close") { store.schedulePanel = nil }
                 .padding(.trailing, 8)

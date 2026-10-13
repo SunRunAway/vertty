@@ -192,17 +192,7 @@ private struct ProjectRow: View {
                 .lineLimit(1)
             Spacer(minLength: 4)
             if hover {
-                Menu {
-                    projectMenu
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 12, weight: .medium))
-                        .frame(width: 20, height: 20)
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .foregroundStyle(.secondary)
+                IconMenu { projectMenu }
                 IconButton(systemName: "magnifyingglass", help: "Search Sessions") {
                     if store.searchQuery[project.id] != nil { store.closeSearch(project) } else { store.openSearch(project) }
                 }
@@ -350,21 +340,58 @@ struct IconButton: View {
     let help: LocalizedStringKey
     /// Drawn brighter while what it toggles is on.
     var active = false
+    var large = false
     let action: () -> Void
     @State private var hover = false
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 12.5, weight: .medium))
-                .frame(width: 24, height: 22)
-                .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(hover ? 0.10 : 0)))
-                .contentShape(Rectangle())
+            IconFace(systemName: systemName, large: large, hover: hover)
         }
         .buttonStyle(.plain)
         .foregroundStyle(active ? .primary : .secondary)
         .onHover { hover = $0 }
         .help(help)
+    }
+}
+
+/// An icon that opens a menu, looking and hovering like an IconButton.
+struct IconMenu<Content: View>: View {
+    var systemName = "ellipsis"
+    var large = false
+    @ViewBuilder let content: Content
+    @State private var hover = false
+
+    var body: some View {
+        // The button menu style keeps the label's frame and background; the
+        // borderless one draws only the glyph.
+        Menu {
+            content
+        } label: {
+            IconFace(systemName: systemName, large: large, hover: hover)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .foregroundStyle(.secondary)
+        .onHover { hover = $0 }
+    }
+}
+
+/// The glyph and hover square of an IconButton or IconMenu; the square is
+/// what takes the click.
+private struct IconFace: View {
+    let systemName: String
+    let large: Bool
+    let hover: Bool
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(.system(size: large ? 14 : 12.5, weight: .medium))
+            .frame(width: large ? 32 : 24, height: large ? 30 : 22)
+            .background(RoundedRectangle(cornerRadius: large ? 8 : 6).fill(Color.white.opacity(hover ? 0.10 : 0)))
+            .contentShape(Rectangle())
     }
 }
 
