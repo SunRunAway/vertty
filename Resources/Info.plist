@@ -34,7 +34,7 @@
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSAppleEventsUsageDescription</key>
-    <string>Amphetamine compatibility.</string>
+    <string>Read Amphetamine’s status to avoid accidentally turning off its closed-lid sleep protection.</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
     <key>NSSupportsAutomaticTermination</key>
