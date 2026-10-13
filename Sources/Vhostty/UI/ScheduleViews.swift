@@ -599,6 +599,10 @@ struct ScheduleEditorView: View {
                         .labelsHidden()
                         .fixedSize()
                         .disabled(bound)
+                        // Another project: its own default agent.
+                        .onChange(of: task.projectID) { _, id in
+                            if !bound, let p = store.project(id) { task.kind = store.defaultKind(p) }
+                        }
                         Picker("", selection: $task.kind) {
                             ForEach(AgentKind.allCases) { Text($0.name).tag($0) }
                         }
