@@ -5,6 +5,7 @@ Never authorizes or changes the host's power settings.
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -42,22 +43,47 @@ try:
     p = helper(); send(p, 0)
     wait(lambda: read(case / 'value') == '0', 'killed watchdog recovery')
     p.stdin.close(); p.wait(timeout=10)
-    print('PASS killed watchdog journal recovery', flush=True)
-    (case / 'value').write_text('1')
+    print('PASS killed watchdog recovery', flush=True)
+    # Restore even a pre-existing 1; only Amphetamine's two true states exempt it.
+    for state in [None, 'true,true', 'true,false', 'false,true', 'false,false', 'error']:
+        amphetamine = case / 'amphetamine'
+        if state is None: amphetamine.unlink(missing_ok=True)
+        else: amphetamine.write_text(state)
+        (case / 'value').write_text('1')
+        (case / 'sleep-status').unlink(missing_ok=True)
+        p = helper(); send(p, 0)
+        expected = 'external' if state == 'true,true' else 'error' if state == 'error' else 'idle'
+        wait(lambda: read(case / 'sleep-status') == expected, f'restore state {state}')
+        p.stdin.close(); p.wait(timeout=10)
+        assert read(case / 'value') == ('1' if expected != 'idle' else '0'), state
+        # Enabling protection is independent of Amphetamine, including query failure.
+        (case / 'value').write_text('0')
+        p = helper(); send(p, 1)
+        wait(lambda: read(case / 'value') == '1', f'enable state {state}')
+        p.stdin.close(); p.wait(timeout=10)
+    print('PASS all Amphetamine states / query failure / unconditional enable', flush=True)
+    (case / 'amphetamine').unlink()
+    (case / 'value').write_text('0')
     p = helper(); send(p, 1)
-    wait(lambda: read(case / 'sleep-status') == 'external', 'pre-existing protection')
+    wait(lambda: read(case / 'value') == '1', 'late Amphetamine test acquire')
+    (case / 'amphetamine').write_text('true,true')
     p.stdin.close(); p.wait(timeout=10)
-    assert read(case / 'value') == '1', 'changed external setting'
-    print('PASS preserves pre-existing protection', flush=True)
-    (case / 'value').write_text('0'); (case / 'amphetamine').touch()
+    assert read(case / 'value') == '1', 'did not respect Amphetamine started after launch'
+    p = helper(); send(p, 0)
+    wait(lambda: read(case / 'sleep-status') == 'external', 'active Amphetamine not preserved')
+    (case / 'amphetamine').write_text('false,true'); send(p, 0)
+    wait(lambda: read(case / 'value') == '0', 'ended Amphetamine session not restored')
+    (case / 'value').write_text('1'); (case / 'amphetamine').write_text('true,true'); send(p, 0)
+    wait(lambda: read(case / 'sleep-status') == 'external', 'restarted Amphetamine not preserved')
+    (case / 'amphetamine').unlink(); send(p, 0)
+    wait(lambda: read(case / 'value') == '0', 'exited Amphetamine not restored')
+    p.stdin.close(); p.wait(timeout=10)
+    print('PASS live Amphetamine start / session end / exit transitions', flush=True)
     p = helper(); send(p, 1)
-    time.sleep(.5)
-    assert read(case / 'value') == '0'
-    (case / 'amphetamine').unlink(); send(p, 1)
-    wait(lambda: read(case / 'value') == '1', 'did not acquire after Amphetamine exit')
+    wait(lambda: read(case / 'value') == '1', 'expired lease test acquire')
     p.wait(timeout=20)
     assert read(case / 'value') == '0', 'expired lease not restored'
-    print('PASS Amphetamine exclusion / expired lease recovery', flush=True)
+    print('PASS expired lease recovery', flush=True)
     p = helper(); send(p, 1)
     wait(lambda: read(case / 'value') == '1', 'idle test acquire')
     for _ in range(18):
@@ -67,6 +93,9 @@ try:
     print('PASS idle grace restoration', flush=True)
 finally:
     if p.poll() is None: p.kill(); p.wait()
+
+if '--watchdog-only' in sys.argv:
+    sys.exit(0)
 
 case = root / 'app'
 case.mkdir()

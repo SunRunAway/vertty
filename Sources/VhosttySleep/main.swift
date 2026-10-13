@@ -1,5 +1,7 @@
 import Foundation
 import Darwin
+import AppKit
+import Carbon
 
 // Unprivileged watchdog: only the two fixed pmset commands run through sudo.
 // A pipe lease makes app crashes/force-quit release protection without UI cleanup.
@@ -7,7 +9,6 @@ let args = CommandLine.arguments
 guard args.count >= 2 else { exit(2) }
 let directory = URL(fileURLWithPath: args[1], isDirectory: true)
 let test = args.count == 4 && args[2] == "--test-dir" ? URL(fileURLWithPath: args[3]) : nil
-let marker = directory.appendingPathComponent("sleep-owned")
 let status = directory.appendingPathComponent("sleep-status")
 let lock = open(directory.appendingPathComponent("sleep.lock").path, O_CREAT | O_RDWR, 0o600)
 guard lock >= 0, flock(lock, LOCK_EX | LOCK_NB) == 0 else { exit(3) }
@@ -20,9 +21,34 @@ func run(_ path: String, _ arguments: [String]) -> (Int32, String) {
     let data = pipe.fileHandleForReading.readDataToEndOfFile(); p.waitUntilExit()
     return (p.terminationStatus, String(decoding: data, as: UTF8.self))
 }
-func externalApp() -> Bool {
-    if let test { return FileManager.default.fileExists(atPath: test.appendingPathComponent("amphetamine").path) }
-    return run("/usr/bin/pgrep", ["-x", "Amphetamine"]).0 == 0
+/// nil means denied, timed out, or unreadable; it must not be treated as false.
+func amphetamineProtectsSleep(requestPermission: Bool = false) -> Bool? {
+    if let test, !FileManager.default.fileExists(atPath: test.appendingPathComponent("live-amphetamine").path) {
+        guard FileManager.default.fileExists(atPath: test.appendingPathComponent("amphetamine").path) else { return false }
+        let state = (try? String(contentsOf: test.appendingPathComponent("amphetamine"), encoding: .utf8)) ?? ""
+        switch state {
+        case "true,true": return true
+        case "true,false", "false,true", "false,false": return false
+        default: return nil
+        }
+    }
+    guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.if.Amphetamine").first else { return false }
+    // Address the running PID so a race with quitting cannot launch Amphetamine.
+    let target = NSAppleEventDescriptor(processIdentifier: app.processIdentifier)
+    let eventClass: AEEventClass = 0x616d7068 // amph, from Amphetamine.sdef
+    guard AEDeterminePermissionToAutomateTarget(target.aeDesc, eventClass, typeWildCard, requestPermission) == noErr else { return nil }
+    func query(_ eventID: AEEventID) -> Bool? {
+        let event = NSAppleEventDescriptor(eventClass: eventClass, eventID: eventID,
+                                          targetDescriptor: target, returnID: AEReturnID(kAutoGenerateReturnID),
+                                          transactionID: AETransactionID(kAnyTransactionID))
+        guard let reply = try? event.sendEvent(options: [.waitForReply, .neverInteract], timeout: 3),
+              (reply.paramDescriptor(forKeyword: keyErrorNumber)?.int32Value ?? 0) == 0,
+              let value = reply.paramDescriptor(forKeyword: keyDirectObject)?.coerce(toDescriptorType: typeBoolean) else { return nil }
+        return value.booleanValue
+    }
+    guard let active = query(0x63416374), // cAct: session is active
+          let closed = query(0x43444d4b) else { return nil } // CDMK: closed display mode enabled
+    return active && closed
 }
 func disabled() -> Bool? {
     let output: String
@@ -42,16 +68,18 @@ func setDisabled(_ value: Bool) -> Bool {
     }
     return run("/usr/bin/sudo", ["-n", "-k", "/usr/bin/pmset", "-a", "disablesleep", value ? "1" : "0"]).0 == 0
 }
-var owned = FileManager.default.fileExists(atPath: marker.path)
 func release() {
-    guard owned else { return }
-    // Never switch off another app's protection. Keep the recovery marker.
-    guard !externalApp() else { report("external"); return }
-    if setDisabled(false) {
-        owned = false; try? FileManager.default.removeItem(at: marker); report("idle")
-    } else { report("error") }
+    guard disabled() != false else { report("idle"); return }
+    guard let protected = amphetamineProtectsSleep() else { report("error"); return }
+    if protected { report("external"); return }
+    report(setDisabled(false) ? "idle" : "error")
 }
-release() // Recover a previous watchdog that was itself killed.
+// This is the only place that may request macOS automation consent.
+// Later checks (including after the parent exits) must never prompt.
+let initialAmphetamineState = amphetamineProtectsSleep(requestPermission: true)
+if let test, FileManager.default.fileExists(atPath: test.appendingPathComponent("live-amphetamine").path) {
+    try? (initialAmphetamineState.map(String.init) ?? "error").write(to: test.appendingPathComponent("amphetamine-result"), atomically: true, encoding: .utf8)
+}
 var lastBusy: TimeInterval = -100
 var pending = ""
 var done = false
@@ -77,16 +105,9 @@ while !done {
     }
     if done { break }
     let busy = ProcessInfo.processInfo.systemUptime - lastBusy < 15
-    if externalApp() { report("external"); continue }
-    if !busy { release(); if !owned { report("idle") }; continue }
-    guard let current = disabled() else { report("error"); continue }
-    if current && !owned { report("external"); continue }
-    if !owned {
-        // Journal before the global mutation, so a killed helper can recover it.
-        do { try Data().write(to: marker, options: .atomic); owned = true }
-        catch { report("error"); continue }
-    }
-    if current || setDisabled(true) { report("active") } else { report("error") }
+    if !busy { release(); continue }
+    // Enabling protection never depends on Amphetamine or its automation permission.
+    if disabled() == true || setDisabled(true) { report("active") } else { report("error") }
 }
 release()
 withExtendedLifetime(signals) {}
