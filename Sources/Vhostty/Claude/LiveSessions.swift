@@ -55,7 +55,7 @@ enum LiveSessions {
         }
         lock.unlock()
         // An unreadable environment (not ours yet, or gone) is retried next time.
-        guard let env = environment(pid) else { return nil }
+        guard let env = ProcessScan.argumentsAndEnvironment(pid)?.1 else { return nil }
         let tab = env["VHOSTTY_TAB_ID"].flatMap(UUID.init(uuidString:))
         lock.lock()
         tabOfProcess[key] = tab
@@ -73,25 +73,30 @@ enum LiveSessions {
         return Double(tv.tv_sec) + Double(tv.tv_usec) / 1e6
     }
 
-    /// A process's environment, from KERN_PROCARGS2: argc, the executable path,
-    /// argv, then the environment, all NUL-separated.
-    private static func environment(_ pid: pid_t) -> [String: String]? {
-        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
-        var size = 0
-        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size else { return nil }
-        var buf = [UInt8](repeating: 0, count: size)
-        guard sysctl(&mib, 3, &buf, &size, nil, 0) == 0 else { return nil }
-        let argc = buf.withUnsafeBytes { $0.loadUnaligned(as: Int32.self) }
-        let strings = buf[MemoryLayout<Int32>.size..<size]
-            .split(separator: 0, omittingEmptySubsequences: true)
-            .map { String(decoding: $0, as: UTF8.self) }
-        // strings[0] is the executable path, then argc arguments.
-        guard strings.count > Int(argc) else { return nil }
-        var env: [String: String] = [:]
-        for s in strings.dropFirst(Int(argc) + 1) {
-            guard let eq = s.firstIndex(of: "=") else { continue }
-            env[String(s[..<eq])] = String(s[s.index(after: eq)...])
+    /// Live interactive processes of a session, wherever they run: the pid and
+    /// the Vhostty tab it belongs to (nil outside Vhostty or in another instance).
+    static func processes(sessionID: String) -> [(pid: pid_t, tab: UUID?)] {
+        guard let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+        else { return [] }
+        return files.compactMap { file in
+            guard file.pathExtension == "json", let data = try? Data(contentsOf: file),
+                  let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  obj["sessionId"] as? String == sessionID,
+                  let pid = (obj["pid"] as? NSNumber)?.int32Value,
+                  let started = processStart(pid) else { return nil }
+            return (pid, tab(of: pid, key: "\(pid)@\(started)"))
         }
-        return env
+    }
+
+    /// Whether the session runs as a background job (sent away with ←), which
+    /// `claude attach` reopens. Same check as the vhostty-claude launcher.
+    static func backgroundJobRunning(sessionID: String) -> Bool {
+        let file = URL(fileURLWithPath: NSHomeDirectory())
+            .appendingPathComponent(".claude/jobs/\(sessionID.prefix(8))/state.json")
+        guard let data = try? Data(contentsOf: file),
+              let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              obj["sessionId"] as? String == sessionID else { return false }
+        let state = obj["state"] as? String ?? ""
+        return state != "done" && state != "stopped"
     }
 }

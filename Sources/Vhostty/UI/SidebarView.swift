@@ -8,6 +8,10 @@ struct SidebarView: View {
             Color.clear.frame(height: 40) // traffic lights
                 .background(WindowDragArea())
 
+            ScheduleEntry(store: store, schedules: store.schedules)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 10)
+
             HStack(spacing: 6) {
                 Text("Projects")
                     .font(.system(size: 13, weight: .semibold))
@@ -43,6 +47,38 @@ struct SidebarView: View {
         // Solid, opaque background: a behind-window blur makes WindowServer
         // re-composite the blur every time the terminal draws a frame.
         .background(Color(red: 0.118, green: 0.118, blue: 0.125))
+    }
+}
+
+/// Opens the scheduled-task page (above the projects).
+private struct ScheduleEntry: View {
+    @ObservedObject var store: AppStore
+    @ObservedObject var schedules: ScheduleStore
+    @State private var hover = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "clock")
+                .font(.system(size: 12.5))
+                .frame(width: 18)
+            Text("Scheduled Tasks")
+                .font(.system(size: 13.5, weight: .medium))
+            Spacer(minLength: 4)
+            let running = schedules.runs.filter { $0.state == .running }.count
+            if running > 0 {
+                ProgressView().controlSize(.mini).scaleEffect(0.75)
+                    .help(String(localized: "\(running) scheduled runs going"))
+            }
+        }
+        .foregroundStyle(store.showingSchedules ? .primary : .secondary)
+        .padding(.leading, 8)
+        .padding(.trailing, 8)
+        .frame(height: 30)
+        .background(RoundedRectangle(cornerRadius: 7)
+            .fill(Color.white.opacity(store.showingSchedules ? 0.11 : hover ? 0.07 : 0)))
+        .contentShape(Rectangle())
+        .onHover { hover = $0 }
+        .onTapGesture { store.showSchedules() }
     }
 }
 
@@ -192,6 +228,7 @@ private struct ProjectRow: View {
             Button(kind.newSessionTitle) { store.newSession(in: project, kind: kind) }
         }
         Button("Search Sessions") { store.openSearch(project) }
+        Button("New Scheduled Task…") { store.newScheduledTask(in: project) }
         Menu("Set Default Session") {
             ForEach(AgentKind.allCases) { kind in
                 Toggle(kind.name, isOn: Binding(

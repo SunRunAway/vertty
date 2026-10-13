@@ -11,11 +11,22 @@ struct SessionCard: View {
 
     private var selected: Bool { store.selectedTabID == tab.id }
 
+    /// The scheduled task this card's session belongs to (or that started it).
+    private var scheduleTask: ScheduleTask? {
+        store.schedules.task(forSession: tab.sessionID) ?? tab.scheduleTaskID.flatMap(store.schedules.task)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 7) {
                 StatusIndicator(status: tab.status, attention: tab.attention, kind: tab.kind)
                 AgentIcon(kind: tab.kind, size: 11)
+                if let task = scheduleTask {
+                    Image(systemName: "clock")
+                        .font(.system(size: 9.5, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .help(String(localized: "Scheduled task: \(task.name)"))
+                }
                 Text(tab.title)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(selected ? .primary : .secondary)

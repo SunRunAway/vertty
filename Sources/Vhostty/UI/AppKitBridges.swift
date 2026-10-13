@@ -171,12 +171,12 @@ struct TerminalHost: NSViewRepresentable {
             store?.scheduleSave()
         }
         store.terminalContainer = view
-        view.show(store.selectedTab)
+        view.show(store.showingSchedules ? nil : store.selectedTab)
         return view
     }
 
     func updateNSView(_ view: TerminalContainerView, context: Context) {
-        let tab = store.selectedTab
+        let tab = store.showingSchedules ? nil : store.selectedTab
         let wantShell = tab?.shellVisible == true ? tab?.shellSurface : nil
         if view.current !== tab?.surface || view.currentShell !== wantShell {
             view.show(tab)

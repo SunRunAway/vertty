@@ -83,6 +83,10 @@ final class TabSession: ObservableObject, Identifiable {
     /// its full id becomes sessionID.
     var codexThreadID: String?
     var surface: TerminalSurfaceView?
+    /// The scheduled task that started this card (shown with a clock).
+    @Published var scheduleTaskID: UUID?
+    /// The scheduled run going on in this card's current process, if any.
+    var scheduleRunID: UUID?
 
     /// The bottom shell panel's terminal (created on first ⌘J).
     var shellSurface: TerminalSurfaceView?
@@ -107,7 +111,7 @@ final class TabSession: ObservableObject, Identifiable {
     var record: TabRecord {
         TabRecord(id: id, projectID: projectID, kind: kind, sessionID: sessionID, title: title, cwd: cwd,
                   branch: branch, worktree: worktree, prNumber: prNumber, prURL: prURL, prState: prState,
-                  shellOpen: shellVisible, shellCwd: shellCwd)
+                  shellOpen: shellVisible, shellCwd: shellCwd, scheduleTaskID: scheduleTaskID)
     }
 
     convenience init(record r: TabRecord) {
@@ -119,6 +123,7 @@ final class TabSession: ObservableObject, Identifiable {
         prState = r.prState
         shellVisible = r.shellOpen ?? false
         shellCwd = r.shellCwd
+        scheduleTaskID = r.scheduleTaskID
     }
 }
 
@@ -136,6 +141,7 @@ struct TabRecord: Codable {
     var prState: String?
     var shellOpen: Bool?
     var shellCwd: String?
+    var scheduleTaskID: UUID?
 }
 
 struct PersistedState: Codable {

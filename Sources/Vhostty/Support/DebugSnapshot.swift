@@ -24,7 +24,8 @@ final class DebugSnapshot {
     /// is selected", so a test can't type into a real session by accident.
     ///   to <uuid> / toshell <uuid> · text <s> · enter · down · up · esc ·
     ///   select <uuid> · new · notify · toggleshell · focus claude|shell ·
-    ///   post <ctrl|cmd|none> <char>
+    ///   post <ctrl|cmd|none> <char> · schedules · schedule <task uuid> ·
+    ///   runschedule <task uuid> · tickschedules · newschedule · closesheet
     private func drive() {
         let url = directory.appendingPathComponent("input.txt")
         guard let content = try? String(contentsOf: url, encoding: .utf8) else { return }
@@ -125,6 +126,30 @@ final class DebugSnapshot {
                 store.toggleExpanded(project)
                 continue
             }
+            if line == "schedules" {
+                store.showSchedules()
+                continue
+            }
+            if line.hasPrefix("schedule "), let id = UUID(uuidString: String(line.dropFirst(9))) {
+                store.showSchedules(detail: id)
+                continue
+            }
+            if line.hasPrefix("runschedule "), let id = UUID(uuidString: String(line.dropFirst(12))) {
+                store.runScheduleNow(id)
+                continue
+            }
+            if line == "tickschedules" {
+                store.runDueSchedules()
+                continue
+            }
+            if line == "newschedule" {
+                store.newScheduledTask()
+                continue
+            }
+            if line == "closesheet" {
+                store.scheduleEditor = nil
+                continue
+            }
             if line == "refreshhistory" {
                 store.refreshHistory()
                 continue
@@ -155,6 +180,9 @@ final class DebugSnapshot {
         if let cg = vhostty_window_image(CGWindowID(window.windowNumber)) {
             write(NSBitmapImageRep(cgImage: cg), "window.png")
         }
+        if let sheet = window.attachedSheet, let cg = vhostty_window_image(CGWindowID(sheet.windowNumber)) {
+            write(NSBitmapImageRep(cgImage: cg), "sheet.png")
+        }
         // AppKit rendering (SwiftUI chrome only, no terminal pixels).
         if let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
             view.cacheDisplay(in: view.bounds, to: rep)
@@ -180,6 +208,13 @@ final class DebugSnapshot {
                 lines.append("    frame=\(s.frame) inWindow=\(s.window != nil)")
                 lines.append(s.visibleText().split(separator: "\n", omittingEmptySubsequences: false)
                     .map { "    | " + $0 }.joined(separator: "\n"))
+            }
+        }
+        lines.append("schedulesShown=\(store.showingSchedules) detail=\(store.scheduleDetailID?.uuidString ?? "-") editor=\(store.scheduleEditor != nil)")
+        for task in store.schedules.tasks {
+            lines.append("=== task \(task.id) \(task.name) kind=\(task.kind) enabled=\(task.enabled) deleted=\(task.isDeleted) session=\(task.sessionID ?? "-") next=\(task.nextPlan.map { "\($0)" } ?? "-") note=\(task.reviewNote ?? "-")")
+            for run in store.schedules.runs(of: task.id) {
+                lines.append("    run \(run.id) \(run.trigger) \(run.state) phase=\(run.phase?.rawValue ?? "-") unresolved=\(run.unresolved ?? false) planned=\(run.plannedAt.map { "\($0)" } ?? "-") skipped=\(run.skippedCount ?? 0) session=\(run.sessionID ?? "-") reason=\(run.reason ?? "-")")
             }
         }
         for (pid, items) in store.history {

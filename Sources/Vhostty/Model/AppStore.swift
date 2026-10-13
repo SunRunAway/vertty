@@ -38,12 +38,25 @@ final class AppStore: ObservableObject {
     private var historyRefreshing = false
     private var historyRefreshPending = false
     private var saveWork: DispatchWorkItem?
-    private let infoQueue = DispatchQueue(label: "vhostty.info", qos: .utility)
+    let infoQueue = DispatchQueue(label: "vhostty.info", qos: .utility)
     private let searchQueue = DispatchQueue(label: "vhostty.search", qos: .userInitiated)
     private var promptSearchWork: [UUID: DispatchWorkItem] = [:]
     private var refreshing: Set<UUID> = []
     /// The Claude process last seen running in each tab (see refreshLiveSessions).
-    private var livePIDs: [UUID: pid_t] = [:]
+    private(set) var livePIDs: [UUID: pid_t] = [:]
+
+    let schedules = ScheduleStore()
+    /// The scheduled-task page replaces the terminal while shown.
+    @Published var showingSchedules = false
+    /// The task whose detail the page shows (nil: the list).
+    @Published var scheduleDetailID: UUID?
+    /// The open new/edit task sheet.
+    @Published var scheduleEditor: ScheduleEditorRequest?
+    var scheduleTimer: Timer?
+    /// Since when a scheduled Claude turn has looked idle without a Stop hook.
+    var scheduleIdleSince: [UUID: Date] = [:]
+    /// Runs whose card is being stopped before they resume in it.
+    var scheduleStopping: Set<UUID> = []
 
     var selectedTab: TabSession? { tabs.first { $0.id == selectedTabID } }
 
@@ -94,9 +107,11 @@ final class AppStore: ObservableObject {
         ) { [weak self] _ in
             self?.watchHistory()
             self?.refreshHistory()
+            self?.runDueSchedules()
         })
         refreshHistory()
         refreshAllInfo()
+        startSchedules()
     }
 
     /// Called once the user's shell environment is known (ShellEnvironment.loadInteractive).
@@ -190,7 +205,9 @@ final class AppStore: ObservableObject {
         panel.directoryURL = URL(fileURLWithPath: project.path)
         panel.prompt = String(localized: "Choose")
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard url.path != project.path else { return }
         updateProject(project.id) { $0.path = url.path }
+        schedules.projectChanged(project.id, note: String(localized: "The project directory changed. Check the task before resuming it."))
         refreshHistory()
     }
 
@@ -205,6 +222,7 @@ final class AppStore: ObservableObject {
         alert.addButton(withTitle: String(localized: "Cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         for tab in open { closeTab(tab, force: true) }
+        schedules.projectChanged(project.id, note: String(localized: "The project was removed from Vhostty."))
         projects.removeAll { $0.id == project.id }
         history.removeValue(forKey: project.id)
         scheduleSave()
@@ -273,7 +291,7 @@ final class AppStore: ObservableObject {
 
     /// New and resumed sessions go to the top of their project's cards, matching
     /// the newest-first order of the history list below them.
-    private func insertAtTopOfProject(_ tab: TabSession) {
+    func insertAtTopOfProject(_ tab: TabSession) {
         if let first = tabs.firstIndex(where: { $0.projectID == tab.projectID }) {
             tabs.insert(tab, at: first)
         } else {
@@ -283,12 +301,13 @@ final class AppStore: ObservableObject {
     }
 
     func select(_ tab: TabSession) {
+        showingSchedules = false
         launchIfNeeded(tab)
         if tab.shellVisible { launchShellIfNeeded(tab) }
         tab.attention = false
         if selectedTabID != tab.id { selectedTabID = tab.id }
         if lastProjectID != tab.projectID { lastProjectID = tab.projectID }
-        terminalContainer?.show(tab)
+        showInContainer(tab)
         updateDockBadge()
         scheduleSave()
     }
@@ -357,7 +376,7 @@ final class AppStore: ObservableObject {
         let wasSelected = tab.id == selectedTabID
         let ordered = orderedTabs
         let orderedIndex = ordered.firstIndex { $0 === tab } ?? 0
-        if wasSelected { terminalContainer?.show(nil) }
+        if wasSelected { showInContainer(nil) }
         tab.surface = nil
         tab.shellSurface = nil
         tabs.remove(at: index)
@@ -378,6 +397,11 @@ final class AppStore: ObservableObject {
         updateDockBadge()
         refreshHistory()
         scheduleSave()
+    }
+
+    /// Puts a session in the terminal area, unless the scheduled-task page covers it.
+    func showInContainer(_ tab: TabSession?) {
+        terminalContainer?.show(showingSchedules ? nil : tab)
     }
 
     func tab(for surface: TerminalSurfaceView) -> TabSession? {
@@ -423,7 +447,14 @@ final class AppStore: ObservableObject {
     // MARK: - Launching Claude
 
     private func launchIfNeeded(_ tab: TabSession) {
-        guard tab.surface == nil, let project = project(tab.projectID) else { return }
+        guard tab.surface == nil else { return }
+        launch(tab)
+    }
+
+    /// Starts the card's agent: resumed when its session exists, else new. A
+    /// scheduled run hands over its prompt with it.
+    func launch(_ tab: TabSession, prompt: String? = nil, scheduleRunID: UUID? = nil) {
+        guard let project = project(tab.projectID) else { return }
         var transcript: URL?
         let resume: Bool
         switch tab.kind {
@@ -436,14 +467,15 @@ final class AppStore: ObservableObject {
         }
         let options = TerminalSurfaceView.Options(
             workingDirectory: launchDirectory(project),
-            command: ClaudeLauncher.command(kind: tab.kind, sessionID: tab.sessionID, resume: resume),
-            environment: ClaudeLauncher.environment(tabID: tab.id))
+            command: ClaudeLauncher.command(kind: tab.kind, sessionID: tab.sessionID, resume: resume, prompt: prompt),
+            environment: ClaudeLauncher.environment(tabID: tab.id, scheduleRunID: scheduleRunID))
         let surface = TerminalSurfaceView(options: options)
         surface.onTitleChange = { [weak self, weak tab] title in
             guard let self, let tab else { return }
             self.terminalTitleChanged(tab, title)
         }
         tab.surface = surface
+        tab.scheduleRunID = scheduleRunID
         tab.transcriptPath = transcript?.path
         tab.status = .starting
         tab.hooksActive = false
@@ -469,7 +501,7 @@ final class AppStore: ObservableObject {
             tab.shellVisible = true
             tab.shellFocused = true
         }
-        terminalContainer?.show(tab)
+        showInContainer(tab)
         scheduleSave()
     }
 
@@ -504,7 +536,7 @@ final class AppStore: ObservableObject {
         tab.shellVisible = false
         tab.shellFocused = false
         tab.shellCwd = nil
-        if tab.id == selectedTabID { terminalContainer?.show(tab) }
+        if tab.id == selectedTabID { showInContainer(tab) }
         tab.shellSurface = nil
         scheduleSave()
     }
@@ -656,6 +688,7 @@ final class AppStore: ObservableObject {
         default:
             break
         }
+        scheduleHook(tab, event)
         updateDockBadge()
         refreshInfo(tab)
     }
@@ -663,6 +696,7 @@ final class AppStore: ObservableObject {
     // MARK: - Branch / worktree / PR
 
     private func refreshAllInfo() {
+        evaluateScheduleRuns()
         refreshLiveSessions()
         confirmCodexThreads()
         for tab in tabs { refreshInfo(tab) }
@@ -682,6 +716,7 @@ final class AppStore: ObservableObject {
                 guard let self else { return }
                 for (tab, ref, id) in saved where tab.codexThreadID == ref && tab.sessionID != id {
                     tab.sessionID = id
+                    self.scheduleSessionKnown(tab)
                     self.scheduleSave()
                     self.refreshInfo(tab)
                 }

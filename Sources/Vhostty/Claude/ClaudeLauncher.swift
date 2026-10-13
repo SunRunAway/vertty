@@ -30,27 +30,34 @@ enum ClaudeLauncher {
     /// Claude gets the session id up front. Codex can't, so its terminal title is set
     /// to its activity spinner, the thread title and the thread id (cut to its first
     /// 29 characters), and AppStore.terminalTitleChanged reads the id from there.
-    static func command(kind: AgentKind, sessionID: String, resume: Bool) -> String {
+    /// A scheduled run passes its prompt as the agent's prompt argument, never
+    /// by typing into the terminal.
+    static func command(kind: AgentKind, sessionID: String, resume: Bool, prompt: String? = nil) -> String {
         let shell = ShellQuote.quote(ShellEnvironment.shell)
-        let args: String
+        var args: String
         switch kind {
         case .claude: args = "\(resume ? "--resume" : "--session-id") \(sessionID)"
         case .codex:
             let title = "-c " + ShellQuote.quote(#"tui.terminal_title=["activity","thread-title","thread-id"]"#)
             args = resume ? "resume \(title) \(ShellQuote.quote(sessionID))" : title
         }
+        // A leading "-" would read as an option.
+        if let prompt { args += " " + ShellQuote.quote(prompt.hasPrefix("-") ? " " + prompt : prompt) }
         let inner = "\(ShellQuote.quote(launcherPath(kind))) \(args); exec \(shell) -l"
         // libghostty already runs this as `exec -l <command>` under /bin/bash.
         return "\(shell) -l -i -c \(ShellQuote.quote(inner))"
     }
 
-    static func environment(tabID: UUID) -> [String: String] {
-        [
+    static func environment(tabID: UUID, scheduleRunID: UUID? = nil) -> [String: String] {
+        var env = [
             "VHOSTTY_TAB_ID": tabID.uuidString,
             "VHOSTTY_SOCK": AppPaths.hookSocket,
             "VHOSTTY_CLAUDE_SETTINGS": AppPaths.claudeSettings.path,
             "VHOSTTY_HOOK": hookPath,
         ]
+        // Tells the launcher not to swap a scheduled resume for `claude attach`.
+        if let scheduleRunID { env["VHOSTTY_SCHEDULE_RUN"] = scheduleRunID.uuidString }
+        return env
     }
 
     static var hookPath: String {

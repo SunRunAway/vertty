@@ -8,6 +8,11 @@ if [ "$1" = "--resume" ] && [ -n "$2" ]; then
   file="$HOME/.claude/jobs/$job/state.json"
   if [ -f "$file" ] && grep -q "^  \"sessionId\": \"$2\"" "$file" &&
      ! grep -q '^  "state": "\(done\|stopped\)"' "$file"; then
+    # A scheduled run brings a prompt, which attach can't take: don't run it.
+    if [ -n "$VHOSTTY_SCHEDULE_RUN" ]; then
+      echo "Vhostty: this session is running in the background; the scheduled run was not started." >&2
+      exit 75
+    fi
     exec claude attach "$job"
   fi
 fi

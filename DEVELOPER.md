@@ -51,6 +51,14 @@ Claude 的历史来自项目自己的会话记录目录、`git worktree list` �
 
 hooks 事件的传递路径：`vhostty-hook`（App 里自带的一个小程序）通过 Unix socket，把事件转发给 App。
 
+### 定时任务
+
+产品规则见 [docs/spec/schedule-product.md](docs/spec/schedule-product.md)。任务和运行记录存在状态目录的 `schedules.json`。
+
+- **计划**：每个任务记着下一次还没处理的计划时间 `nextPlan`。每 20 秒、启动和唤醒时检查一次：到点的计划里只运行最近一次，更早的合成一条“已跳过”；先把新的 `nextPlan` 写盘再启动，所以重复检查、唤醒或重启都不会重复提交。时间按任务固定时区的日历计算（`Calendar.nextDate`，夏令时跳过的时刻顺延，重复的时刻只取第一次）。
+- **执行**：提示词作为 agent 的命令行参数传入（`claude --session-id/--resume <id> <提示词>`、`codex [resume <id>] <提示词>`），从不往终端里打字。首次运行在项目顶部新建一张后台卡片；之后 resume 任务绑定的会话 ID。这个会话开在某张卡片里时，先释放那张卡片的终端，等它的 agent 进程（Claude 看 `~/.claude/sessions`，外加带这张卡片 `VHOSTTY_TAB_ID` 的 `claude`、`vhostty-hook` 进程；Codex 看带 `tui.terminal_title` 参数的 TUI 进程）都退出后，再在同一张卡片里 resume。确认不了已停止就记异常，不启动第二个实例。Claude 会话如果在 Vhostty 之外（别的终端、底部终端、后台任务）还有进程，不碰它，直接记异常，因为再 resume 会让会话分叉。
+- **状态**：Claude 靠 hooks：`UserPromptSubmit` 表示已提交，`Stop` 表示已回复，没有 `Stop` 就空闲下来算中断。Codex 没有 hooks，查 `thread_history_<n>.sqlite`：本轮的 `userMessage` 出现表示已提交，同一轮有 `phase` 为 `final_answer` 的 `agentMessage` 表示已回复。App 重启时还在运行的记录标为“执行状态待确认”，在用户结束这条记录之前，这个任务不再运行。
+
 ## 为了不装 Xcode 做的处理
 
 Ghostty 官方的 macOS 构建依赖 Xcode。为了只用 Command Line Tools 就能编译，`patches/ghostty-vhostty.patch` 对 Ghostty 做了这些改动：
@@ -91,9 +99,12 @@ build/Vhostty.app/Contents/MacOS/Vhostty
 | `focus claude` / `focus shell` | 聚焦上面 / 下面的终端 |
 | `menukey <ctrl\|cmd> <字符>` | 把快捷键直接交给主菜单处理 |
 | `post <ctrl\|cmd\|none> <字符>` | 模拟一次真实按键，走 AppKit 正常的分发流程 |
+| `schedules` / `schedule <任务 UUID>` | 打开定时任务列表 / 某个任务的详情 |
+| `runschedule <任务 UUID>` / `tickschedules` | 立即运行一个任务 / 立即检查到点的计划 |
+| `newschedule` / `closesheet` | 打开新建任务表单 / 关闭表单 |
 | `cmdj-through-terminal` | 检查 ⌘J 是被终端吃掉还是交给了菜单，结果写到 `keyequiv.txt` |
 
-按键和文字只会发给用 `to` / `toshell` 明确指定的会话。
+按键和文字只会发给用 `to` / `toshell` 明确指定的会话。截图时如果有表单（sheet）打开，另存为 `sheet.png`；`state.txt` 末尾列出定时任务及其运行记录。
 
 `make app` 后运行 `python3 scripts/test-codex-history.py`，可在临时状态目录和数据库里验证 Codex 历史在最后一个数据库写连接关闭、数据库暂时被锁、恢复和真正清空时的行为；测试不会启动终端会话，并按 PID 停止自己的 App 实例。
 

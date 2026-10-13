@@ -141,6 +141,33 @@ enum CodexThreads {
         return result
     }
 
+    /// How far a prompt given to a thread at `since` got: whether it was submitted
+    /// (a user message with that text), and whether Codex gave its final answer in
+    /// that turn. nil when the history can't be read.
+    static func turnProgress(threadID: String, prompt: String, since: Date) -> (submitted: Bool, answered: Bool)? {
+        let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let turns = rows(newest("thread_history_"), """
+            SELECT turn_id, json_extract(part.value, '$.text')
+            FROM thread_items AS i, json_each(i.item_json, '$.content') AS part
+            WHERE i.thread_id = ? AND i.item_type = 'userMessage' AND i.created_at_ms >= ?
+            ORDER BY i.rollout_ordinal DESC
+            """, [threadID, Int(since.timeIntervalSince1970 * 1000)], { stmt -> String? in
+                guard let turn = self.text(stmt, 0),
+                      self.text(stmt, 1)?.trimmingCharacters(in: .whitespacesAndNewlines) == text else { return nil }
+                return turn
+            })
+        else { return nil }
+        guard let turn = turns.first else { return (false, false) }
+        guard let answers = rows(newest("thread_history_"), """
+            SELECT 1 FROM thread_items
+            WHERE thread_id = ? AND turn_id = ? AND item_type = 'agentMessage'
+              AND json_extract(item_json, '$.phase') = 'final_answer'
+            LIMIT 1
+            """, [threadID, turn], { _ in true })
+        else { return nil }
+        return (true, !answers.isEmpty)
+    }
+
     /// The query as it appears inside a JSON string written by Codex (serde_json).
     private static func jsonEscaped(_ s: String) -> String {
         var out = ""

@@ -20,11 +20,17 @@ struct RootView: View {
                     if store.tabs.isEmpty {
                         EmptyStateView(store: store)
                     }
+                    if store.showingSchedules {
+                        ScheduleManagerView(store: store, schedules: store.schedules)
+                    }
                 }
             }
         }
         .ignoresSafeArea()
         .preferredColorScheme(.dark)
+        .sheet(item: $store.scheduleEditor) { request in
+            ScheduleEditorView(store: store, request: request)
+        }
     }
 
     private var resizeHandle: some View {
@@ -55,7 +61,12 @@ struct TitleStrip: View {
     var body: some View {
         ZStack {
             WindowDragArea()
-            if let tab = store.selectedTab {
+            if store.showingSchedules {
+                Text("Scheduled Tasks")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .allowsHitTesting(false)
+            } else if let tab = store.selectedTab {
                 TitleStripLabel(tab: tab, project: store.project(tab.projectID))
                     .allowsHitTesting(false)
                 HStack {
