@@ -52,7 +52,7 @@ try:
         (case / 'value').write_text('1')
         (case / 'sleep-status').unlink(missing_ok=True)
         p = helper(); send(p, 0)
-        expected = 'external' if state == 'true,true' else 'error' if state == 'error' else 'idle'
+        expected = 'external' if state == 'true,true' else 'idle'
         wait(lambda: read(case / 'sleep-status') == expected, f'restore state {state}')
         p.stdin.close(); p.wait(timeout=10)
         assert read(case / 'value') == ('1' if expected != 'idle' else '0'), state
@@ -61,6 +61,7 @@ try:
         p = helper(); send(p, 1)
         wait(lambda: read(case / 'value') == '1', f'enable state {state}')
         p.stdin.close(); p.wait(timeout=10)
+        assert read(case / 'value') == ('1' if state == 'true,true' else '0'), f'EOF restore state {state}'
     print('PASS all Amphetamine states / query failure / unconditional enable', flush=True)
     (case / 'amphetamine').unlink()
     (case / 'value').write_text('0')

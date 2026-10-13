@@ -21,7 +21,7 @@ func run(_ path: String, _ arguments: [String]) -> (Int32, String) {
     let data = pipe.fileHandleForReading.readDataToEndOfFile(); p.waitUntilExit()
     return (p.terminationStatus, String(decoding: data, as: UTF8.self))
 }
-/// nil means denied, timed out, or unreadable; it must not be treated as false.
+/// nil means denied, timed out, or unreadable.
 func amphetamineProtectsSleep(requestPermission: Bool = false) -> Bool? {
     if let test, !FileManager.default.fileExists(atPath: test.appendingPathComponent("live-amphetamine").path) {
         guard FileManager.default.fileExists(atPath: test.appendingPathComponent("amphetamine").path) else { return false }
@@ -70,8 +70,7 @@ func setDisabled(_ value: Bool) -> Bool {
 }
 func release() {
     guard disabled() != false else { report("idle"); return }
-    guard let protected = amphetamineProtectsSleep() else { report("error"); return }
-    if protected { report("external"); return }
+    if amphetamineProtectsSleep() == true { report("external"); return }
     report(setDisabled(false) ? "idle" : "error")
 }
 // This is the only place that may request macOS automation consent.
