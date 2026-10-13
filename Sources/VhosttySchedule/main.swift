@@ -1,8 +1,8 @@
 import Foundation
 
-// vhostty-schedule: reads Vhostty's scheduled tasks, and for a change opens
-// Vhostty's own form or confirmation, filled in, for the user to confirm. It
-// can't change anything itself. Used by the built-in schedule skill; talks to
+// vhostty-schedule: reads Vhostty's scheduled tasks and pauses, resumes or runs
+// them. Creating, editing or deleting opens Vhostty's own form or confirmation,
+// filled in, for the user to confirm. Used by the built-in schedule skill; talks to
 // the running app over its hook socket.
 
 let usage = """
@@ -12,8 +12,9 @@ usage: vhostty-schedule <command> [options]
   show <task-id>            one task with its recent runs
   create [fields]           open the new-task form, filled in
   edit <task-id> [fields]   open the task's edit form with these changes
-  pause|resume|delete|run <task-id>
-                            ask the user to confirm that ("run" = run now)
+  pause|resume|run <task-id>
+                            done at once ("run" = run now)
+  delete <task-id>          ask the user to confirm deleting it
 
 fields:
   --name TEXT
@@ -26,7 +27,8 @@ fields:
   --project PATH|NAME       default: the project of this session
   --agent claude|codex      default: this session's agent
 
-Nothing changes until the user confirms it in Vhostty; cancelling drops it.
+create, edit and delete change nothing until the user confirms them in
+Vhostty; cancelling drops them.
 """
 
 func fail(_ message: String) -> Never {

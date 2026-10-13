@@ -707,55 +707,26 @@ extension AppStore {
         scheduleEditor = ScheduleEditorRequest(task: t, isNew: false)
     }
 
-    /// An agent's pause, resume, delete or run, asked on the window as a sheet:
-    /// a modal alert would hold up the main thread (and the hook socket) for as
-    /// long as the user is away. Delete asks what the Delete menu item asks.
-    func askScheduleAction(_ op: String, _ task: ScheduleTask) {
-        let alert: NSAlert
-        switch op {
-        case "pause":
-            alert = scheduleAlert(String(localized: "Pause “\(task.name)”?"), String(localized: "Pause"),
-                                  String(localized: "Its future runs stop. A run going on now isn't stopped."))
-        case "resume":
-            let next = task.timing.next(after: Date()).map { ScheduleFormat.dateTime($0, zone: task.timing.zone) } ?? "—"
-            alert = scheduleAlert(String(localized: "Resume “\(task.name)”?"), String(localized: "Resume"),
-                                  String(localized: "It runs on its schedule again from now on, without catching up what was missed. Next: \(next)"))
-        case "delete":
-            alert = deleteAlert(task)
-        default:
-            alert = scheduleAlert(String(localized: "Run “\(task.name)” now?"), String(localized: "Run Now"),
-                                  String(localized: "It runs once now; its schedule stays as it is. Its session is stopped and resumed, which may interrupt you."))
-        }
+    /// An agent's delete, asked on the window as a sheet: a modal alert would
+    /// hold up the main thread (and the hook socket) for as long as the user is
+    /// away. It asks what the Delete menu item asks.
+    func askDeleteScheduledTask(_ task: ScheduleTask) {
         guard let window = (NSApp.delegate as? AppDelegate)?.window else { return }
         scheduleAsking = true
-        alert.beginSheetModal(for: window) { [self] answer in
+        deleteAlert(task).beginSheetModal(for: window) { [self] answer in
             scheduleAsking = false
-            guard answer == .alertFirstButtonReturn, let t = schedules.task(task.id), !t.isDeleted else { return }
-            switch op {
-            case "pause": schedules.setEnabled(t.id, false)
-            case "resume":
-                guard project(t.projectID) != nil, t.timing.canResume else { return }
-                schedules.setEnabled(t.id, true)
-            case "delete": schedules.delete(t.id)
-            default:
-                guard project(t.projectID) != nil, schedules.openRun(of: t.id) == nil else { return }
-                runScheduleNow(t.id)
-            }
+            guard answer == .alertFirstButtonReturn else { return }
+            schedules.delete(task.id)
         }
-    }
-
-    private func scheduleAlert(_ title: String, _ button: String, _ info: String) -> NSAlert {
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = info
-        alert.addButton(withTitle: button)
-        alert.addButton(withTitle: String(localized: "Cancel"))
-        return alert
     }
 
     private func deleteAlert(_ task: ScheduleTask) -> NSAlert {
-        scheduleAlert(String(localized: "Delete “\(task.name)”?"), String(localized: "Delete"),
-                      String(localized: "It stops being scheduled and moves to Deleted, where its runs stay visible. Its session and any current run are left alone."))
+        let alert = NSAlert()
+        alert.messageText = String(localized: "Delete “\(task.name)”?")
+        alert.informativeText = String(localized: "It stops being scheduled and moves to Deleted, where its runs stay visible. Its session and any current run are left alone.")
+        alert.addButton(withTitle: String(localized: "Delete"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        return alert
     }
 
     func confirmDeleteScheduledTask(_ task: ScheduleTask) {

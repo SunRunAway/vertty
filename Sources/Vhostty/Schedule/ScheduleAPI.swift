@@ -1,9 +1,10 @@
 import Foundation
 
 /// Requests from `vhostty-schedule` (the command the built-in schedule skill
-/// runs). Agents can read tasks. A change only opens the form or confirmation
-/// the user would use anyway, filled in; nothing is saved unless the user
-/// confirms it there, and cancelling leaves nothing behind.
+/// runs). Agents can read tasks, and pause, resume or run one, as the user can
+/// with one click. Creating, editing or deleting only opens the form or
+/// confirmation the user would use anyway, filled in: nothing is saved unless
+/// the user confirms it there, and cancelling leaves nothing behind.
 extension AppStore {
     func handleScheduleRequest(_ request: [String: Any]) -> [String: Any] {
         let allowed: Set<String> = ["op", "taskID", "fields", "tabID", "threadID", "cwd"]
@@ -26,7 +27,25 @@ extension AppStore {
             var d = describe(task)
             d["recentRuns"] = schedules.runs(of: id).prefix(10).map(describe)
             return ["ok": true, "task": d]
-        case "create", "edit", "pause", "resume", "delete", "run":
+        case "pause", "resume", "run":
+            // The same one click as in the window: the task is one the user confirmed.
+            guard let id = taskID, let task = schedules.task(id), !task.isDeleted else { return error("No task with that id.") }
+            if !fields.isEmpty { return error("\(op) takes no fields.") }
+            switch op {
+            case "pause":
+                schedules.setEnabled(id, false)
+            case "resume":
+                guard project(task.projectID) != nil, task.timing.canResume else {
+                    return error("This task can't be resumed as it is: its project is gone or its one-time date has passed. Edit it first.")
+                }
+                schedules.setEnabled(id, true)
+            default:
+                guard project(task.projectID) != nil else { return error("The task's project is gone.") }
+                guard schedules.openRun(of: id) == nil else { return error("The task is running now.") }
+                runScheduleNow(id)
+            }
+            return ["ok": true, "task": describe(schedules.task(id)!)]
+        case "create", "edit", "delete":
             guard scheduleEditor == nil, !scheduleAsking else {
                 return error("A scheduled-task form is already open in Vhostty. Ask the user to finish it, then try again.")
             }
@@ -38,27 +57,18 @@ extension AppStore {
                 return opened("The New Scheduled Task form")
             }
             guard let id = taskID, let task = schedules.task(id), !task.isDeleted else { return error("No task with that id.") }
-            if op != "edit", !fields.isEmpty { return error("\(op) takes no fields.") }
-            if op == "edit" {
-                switch filledTask(task, fields, source: source, cwd: cwd) {
-                case .failure(let e): return error(e.message)
-                case .success(let changed):
-                    if changed == task { return error("Nothing would change.") }
-                    editScheduledTask(changed)
-                }
-                return opened("The Edit Scheduled Task form")
+            if op == "delete" {
+                if !fields.isEmpty { return error("delete takes no fields.") }
+                askDeleteScheduledTask(task)
+                return opened("The delete confirmation")
             }
-            if op == "resume" {
-                guard project(task.projectID) != nil, task.timing.canResume else {
-                    return error("This task can't be resumed as it is: its project is gone or its one-time date has passed. Edit it first.")
-                }
+            switch filledTask(task, fields, source: source, cwd: cwd) {
+            case .failure(let e): return error(e.message)
+            case .success(let changed):
+                if changed == task { return error("Nothing would change.") }
+                editScheduledTask(changed)
             }
-            if op == "run" {
-                guard project(task.projectID) != nil else { return error("The task's project is gone.") }
-                guard schedules.openRun(of: id) == nil else { return error("The task is running now.") }
-            }
-            askScheduleAction(op, task)
-            return opened("A confirmation")
+            return opened("The Edit Scheduled Task form")
         default:
             return error("Unknown op: \(op)")
         }

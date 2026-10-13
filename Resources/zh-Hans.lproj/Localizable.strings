@@ -220,12 +220,6 @@
 "The project directory changed. Check the task before resuming it." = "项目目录已更改，请核对任务后再恢复。";
 "The project was removed from Vhostty." = "项目已从 Vhostty 移除。";
 "The task no longer exists." = "任务已不存在。";
-"Pause “%@”?" = "暂停“%@”？";
-"Resume “%@”?" = "恢复“%@”？";
-"Run “%@” now?" = "立即运行“%@”？";
-"Its future runs stop. A run going on now isn't stopped." = "之后不再自动运行，正在进行的运行不会被终止。";
-"It runs on its schedule again from now on, without catching up what was missed. Next: %@" = "从现在起按计划运行，不补跑错过的计划。下次：%@";
-"It runs once now; its schedule stays as it is. Its session is stopped and resumed, which may interrupt you." = "立即运行一次，原计划不变。任务会话会被停止并恢复，可能打断你的操作。";
 "The task is running now." = "任务正在运行。";
 "The task has its session now, so its project and agent can't change." = "任务已建立会话，项目和 agent 不能再更改。";
 "The session's card changed while it was being stopped, so nothing was resumed." = "停止期间会话卡片发生了变化，因此没有恢复执行。";
