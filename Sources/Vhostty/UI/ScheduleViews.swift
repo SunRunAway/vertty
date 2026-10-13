@@ -220,7 +220,6 @@ enum ScheduleText {
     }
 
     static func phase(_ run: ScheduleRun) -> String? {
-        if run.unresolved == true { return String(localized: "Result unknown") }
         switch run.phase {
         case .starting?: return String(localized: "Starting")
         case .executing?: return String(localized: "Working")
@@ -241,7 +240,7 @@ enum ScheduleText {
         if task.isDeleted { return "—" }
         if !task.enabled { return String(localized: "Paused") }
         guard let next = task.nextPlan else { return String(localized: "No more plans") }
-        return ScheduleFormat.dateTime(next, zone: task.timing.zone)
+        return ScheduleFormat.dateTime(next)
     }
 }
 
@@ -278,9 +277,6 @@ private struct ScheduleDetailView: View {
                     if !task.isDeleted { actions }
                 }
 
-                if let note = task.reviewNote, !task.isDeleted {
-                    banner(note, systemImage: "exclamationmark.triangle")
-                }
                 if !task.isDeleted {
                     banner(String(localized: "When the task runs, it stops and resumes this session, which may interrupt what you're doing in it."),
                            systemImage: "info.circle")
@@ -332,7 +328,7 @@ private struct ScheduleDetailView: View {
             row("Project", store.project(task.projectID).map { "\($0.name)  \($0.path.abbreviatingHome)" }
                 ?? String(localized: "Removed project"))
             row("Agent", task.kind.name)
-            row("Schedule", task.timing.summaryWithZone)
+            row("Schedule", task.timing.summary)
             row("Next Run", ScheduleText.nextRun(task))
             GridRow {
                 Text("Session").foregroundStyle(.secondary)
@@ -406,9 +402,6 @@ private struct RunRow: View {
                     }
                 }
                 Spacer()
-                if run.unresolved == true {
-                    Button("End This Record") { schedules.endRecord(run.id) }
-                }
                 if canOpen {
                     Button("Open Session") { open() }
                 }
@@ -441,17 +434,12 @@ private struct RunRow: View {
     private var detailLines: [String] {
         var lines: [String] = []
         if let planned = run.plannedAt {
-            if let count = run.skippedCount, count > 1, let from = run.skippedFrom {
-                lines.append(String(localized: "\(count) missed plans: \(ScheduleFormat.dateTime(from)) – \(ScheduleFormat.dateTime(planned))"))
-            } else {
-                lines.append(String(localized: "Planned for \(ScheduleFormat.dateTime(planned))"))
-            }
+            lines.append(String(localized: "Planned for \(ScheduleFormat.dateTime(planned))"))
         }
         if let ended = run.endedAt, run.state != .skipped {
             lines.append(String(localized: "Ended \(ScheduleFormat.dateTime(ended))"))
         }
         if let reason = run.reason { lines.append(reason) }
-        if run.resolvedByUser == true { lines.append(String(localized: "Record ended by you.")) }
         return lines
     }
 
@@ -561,9 +549,7 @@ struct ScheduleEditorView: View {
                             DatePicker("", selection: onceDay, displayedComponents: .date).labelsHidden().fixedSize()
                         }
                         DatePicker("", selection: timeOfDay, displayedComponents: .hourAndMinute).labelsHidden().fixedSize()
-                        Text(task.timing.timeZone).foregroundStyle(.secondary)
                     }
-                    .environment(\.timeZone, task.timing.zone)
                 }
                 GridRow {
                     Color.clear.frame(width: 1, height: 1)
@@ -593,8 +579,8 @@ struct ScheduleEditorView: View {
     }
 
     private var planSummary: String {
-        let next = task.timing.next(after: Date()).map { ScheduleFormat.dateTime($0, zone: task.timing.zone) }
-        return String(localized: "\(task.timing.summaryWithZone) · Next: \(next ?? "—")")
+        let next = task.timing.next(after: Date()).map { ScheduleFormat.dateTime($0) }
+        return String(localized: "\(task.timing.summary) · Next: \(next ?? "—")")
     }
 
     /// The time of day, as a date in the task's zone (the picker shows that zone).

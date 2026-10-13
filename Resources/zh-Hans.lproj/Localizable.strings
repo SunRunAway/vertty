@@ -152,7 +152,6 @@
 "Replied" = "已回复";
 "Error" = "异常";
 "Skipped" = "已跳过";
-"Result unknown" = "执行状态待确认";
 "Starting" = "正在启动";
 "Working" = "正在执行";
 "Waiting for you" = "等待你确认";
@@ -169,11 +168,8 @@
 "Prompt" = "提示词";
 "Runs" = "运行记录";
 "Show Earlier Runs" = "加载更早记录";
-"End This Record" = "结束本次记录";
-"%lld missed plans: %@ – %@" = "错过 %lld 次计划：%@ – %@";
 "Planned for %@" = "原计划 %@";
 "Ended %@" = "结束于 %@";
-"Record ended by you." = "已由你结束本次记录。";
 "Daily %@" = "每天 %@";
 "Weekdays %@" = "工作日 %@";
 "Every %@ %@" = "每%@ %@";
@@ -200,7 +196,6 @@
 "Choose at least one day." = "请至少选择一天。";
 "Choose a time in the future." = "请选择未来的时间。";
 "The previous run hasn't finished." = "同一任务上次运行尚未结束。";
-"The previous run's result is still unknown. End that record to let the task run again." = "上次运行的执行状态待确认。结束那条记录后任务才会继续运行。";
 "The task's project is no longer in Vhostty." = "任务所属项目已不在 Vhostty 中。";
 "The project directory doesn't exist: %@" = "项目目录不存在：%@";
 "The task's session record can't be found." = "找不到任务的会话记录。";
@@ -215,15 +210,13 @@
 "The turn was interrupted." = "本轮被中断。";
 "Couldn't confirm that the prompt was submitted." = "无法确认提示词已提交。";
 "The prompt wasn't submitted. The session may be open somewhere else." = "提示词未能提交，会话可能在其他地方打开。";
-"Missed while Vhostty wasn't running or the Mac was asleep. Only the latest one is caught up." = "Vhostty 未运行或电脑休眠时错过，只补跑最近一次。";
-"Vhostty quit while this run was going. Its result is unknown." = "运行期间 Vhostty 退出，执行状态待确认。";
-"The project directory changed. Check the task before resuming it." = "项目目录已更改，请核对任务后再恢复。";
-"The project was removed from Vhostty." = "项目已从 Vhostty 移除。";
 "The task no longer exists." = "任务已不存在。";
 "The task is running now." = "任务正在运行。";
 "The task has its session now, so its project and agent can't change." = "任务已建立会话，项目和 agent 不能再更改。";
 "The session's card changed while it was being stopped, so nothing was resumed." = "停止期间会话卡片发生了变化，因此没有恢复执行。";
-"Couldn't confirm that the session was created or the prompt submitted. Check the card, then end this record." = "无法确认会话是否已创建、提示词是否已提交。请检查卡片后结束本次记录。";
+"Couldn't confirm that the session was created or the prompt submitted." = "无法确认会话是否已创建、提示词是否已提交。";
 "Codex reported an error in this turn." = "Codex 本轮执行出错。";
-"The turn stopped without an answer or a recorded status. Check the card, then end this record." = "本轮停止了，但没有最终回复，也没有记录状态。请检查卡片后结束本次记录。";
+"The turn stopped without an answer or a recorded status." = "本轮停止了，但没有最终回复，也没有记录状态。";
 "Codex's session records couldn't be read." = "无法读取 Codex 的会话记录。";
+
+"Vhostty quit during the run." = "运行期间 Vhostty 退出了。";

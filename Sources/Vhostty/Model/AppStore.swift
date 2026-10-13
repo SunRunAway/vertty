@@ -113,6 +113,12 @@ final class AppStore: ObservableObject {
             self?.refreshHistory()
             self?.runDueSchedules()
         })
+        historyObservers.append(NotificationCenter.default.addObserver(
+            forName: .NSSystemTimeZoneDidChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            NSTimeZone.resetSystemTimeZone()
+            self?.schedules.timeZoneChanged()
+        })
         refreshHistory()
         refreshAllInfo()
         startSchedules()
@@ -213,7 +219,6 @@ final class AppStore: ObservableObject {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         guard url.path != project.path else { return }
         updateProject(project.id) { $0.path = url.path }
-        schedules.projectChanged(project.id, note: String(localized: "The project directory changed. Check the task before resuming it."))
         refreshHistory()
     }
 
@@ -228,7 +233,6 @@ final class AppStore: ObservableObject {
         alert.addButton(withTitle: String(localized: "Cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         for tab in open { closeTab(tab, force: true) }
-        schedules.projectChanged(project.id, note: String(localized: "The project was removed from Vhostty."))
         projects.removeAll { $0.id == project.id }
         history.removeValue(forKey: project.id)
         scheduleSave()

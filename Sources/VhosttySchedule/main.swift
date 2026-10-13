@@ -22,8 +22,7 @@ fields:
   --repeat once|daily|weekdays|weekly
   --days mon,tue,…          for weekly
   --date YYYY-MM-DD         for once
-  --time HH:MM              24-hour, in --timezone
-  --timezone ZONE           IANA name; default: this Mac's zone
+  --time HH:MM              24-hour, this Mac's time
   --project PATH|NAME       default: the project of this session
   --agent claude|codex      default: this session's agent
 
@@ -62,7 +61,7 @@ default:
 }
 
 let fieldNames = ["--name": "name", "--prompt": "prompt", "--repeat": "repeat", "--days": "days", "--date": "date",
-                  "--time": "time", "--timezone": "timezone", "--project": "project", "--agent": "agent"]
+                  "--time": "time", "--project": "project", "--agent": "agent"]
 var fields: [String: Any] = [:]
 while !args.isEmpty {
     let flag = args.removeFirst()

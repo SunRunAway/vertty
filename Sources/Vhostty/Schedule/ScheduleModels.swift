@@ -6,7 +6,7 @@ enum ScheduleRepeat: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-/// When a task runs: wall-clock time in a fixed time zone (not every 24 hours).
+/// When a task runs: wall-clock time in the Mac's time zone (not every 24 hours).
 struct ScheduleTiming: Codable, Equatable {
     var repeatKind: ScheduleRepeat = .weekly
     var hour = 9
@@ -17,13 +17,10 @@ struct ScheduleTiming: Codable, Equatable {
     var year: Int?
     var month: Int?
     var day: Int?
-    var timeZone = TimeZone.current.identifier
-
-    var zone: TimeZone { TimeZone(identifier: timeZone) ?? .current }
 
     var calendar: Calendar {
         var c = Calendar(identifier: .gregorian)
-        c.timeZone = zone
+        c.timeZone = .current
         return c
     }
 
@@ -92,12 +89,10 @@ struct ScheduleTiming: Codable, Equatable {
                 .map { names[($0 - 1) % 7] }.joined(separator: String(localized: ", "))
             return String(localized: "Every \(days) \(time)")
         case .once:
-            let date = onceDate.map { ScheduleFormat.day($0, zone: zone) } ?? "?"
+            let date = onceDate.map { ScheduleFormat.day($0) } ?? "?"
             return String(localized: "Once \(date) \(time)")
         }
     }
-
-    var summaryWithZone: String { "\(summary) · \(timeZone)" }
 
     static func mondayFirst(_ weekday: Int) -> Int { (weekday + 5) % 7 }
 }
@@ -111,19 +106,16 @@ enum ScheduleFormat {
         return cal.shortWeekdaySymbols
     }
 
-    static func day(_ date: Date, zone: TimeZone) -> String {
+    static func day(_ date: Date) -> String {
         let f = DateFormatter()
         f.locale = locale
-        f.timeZone = zone
         f.setLocalizedDateFormatFromTemplate("yMMMdEEE")
         return f.string(from: date)
     }
 
-    /// Date and time, in the task's zone when given.
-    static func dateTime(_ date: Date, zone: TimeZone? = nil) -> String {
+    static func dateTime(_ date: Date) -> String {
         let f = DateFormatter()
         f.locale = locale
-        f.timeZone = zone ?? .current
         f.setLocalizedDateFormatFromTemplate("MMMdEEEHHmm")
         return f.string(from: date)
     }
@@ -145,8 +137,6 @@ struct ScheduleTask: Codable, Identifiable, Equatable {
     var sessionID: String?
     /// The next planned time not handled yet (nil: no more plans).
     var nextPlan: Date?
-    /// Set when Vhostty paused the task because its project was removed or moved.
-    var reviewNote: String?
 
     var isDeleted: Bool { deletedAt != nil }
     /// Project and agent are fixed once the task has its session.
@@ -180,21 +170,9 @@ struct ScheduleRun: Codable, Identifiable, Equatable {
     var state: RunState
     var phase: RunPhase?
     var reason: String?
-    /// The run's state is unknown: it blocks the task until the user ends the record.
-    var unresolved: Bool?
-    var resolvedByUser: Bool?
-    /// A skip record that stands for several missed plans (the earliest is skippedFrom).
-    var skippedCount: Int?
-    var skippedFrom: Date?
     var kind: AgentKind
     var sessionID: String?
     var cwd: String?
-    /// What this run was given, kept as it was then.
-    var prompt: String
-    var timingSummary: String
-
-    /// Still holds the task: running, or unresolved.
-    var isOpen: Bool { state == .running || unresolved == true }
 }
 
 struct ScheduleFile: Codable {

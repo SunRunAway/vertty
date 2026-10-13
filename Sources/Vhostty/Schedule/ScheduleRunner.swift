@@ -29,15 +29,12 @@ extension AppStore {
 
     private func startRun(_ task: ScheduleTask, plannedAt: Date?, trigger: RunTrigger) {
         var run = ScheduleRun(taskID: task.id, trigger: trigger, plannedAt: plannedAt, state: .running, phase: .starting,
-                              kind: task.kind, sessionID: task.sessionID, prompt: task.prompt,
-                              timingSummary: task.timing.summaryWithZone)
+                              kind: task.kind, sessionID: task.sessionID)
         if let open = schedules.openRun(of: task.id) {
             run.state = .skipped
             run.phase = nil
             run.endedAt = Date()
-            run.reason = open.unresolved == true
-                ? String(localized: "The previous run's result is still unknown. End that record to let the task run again.")
-                : String(localized: "The previous run hasn't finished.")
+            run.reason = String(localized: "The previous run hasn't finished.")
             schedules.add(run)
             return
         }
@@ -215,11 +212,9 @@ extension AppStore {
                     }
                 }
                 guard stopped else {
-                    // Held until the user checks the card: the next run mustn't start a second one.
                     self.schedulePreparing.remove(runID)
                     return self.schedules.modifyRun(runID) {
                         self.markFailed(&$0, String(localized: "The session's earlier instance couldn't be confirmed stopped, so it wasn't resumed."))
-                        $0.unresolved = true
                     }
                 }
                 self.launchRun(tab, task, runID)
@@ -353,21 +348,19 @@ extension AppStore {
     private func evaluateCodex(_ run: ScheduleRun, _ tab: TabSession, _ age: TimeInterval) {
         let threadID = tab.sessionID
         guard !threadID.isEmpty else {
-            // The session may exist without its id being readable yet: keep the task
-            // held (unresolved) rather than let the next run start another one.
             if age > 120 {
                 tab.scheduleRunID = nil
                 schedules.modifyRun(run.id) {
-                    self.markFailed(&$0, String(localized: "Couldn't confirm that the session was created or the prompt submitted. Check the card, then end this record."))
-                    $0.unresolved = true
+                    self.markFailed(&$0, String(localized: "Couldn't confirm that the session was created or the prompt submitted."))
                 }
             }
             return
         }
+        guard let prompt = schedules.task(run.taskID)?.prompt else { return }
         let since = run.startedAt.addingTimeInterval(-5)
         let idle = tab.status == .idle && !tab.titleBusy
         infoQueue.async { [weak self] in
-            let progress = CodexThreads.turnProgress(threadID: threadID, prompt: run.prompt, since: since)
+            let progress = CodexThreads.turnProgress(threadID: threadID, prompt: prompt, since: since)
             DispatchQueue.main.async {
                 guard let self, let progress, tab.scheduleRunID == run.id,
                       let current = self.schedules.run(run.id), current.state == .running else { return }
@@ -382,12 +375,11 @@ extension AppStore {
                     }
                 } else if progress.submitted {
                     if current.phase == .starting { self.schedules.modifyRun(run.id) { $0.phase = .executing } }
-                    // Submitted, idle, and no status recorded for the turn: its end is unknown.
+                    // Submitted, idle, and no status recorded for the turn.
                     if progress.status == nil && idle && age > 120 {
                         tab.scheduleRunID = nil
                         self.schedules.modifyRun(run.id) {
-                            self.markFailed(&$0, String(localized: "The turn stopped without an answer or a recorded status. Check the card, then end this record."))
-                            $0.unresolved = true
+                            self.markFailed(&$0, String(localized: "The turn stopped without an answer or a recorded status."))
                         }
                     }
                 } else if idle && age > 60 {

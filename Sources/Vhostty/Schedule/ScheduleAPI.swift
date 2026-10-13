@@ -85,7 +85,7 @@ extension AppStore {
     /// asking session unless given, and can't change once the task has its session.
     private func filledTask(_ existing: ScheduleTask?, _ f: [String: Any], source: TabSession?,
                            cwd: String?) -> Result<ScheduleTask, APIError> {
-        let known: Set<String> = ["name", "prompt", "repeat", "days", "date", "time", "timezone", "project", "agent"]
+        let known: Set<String> = ["name", "prompt", "repeat", "days", "date", "time", "project", "agent"]
         if let extra = f.keys.first(where: { !known.contains($0) }) { return .failure(APIError(message: "Unknown field: \(extra)")) }
         func str(_ k: String) -> String? { (f[k] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) }
 
@@ -129,10 +129,6 @@ extension AppStore {
         if let kind { t.kind = kind }
         if let v = str("name") { t.name = v }
         if let v = f["prompt"] as? String { t.prompt = v.trimmingCharacters(in: .whitespacesAndNewlines) }
-        if let v = str("timezone") {
-            guard TimeZone(identifier: v) != nil else { return .failure(APIError(message: "Unknown time zone \(v).")) }
-            t.timing.timeZone = v
-        }
         if let v = str("repeat") {
             guard let r = ScheduleRepeat(rawValue: v.lowercased()) else {
                 return .failure(APIError(message: "repeat must be once, daily, weekdays or weekly."))
@@ -190,8 +186,8 @@ extension AppStore {
         var d: [String: Any] = [
             "id": t.id.uuidString, "name": t.name, "agent": t.kind.rawValue, "prompt": t.prompt,
             "project": project(t.projectID).map { ["name": $0.name, "path": $0.path] } ?? NSNull(),
-            "schedule": t.timing.summaryWithZone, "repeat": t.timing.repeatKind.rawValue,
-            "time": String(format: "%02d:%02d", t.timing.hour, t.timing.minute), "timezone": t.timing.timeZone,
+            "schedule": t.timing.summary, "repeat": t.timing.repeatKind.rawValue,
+            "time": String(format: "%02d:%02d", t.timing.hour, t.timing.minute),
             "enabled": t.enabled, "deleted": t.isDeleted,
             "nextRun": t.enabled ? (t.nextPlan.map(iso) ?? NSNull()) : NSNull(),
             "lastRunState": schedules.shownRun(of: t.id)?.state.rawValue ?? NSNull(),
@@ -208,7 +204,7 @@ extension AppStore {
 
     private func describe(_ r: ScheduleRun) -> [String: Any] {
         ["trigger": r.trigger.rawValue, "state": r.state.rawValue, "startedAt": iso(r.startedAt),
-         "reason": r.reason ?? NSNull(), "unresolved": r.unresolved ?? false]
+         "reason": r.reason ?? NSNull()]
     }
 
 

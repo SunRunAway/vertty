@@ -24,14 +24,12 @@ final class ScheduleStore: ObservableObject {
         }
         tasks = file.tasks
         runs = file.runs
-        // Runs left running by the last launch: their terminals are gone, but
-        // whether their turn finished is unknown, so don't count them as done.
+        // Runs left running by the last launch: their terminals are gone.
         var changed = false
         for i in runs.indices where runs[i].state == .running {
             runs[i].state = .failed
             runs[i].phase = nil
-            runs[i].unresolved = true
-            runs[i].reason = String(localized: "Vhostty quit while this run was going. Its result is unknown.")
+            runs[i].reason = String(localized: "Vhostty quit during the run.")
             changed = true
         }
         if changed { save() }
@@ -75,12 +73,12 @@ final class ScheduleStore: ObservableObject {
 
     func run(_ id: UUID) -> ScheduleRun? { runs.first { $0.id == id } }
 
-    /// The run still holding the task (running or unresolved), if any.
+    /// The task's run going on now, if any.
     func openRun(of taskID: UUID) -> ScheduleRun? {
-        runs.last { $0.taskID == taskID && $0.isOpen }
+        runs.last { $0.taskID == taskID && $0.state == .running }
     }
 
-    /// What the list shows: an open run first (a later skip mustn't hide it), else the latest.
+    /// What the list shows: a running run first (a later skip mustn't hide it), else the latest.
     func shownRun(of taskID: UUID) -> ScheduleRun? {
         openRun(of: taskID) ?? runs.last { $0.taskID == taskID }
     }
@@ -134,7 +132,6 @@ final class ScheduleStore: ObservableObject {
         modify(id) { t in
             t.enabled = enabled
             t.nextPlan = enabled ? t.timing.next(after: Date()) : nil
-            if enabled { t.reviewNote = nil }
         }
     }
 
@@ -157,21 +154,8 @@ final class ScheduleStore: ObservableObject {
         save()
     }
 
-    /// "End this record": frees the task from an unresolved run. Stops nothing.
-    func endRecord(_ id: UUID) {
-        modifyRun(id) { r in
-            r.unresolved = nil
-            r.resolvedByUser = true
-            if r.state == .running {
-                r.state = .failed
-                r.phase = nil
-            }
-            r.endedAt = r.endedAt ?? Date()
-        }
-    }
-
     /// A project was added again after being removed: its tasks (found by the
-    /// directory their runs used) go back to it, still paused.
+    /// directory their runs used) go back to it.
     func projectAdded(_ projectID: UUID, path: String, known: Set<UUID>) {
         var changed = false
         for i in tasks.indices where !known.contains(tasks[i].projectID) {
@@ -183,12 +167,10 @@ final class ScheduleStore: ObservableObject {
         if changed { save() }
     }
 
-    /// A project was removed or moved: pause its tasks until the user checks them.
-    func projectChanged(_ projectID: UUID, note: String) {
-        for i in tasks.indices where tasks[i].projectID == projectID && !tasks[i].isDeleted {
-            tasks[i].enabled = false
-            tasks[i].nextPlan = nil
-            tasks[i].reviewNote = note
+    /// The Mac's time zone changed: plans follow its wall clock.
+    func timeZoneChanged() {
+        for i in tasks.indices where tasks[i].enabled && !tasks[i].isDeleted {
+            tasks[i].nextPlan = tasks[i].timing.next(after: Date())
         }
         save()
     }
@@ -202,31 +184,25 @@ final class ScheduleStore: ObservableObject {
     }
 
     /// Takes every plan that is due. Only the latest plan of a task runs; earlier
-    /// ones (missed while asleep or quit) become one skip record. Each plan is
+    /// ones (missed while asleep or quit) are dropped. Each plan is
     /// claimed (saved as handled) before it's returned, so it can't run twice.
     func claimDue(now: Date = Date()) -> [Due] {
-        let before = (tasks, runs)
+        let before = tasks
         var due: [Due] = []
         for i in tasks.indices {
             let t = tasks[i]
             guard t.enabled, !t.isDeleted, let first = t.nextPlan, first <= now else { continue }
             var plans = [first]
             while plans.count < 10_000, let n = t.timing.next(after: plans.last!), n <= now { plans.append(n) }
-            let latest = plans.removeLast()
-            if let missed = plans.last {
-                runs.append(ScheduleRun(
-                    taskID: t.id, trigger: .catchUp, plannedAt: missed, endedAt: now, state: .skipped,
-                    reason: String(localized: "Missed while Vhostty wasn't running or the Mac was asleep. Only the latest one is caught up."),
-                    skippedCount: plans.count, skippedFrom: plans.first,
-                    kind: t.kind, sessionID: t.sessionID, prompt: t.prompt, timingSummary: t.timing.summaryWithZone))
-            }
+            // Missed plans: only the latest runs.
+            let latest = plans.last!
             tasks[i].nextPlan = t.timing.next(after: now)
             // Late by more than a couple of minutes: that's catching up, not on time.
             due.append(Due(task: tasks[i], plannedAt: latest, trigger: now.timeIntervalSince(latest) > 120 ? .catchUp : .scheduled))
         }
         // Unsaved, a claim could run again after a restart: then don't run it now.
         if !due.isEmpty && !save() {
-            (tasks, runs) = before
+            tasks = before
             return []
         }
         return due

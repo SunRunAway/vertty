@@ -231,9 +231,9 @@ final class DebugSnapshot {
         lines.append("schedulesShown=\(store.showingSchedules) detail=\(store.scheduleDetailID?.uuidString ?? "-") editor=\(store.scheduleEditor != nil)")
         if self.window?.attachedSheet != nil || NSApp.modalWindow != nil { lines.append("sheet=open") }
         for task in store.schedules.tasks {
-            lines.append("=== task \(task.id) \(task.name) kind=\(task.kind) enabled=\(task.enabled) deleted=\(task.isDeleted) session=\(task.sessionID ?? "-") next=\(task.nextPlan.map { "\($0)" } ?? "-") note=\(task.reviewNote ?? "-")")
+            lines.append("=== task \(task.id) \(task.name) kind=\(task.kind) enabled=\(task.enabled) deleted=\(task.isDeleted) session=\(task.sessionID ?? "-") next=\(task.nextPlan.map { "\($0)" } ?? "-")")
             for run in store.schedules.runs(of: task.id) {
-                lines.append("    run \(run.id) \(run.trigger) \(run.state) phase=\(run.phase?.rawValue ?? "-") unresolved=\(run.unresolved ?? false) planned=\(run.plannedAt.map { "\($0)" } ?? "-") skipped=\(run.skippedCount ?? 0) session=\(run.sessionID ?? "-") reason=\(run.reason ?? "-")")
+                lines.append("    run \(run.id) \(run.trigger) \(run.state) phase=\(run.phase?.rawValue ?? "-") planned=\(run.plannedAt.map { "\($0)" } ?? "-") session=\(run.sessionID ?? "-") reason=\(run.reason ?? "-")")
             }
         }
         for (pid, items) in store.history {
