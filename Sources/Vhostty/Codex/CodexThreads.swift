@@ -49,6 +49,13 @@ enum CodexThreads {
         return query("SELECT \(columns) FROM threads WHERE id = ?", [id])?.first
     }
 
+    /// The saved thread with this id: .some(nil) when there's none, nil when
+    /// the database couldn't be read.
+    static func lookUp(id: String) -> Thread?? {
+        guard let rows = query("SELECT \(columns) FROM threads WHERE id = ?", [id]) else { return nil }
+        return .some(rows.first)
+    }
+
     /// The one saved thread whose id starts with `prefix` (hex digits and dashes),
     /// nil if there's none or more than one.
     static func thread(idPrefix prefix: String) -> Thread? {

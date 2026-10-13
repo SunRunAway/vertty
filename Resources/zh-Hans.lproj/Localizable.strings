@@ -226,3 +226,4 @@
 "Couldn't confirm that the session was created or the prompt submitted. Check the card, then end this record." = "无法确认会话是否已创建、提示词是否已提交。请检查卡片后结束本次记录。";
 "Codex reported an error in this turn." = "Codex 本轮执行出错。";
 "The turn stopped without an answer or a recorded status. Check the card, then end this record." = "本轮停止了，但没有最终回复，也没有记录状态。请检查卡片后结束本次记录。";
+"Codex's session records couldn't be read." = "无法读取 Codex 的会话记录。";

@@ -476,7 +476,7 @@ struct ScheduleEditorView: View {
         _task = State(initialValue: request.task)
     }
 
-    private var bound: Bool { task.isBound }
+    private var bound: Bool { !request.isNew && store.schedules.sessionFixed(task) }
 
     private var problems: [String] {
         var p: [String] = []

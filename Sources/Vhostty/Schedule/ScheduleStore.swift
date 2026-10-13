@@ -9,8 +9,19 @@ final class ScheduleStore: ObservableObject {
     private var url: URL { AppPaths.support.appendingPathComponent("schedules.json") }
 
     func load() {
-        guard let data = try? Data(contentsOf: url),
-              let file = try? JSONDecoder.schedule.decode(ScheduleFile.self, from: data) else { return }
+        guard let data = try? Data(contentsOf: url) else { return }
+        let file: ScheduleFile
+        do {
+            file = try JSONDecoder.schedule.decode(ScheduleFile.self, from: data)
+        } catch {
+            // Unreadable (damaged, or written by a newer Vhostty): keep it aside
+            // rather than let the next save overwrite it with nothing.
+            let aside = url.deletingPathExtension()
+                .appendingPathExtension("unreadable-\(Int(Date().timeIntervalSince1970)).json")
+            try? FileManager.default.moveItem(at: url, to: aside)
+            NSLog("Vhostty: couldn't read scheduled tasks (%@); moved to %@", error.localizedDescription, aside.path)
+            return
+        }
         tasks = file.tasks
         runs = file.runs
         // Runs left running by the last launch: their terminals are gone, but
@@ -45,6 +56,12 @@ final class ScheduleStore: ObservableObject {
 
     var activeTasks: [ScheduleTask] { tasks.filter { !$0.isDeleted } }
     var deletedTasks: [ScheduleTask] { tasks.filter(\.isDeleted).sorted { $0.deletedAt! > $1.deletedAt! } }
+
+    /// Project and agent are fixed once the task has its session, or while its
+    /// first run is creating it.
+    func sessionFixed(_ task: ScheduleTask) -> Bool {
+        task.isBound || openRun(of: task.id) != nil
+    }
 
     /// The task whose session this is.
     func task(forSession id: String) -> ScheduleTask? {
@@ -89,7 +106,7 @@ final class ScheduleStore: ObservableObject {
         }
         var t = tasks[i]
         // The task may have got its session since the edit was made.
-        if t.isBound && (edit.projectID != t.projectID || edit.kind != t.kind) {
+        if sessionFixed(t) && (edit.projectID != t.projectID || edit.kind != t.kind) {
             return String(localized: "The task has its session now, so its project and agent can't change.")
         }
         t.name = edit.name
@@ -151,6 +168,19 @@ final class ScheduleStore: ObservableObject {
             }
             r.endedAt = r.endedAt ?? Date()
         }
+    }
+
+    /// A project was added again after being removed: its tasks (found by the
+    /// directory their runs used) go back to it, still paused.
+    func projectAdded(_ projectID: UUID, path: String, known: Set<UUID>) {
+        var changed = false
+        for i in tasks.indices where !known.contains(tasks[i].projectID) {
+            let id = tasks[i].id
+            guard runs.contains(where: { $0.taskID == id && $0.cwd == path }) else { continue }
+            tasks[i].projectID = projectID
+            changed = true
+        }
+        if changed { save() }
     }
 
     /// A project was removed or moved: pause its tasks until the user checks them.

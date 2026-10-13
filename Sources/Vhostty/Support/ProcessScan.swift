@@ -42,14 +42,18 @@ enum ProcessScan {
         var buf = [UInt8](repeating: 0, count: size)
         guard sysctl(&mib, 3, &buf, &size, nil, 0) == 0 else { return nil }
         let argc = buf.withUnsafeBytes { $0.loadUnaligned(as: Int32.self) }
-        let strings = buf[MemoryLayout<Int32>.size..<size]
-            .split(separator: 0, omittingEmptySubsequences: true)
+        guard argc >= 0 else { return nil }
+        // The executable path, padded with NULs, then argc arguments (empty ones
+        // too, each one NUL), then the environment.
+        var rest = buf[MemoryLayout<Int32>.size..<size]
+        guard let pathEnd = rest.firstIndex(of: 0) else { return nil }
+        rest = rest[pathEnd...].drop { $0 == 0 }
+        let strings = rest.split(separator: 0, omittingEmptySubsequences: false)
             .map { String(decoding: $0, as: UTF8.self) }
-        // strings[0] is the executable path, then argc arguments.
-        guard strings.count > Int(argc) else { return nil }
-        let args = Array(strings[1...Int(argc)])
+        guard strings.count >= Int(argc) else { return nil }
+        let args = Array(strings.prefix(Int(argc)))
         var env: [String: String] = [:]
-        for s in strings.dropFirst(Int(argc) + 1) {
+        for s in strings.dropFirst(Int(argc)) {
             guard let eq = s.firstIndex(of: "=") else { continue }
             env[String(s[..<eq])] = String(s[s.index(after: eq)...])
         }

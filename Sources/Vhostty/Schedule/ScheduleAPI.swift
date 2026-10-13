@@ -99,7 +99,7 @@ extension AppStore {
             guard let k = AgentKind(rawValue: a.lowercased()) else { return .failure(APIError(message: "agent must be claude or codex.")) }
             kind = k
         }
-        if let existing, existing.isBound {
+        if let existing, schedules.sessionFixed(existing) {
             if let project, project.id != existing.projectID {
                 return .failure(APIError(message: "The project is fixed once the task has its session."))
             }
@@ -119,6 +119,11 @@ extension AppStore {
             project = p
             t = ScheduleTask(name: "", projectID: p.id, kind: kind ?? source?.kind ?? defaultKind(p), prompt: "",
                              timing: ScheduleTiming())
+            // No made-up schedule: the agent should ask rather than leave these out.
+            guard str("repeat") != nil, str("time") != nil else {
+                return .failure(APIError(message: "repeat and time are required."))
+            }
+            t.timing.weekdays = []
         }
         if let project { t.projectID = project.id }
         if let kind { t.kind = kind }
@@ -169,6 +174,9 @@ extension AppStore {
         if t.prompt.isEmpty { return .failure(APIError(message: "prompt is required.")) }
         if t.timing.repeatKind == .weekly && t.timing.weekdays.isEmpty {
             return .failure(APIError(message: "weekly needs days."))
+        }
+        if t.timing.repeatKind == .once && t.timing.onceDate == nil {
+            return .failure(APIError(message: "once needs a date."))
         }
         if t.timing.repeatKind == .once && !t.timing.canResume {
             return .failure(APIError(message: "once needs a date and time in the future."))

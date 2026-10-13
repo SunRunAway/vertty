@@ -87,6 +87,8 @@ final class TabSession: ObservableObject, Identifiable {
     @Published var scheduleTaskID: UUID?
     /// The scheduled run going on in this card's current process, if any.
     var scheduleRunID: UUID?
+    /// When the card's current process was started.
+    var launchedAt: Date?
 
     /// The bottom shell panel's terminal (created on first ⌘J).
     var shellSurface: TerminalSurfaceView?

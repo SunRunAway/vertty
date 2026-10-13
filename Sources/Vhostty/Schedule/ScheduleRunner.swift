@@ -50,15 +50,22 @@ extension AppStore {
         run.cwd = project.path
         schedules.add(run)
         let runID = run.id
+        schedulePreparing.insert(runID)
         let sessionID = task.sessionID ?? ""
         let kind = task.kind
         // A first run whose session id wasn't confirmed: look for that session
         // before starting yet another one.
-        let earlier = sessionID.isEmpty ? schedules.runs(of: task.id).compactMap(\.sessionID).first { !$0.isEmpty } : nil
+        let earlier = sessionID.isEmpty
+            ? schedules.runs(of: task.id).filter { $0.kind == kind }.compactMap(\.sessionID).first { !$0.isEmpty } : nil
         infoQueue.async { [weak self] in
-            let check = Self.checkSession(kind: kind, sessionID: sessionID.isEmpty ? earlier : sessionID, projectPath: project.path)
+            let check = sessionID.isEmpty
+                ? Self.checkSession(kind: kind, sessionID: earlier, confirmed: false, projectPath: project.path)
+                : Self.checkSession(kind: kind, sessionID: sessionID, confirmed: true, projectPath: project.path)
             DispatchQueue.main.async {
-                guard let self, self.schedules.run(runID)?.state == .running else { return }
+                guard let self, self.schedules.run(runID)?.state == .running else {
+                    self?.schedulePreparing.remove(runID)
+                    return
+                }
                 switch check {
                 case .new:
                     self.startFirstSession(runID, task, project)
@@ -67,6 +74,7 @@ extension AppStore {
                     self.schedules.modifyRun(runID) { $0.sessionID = id; $0.cwd = cwd }
                     self.resumeSession(runID, task, id, project)
                 case .fail(let reason):
+                    self.schedulePreparing.remove(runID)
                     self.schedules.modifyRun(runID) { self.markFailed(&$0, reason) }
                 }
             }
@@ -81,14 +89,15 @@ extension AppStore {
 
     /// Whether the task's session can be resumed, off the main thread. A session
     /// running outside Vhostty (another terminal, a background job) isn't touched:
-    /// resuming it there would fork it.
-    private static func checkSession(kind: AgentKind, sessionID: String?, projectPath: String) -> SessionCheck {
+    /// resuming it there would fork it. An unconfirmed id (a first run that may
+    /// not have got as far as creating its session) that isn't found means new.
+    private static func checkSession(kind: AgentKind, sessionID: String?, confirmed: Bool, projectPath: String) -> SessionCheck {
         guard let sessionID, !sessionID.isEmpty else { return .new }
         let fm = FileManager.default
         switch kind {
         case .claude:
             guard let url = Transcript.locate(sessionID: sessionID, projectPath: projectPath) else {
-                return .fail(String(localized: "The task's session record can't be found."))
+                return confirmed ? .fail(String(localized: "The task's session record can't be found.")) : .new
             }
             if LiveSessions.backgroundJobRunning(sessionID: sessionID) {
                 return .fail(String(localized: "The session is running as a background job (claude attach). It wasn't touched."))
@@ -99,8 +108,11 @@ extension AppStore {
             }
             return .resume(sessionID, cwd: cwd)
         case .codex:
-            guard let thread = CodexThreads.thread(id: sessionID) else {
-                return .fail(String(localized: "The task's session record can't be found."))
+            guard let found = CodexThreads.lookUp(id: sessionID) else {
+                return .fail(String(localized: "Codex's session records couldn't be read."))
+            }
+            guard let thread = found else {
+                return confirmed ? .fail(String(localized: "The task's session record can't be found.")) : .new
             }
             if !thread.cwd.isEmpty, !fm.fileExists(atPath: thread.cwd) {
                 return .fail(String(localized: "The session's directory doesn't exist: \(thread.cwd)"))
@@ -116,6 +128,12 @@ extension AppStore {
         tab.scheduleTaskID = task.id
         insertAtTopOfProject(tab)
         if !sessionID.isEmpty { schedules.modifyRun(runID) { $0.sessionID = sessionID } }
+        launchRun(tab, task, runID)
+    }
+
+    private func launchRun(_ tab: TabSession, _ task: ScheduleTask, _ runID: UUID) {
+        schedulePreparing.remove(runID)
+        schedules.modifyRun(runID) { $0.launchedAt = Date() }
         launch(tab, prompt: task.prompt, scheduleRunID: runID)
     }
 
@@ -128,7 +146,8 @@ extension AppStore {
             let outside = task.kind == .claude
                 ? LiveSessions.processes(sessionID: sessionID).filter { $0.tab == nil || $0.tab != tab?.id } : []
             DispatchQueue.main.async {
-                guard let self, self.schedules.run(runID)?.state == .running else { return }
+                guard let self else { return }
+                guard self.schedules.run(runID)?.state == .running else { self.schedulePreparing.remove(runID); return }
                 // Meanwhile the card may have moved to another session (/clear, /new,
                 // /resume) or another card may have opened this one: check again.
                 guard self.tabs.first(where: { $0.kind == task.kind && $0.sessionID == sessionID }) === tab,
@@ -136,6 +155,7 @@ extension AppStore {
                     return self.resumeSession(runID, task, sessionID, project)
                 }
                 guard outside.isEmpty else {
+                    self.schedulePreparing.remove(runID)
                     return self.schedules.modifyRun(runID) {
                         self.markFailed(&$0, String(localized: "The session is open outside this Vhostty window. It wasn't touched."))
                     }
@@ -145,13 +165,11 @@ extension AppStore {
                                           title: task.name)
                     card.scheduleTaskID = task.id
                     self.insertAtTopOfProject(card)
-                    self.launch(card, prompt: task.prompt, scheduleRunID: runID)
+                    self.launchRun(card, task, runID)
                     return
                 }
-                guard tab.surface != nil else {
-                    self.launch(tab, prompt: task.prompt, scheduleRunID: runID)
-                    return
-                }
+                // Even with its terminal gone, the card's agent may not be (a stop
+                // that couldn't be confirmed): check before starting another.
                 self.stopAndResume(tab, runID: runID, task: task)
             }
         }
@@ -160,7 +178,7 @@ extension AppStore {
     /// Ends the card's terminal (its agent with it), waits until that agent is
     /// really gone, then resumes in the same card. Never starts a second instance.
     private func stopAndResume(_ tab: TabSession, runID: UUID, task: ScheduleTask) {
-        scheduleStopping.insert(runID)
+        scheduleStoppingTabs.insert(tab.id)
         // The run joins the card only once it relaunches: hooks of the instance
         // being stopped (its SessionEnd) aren't this run's.
         tab.scheduleRunID = nil
@@ -188,19 +206,23 @@ extension AppStore {
             if stopped { Thread.sleep(forTimeInterval: 0.5) }
             DispatchQueue.main.async {
                 guard let self else { return }
-                self.scheduleStopping.remove(runID)
-                guard self.schedules.run(runID)?.state == .running else { return }
+                self.scheduleStoppingTabs.remove(tabID)
+                guard self.schedules.run(runID)?.state == .running else { self.schedulePreparing.remove(runID); return }
                 guard self.tabs.contains(where: { $0 === tab }), tab.kind == kind, tab.sessionID == sessionID else {
+                    self.schedulePreparing.remove(runID)
                     return self.schedules.modifyRun(runID) {
                         self.markFailed(&$0, String(localized: "The session's card changed while it was being stopped, so nothing was resumed."))
                     }
                 }
                 guard stopped else {
+                    // Held until the user checks the card: the next run mustn't start a second one.
+                    self.schedulePreparing.remove(runID)
                     return self.schedules.modifyRun(runID) {
                         self.markFailed(&$0, String(localized: "The session's earlier instance couldn't be confirmed stopped, so it wasn't resumed."))
+                        $0.unresolved = true
                     }
                 }
-                self.launch(tab, prompt: task.prompt, scheduleRunID: runID)
+                self.launchRun(tab, task, runID)
                 if tab.id == self.selectedTabID { self.showInContainer(tab) }
             }
         }
@@ -274,16 +296,14 @@ extension AppStore {
 
     /// Polled with the other card info (every few seconds): what hooks can't tell.
     func evaluateScheduleRuns() {
-        for run in schedules.runs where run.state == .running && !scheduleStopping.contains(run.id) {
+        for run in schedules.runs where run.state == .running && !schedulePreparing.contains(run.id) {
             guard let tab = tabs.first(where: { $0.scheduleRunID == run.id }) else {
-                // Still checking the session (nothing launched yet), or its card was closed.
-                if Date().timeIntervalSince(run.startedAt) > 30 {
-                    schedules.modifyRun(run.id) { self.markFailed(&$0, String(localized: "The session's card was closed during the run.")) }
-                }
+                // Launched, and no card carries it any more.
+                schedules.modifyRun(run.id) { self.markFailed(&$0, String(localized: "The session's card was closed during the run.")) }
                 continue
             }
             guard tab.surface != nil else { continue }
-            let age = Date().timeIntervalSince(run.startedAt)
+            let age = Date().timeIntervalSince(run.launchedAt ?? run.startedAt)
             if tab.status == .exited {
                 tab.scheduleRunID = nil
                 schedules.modifyRun(run.id) { self.markFailed(&$0, String(localized: "\(run.kind.name) exited before the turn finished.")) }

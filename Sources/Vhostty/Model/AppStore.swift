@@ -57,8 +57,10 @@ final class AppStore: ObservableObject {
     var scheduleTimer: Timer?
     /// Since when a scheduled Claude turn has looked idle without a Stop hook.
     var scheduleIdleSince: [UUID: Date] = [:]
-    /// Runs whose card is being stopped before they resume in it.
-    var scheduleStopping: Set<UUID> = []
+    /// Runs not launched yet: their session is being checked, or its card stopped.
+    var schedulePreparing: Set<UUID> = []
+    /// Cards whose agent a run is stopping: selecting one mustn't start it again.
+    var scheduleStoppingTabs: Set<UUID> = []
 
     var selectedTab: TabSession? { tabs.first { $0.id == selectedTabID } }
 
@@ -179,6 +181,7 @@ final class AppStore: ObservableObject {
                 continue
             }
             let p = Project(name: url.lastPathComponent, path: url.path)
+            schedules.projectAdded(p.id, path: p.path, known: Set(projects.map(\.id)))
             projects.append(p)
             last = p
         }
@@ -450,7 +453,7 @@ final class AppStore: ObservableObject {
     // MARK: - Launching Claude
 
     private func launchIfNeeded(_ tab: TabSession) {
-        guard tab.surface == nil else { return }
+        guard tab.surface == nil, !scheduleStoppingTabs.contains(tab.id) else { return }
         launch(tab)
     }
 
@@ -478,6 +481,9 @@ final class AppStore: ObservableObject {
             self.terminalTitleChanged(tab, title)
         }
         tab.surface = surface
+        tab.launchedAt = Date()
+        // The previous process's pid would make the new one look exited until it registers.
+        livePIDs[tab.id] = nil
         tab.scheduleRunID = scheduleRunID
         tab.transcriptPath = transcript?.path
         tab.status = .starting
@@ -731,12 +737,14 @@ final class AppStore: ObservableObject {
     /// typed into the tab's shell after the first one exited (`claude -r <id>`),
     /// which sends no hooks.
     private func refreshLiveSessions() {
+        let scanned = Date()
         infoQueue.async { [weak self] in
             let live = LiveSessions.scan()
             DispatchQueue.main.async {
                 guard let self else { return }
-                // Codex sessions don't show up here (see confirmCodexThreads).
-                for tab in self.tabs where tab.isLaunched && tab.kind == .claude {
+                // Codex sessions don't show up here (see confirmCodexThreads). A
+                // card started since the scan began isn't in it yet.
+                for tab in self.tabs where tab.isLaunched && tab.kind == .claude && (tab.launchedAt ?? .distantPast) < scanned {
                     let entry = live[tab.id]
                     let lastPID = self.livePIDs[tab.id]
                     self.livePIDs[tab.id] = entry?.pid

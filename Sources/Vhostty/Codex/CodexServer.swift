@@ -47,6 +47,9 @@ final class CodexServer {
             env["VHOSTTY_SCHEDULE_CLI"] = ClaudeLauncher.scheduleCLIPath
             p.environment = env
             let pipe = Pipe()
+            // Only Vhostty holds the writing end: terminals it starts later
+            // mustn't inherit it, or the server would outlive a killed Vhostty.
+            _ = fcntl(pipe.fileHandleForWriting.fileDescriptor, F_SETFD, FD_CLOEXEC)
             p.standardInput = pipe
             p.standardOutput = FileHandle.nullDevice
             p.standardError = FileHandle.nullDevice

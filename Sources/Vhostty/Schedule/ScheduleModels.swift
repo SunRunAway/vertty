@@ -30,6 +30,17 @@ struct ScheduleTiming: Codable, Equatable {
     /// The first planned time strictly after `date`. A time skipped by a DST jump
     /// runs at the first valid moment after it; a repeated time runs once.
     func next(after date: Date) -> Date? {
+        guard let at = nextCandidate(after: date) else { return nil }
+        // The second pass of a time repeated when clocks go back: that time already ran.
+        let cal = calendar
+        let wall: (Date) -> DateComponents = { cal.dateComponents([.year, .month, .day, .hour, .minute], from: $0) }
+        if [1800.0, 3600.0].contains(where: { wall(at.addingTimeInterval(-$0)) == wall(at) }) {
+            return next(after: at)
+        }
+        return at
+    }
+
+    private func nextCandidate(after date: Date) -> Date? {
         let cal = calendar
         switch repeatKind {
         case .once:
@@ -163,6 +174,8 @@ struct ScheduleRun: Codable, Identifiable, Equatable {
     var trigger: RunTrigger
     var plannedAt: Date?
     var startedAt = Date()
+    /// When the agent was started (after checking and stopping the session).
+    var launchedAt: Date?
     var endedAt: Date?
     var state: RunState
     var phase: RunPhase?
