@@ -2,6 +2,8 @@ import AppKit
 
 /// Only an explicit refusal is persisted. Authorization is checked on every launch.
 final class SleepProtection {
+    weak var menuItem: NSMenuItem? { didSet { updateMenuTitle() } }
+    private(set) var hasFailed = false { didSet { updateMenuTitle() } }
     private let store: AppStore
     private var timer: Timer?
     private var helper: Process?
@@ -25,6 +27,7 @@ final class SleepProtection {
     }
     func configure() {
         guard !checking, !isTest || fixture != nil else { return }
+        if hasFailed { retry(); return }
         let alert = NSAlert()
         alert.messageText = String(localized: "Keep tasks running with the lid closed?")
         alert.informativeText = String(localized: "Your Mac stays awake with the lid closed while tasks run, then returns to normal sleep when they finish. Administrator authorization is required the first time.")
@@ -32,8 +35,8 @@ final class SleepProtection {
         alert.addButton(withTitle: String(localized: "Don’t Allow"))
         let answer = alert.runModal()
         if answer == .alertSecondButtonReturn {
-            do { try Data().write(to: declined, options: .atomic); stop() }
-            catch { showError() }
+            do { try Data().write(to: declined, options: .atomic); stop(); hasFailed = false }
+            catch { markFailed() }
         } else if answer == .alertFirstButtonReturn {
             // A previous refusal no longer applies, including when authorization is cancelled.
             try? FileManager.default.removeItem(at: declined)
@@ -92,16 +95,23 @@ final class SleepProtection {
             let ok = success, cancel = cancelled
             DispatchQueue.main.async {
                 self.checking = false
-                if ok { self.launchHelper() } else if !cancel { self.showError() }
+                if ok { self.launchHelper() } else if !cancel { self.markFailed() }
             }
         }
     }
     private static func quote(_ s: String) -> String { "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'" }
-    private func showError() {
-        let alert = NSAlert()
-        alert.messageText = String(localized: "Could not enable sleep protection")
-        alert.informativeText = String(localized: "Try again from the Vhostty menu.")
-        alert.runModal()
+    private func updateMenuTitle() {
+        menuItem?.title = hasFailed
+            ? String(localized: "Closed-Lid Sleep Protection: Not Active…")
+            : String(localized: "Closed-Lid Sleep Protection…")
+    }
+    private func markFailed() {
+        stop()
+        hasFailed = true
+    }
+    func retry() {
+        guard !checking, !isTest || fixture != nil else { return }
+        authorize()
     }
     private func launchHelper() {
         guard helper == nil else { return }
@@ -111,7 +121,7 @@ final class SleepProtection {
         p.arguments = [AppPaths.support.path]
         if let fixture { p.arguments! += ["--test-dir", fixture.path] }
         p.standardInput = pipe; p.standardOutput = FileHandle.nullDevice; p.standardError = FileHandle.nullDevice
-        do { try p.run() } catch { showError(); return }
+        do { try p.run() } catch { markFailed(); return }
         helper = p; input = pipe.fileHandleForWriting
         _ = fcntl(pipe.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.tick() }
@@ -119,14 +129,14 @@ final class SleepProtection {
         tick()
     }
     private func tick() {
-        guard helper?.isRunning == true else { stop(); showError(); return }
-        if (try? String(contentsOf: AppPaths.support.appendingPathComponent("sleep-status"))) == "error" {
-            stop(); showError(); return
-        }
+        guard helper?.isRunning == true else { markFailed(); return }
+        let status = try? String(contentsOf: AppPaths.support.appendingPathComponent("sleep-status"))
+        if status == "error" { markFailed(); return }
+        if status == "idle" || status == "active" || status == "external" { hasFailed = false }
         let busy = store.tabs.contains { $0.isLaunched && ($0.status == .working || $0.status == .starting) }
             || !store.schedulePreparing.isEmpty
         do { try input?.write(contentsOf: Data((busy ? "1\n" : "0\n").utf8)) }
-        catch { stop(); showError() }
+        catch { markFailed() }
     }
     func stop() {
         timer?.invalidate(); timer = nil

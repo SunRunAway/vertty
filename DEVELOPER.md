@@ -141,8 +141,10 @@ defaults write dev.vhostty.Vhostty AppleLanguages '("en")'   # 恢复：defaults
 
 ### 防合盖睡眠
 
-`SleepProtection` 只在状态目录保存 `sleep-declined`（明确选「不允许」）。没有启用标记；每次启动检查 sudo 的 NOPASSWD 规则，已有对应权限则启动守护程序，否则弹出询问。取消管理员授权或授权失败均不写拒绝标记。菜单允许重新选择。管理员授权只安装当前 UID 执行 `/usr/bin/pmset -a disablesleep 1/0` 的规则，经 visudo 校验后原子安装，不授权其他命令。
+`SleepProtection` 只在状态目录保存 `sleep-declined`（明确选「不允许」）。没有启用标记；每次启动检查 sudo 的 NOPASSWD 规则，已有对应权限则启动守护程序，否则弹出询问。取消管理员授权或授权失败均不写拒绝标记。菜单允许重新选择。授权或运行失败只把菜单项改为「防合盖睡眠：未生效…」，点击重试，成功后恢复原名；不弹错误框、不发通知。管理员授权只安装当前 UID 执行 `/usr/bin/pmset -a disablesleep 1/0` 的规则，经 visudo 校验后原子安装，不授权其他命令。
 
 `vhostty-sleep` 是普通用户进程，通过 stdin 接收每秒的工作状态。任务启动、运行或定时任务准备阶段保持保护；全部空闲 15 秒后释放。管道 EOF（含主进程崩溃）或 15 秒未收到心跳也释放。修改前写 `sleep-owned`，守护程序自身被强杀后，下次启动恢复；不接管原本已禁用睡眠的外部设置，Amphetamine 运行期间不修改睡眠设置。进程锁避免同一状态目录有两个守护程序。此机制只覆盖 Vhostty 管理的卡片和任务，不跟踪已脱离卡片的独立后台作业。
 
 `python3 scripts/test-sleep-protection.py` 用真实守护程序、模拟 pmset 和隔离 AppKit 实例验证恢复及首次询问。测试实例默认完全跳过电源功能；同时指定 `VHOSTTY_SUPPORT_DIR`、`VHOSTTY_DEBUG_SNAPSHOT`、`VHOSTTY_SLEEP_TEST_DIR` 才运行模拟电源后端，绝不触发真实提权。debug driver 的 `alertbutton <从 0 开始的索引>` 点击当前模态框按钮；`alert.txt` 和 `alert.png` 输出按钮列表及截图。自动测试不验证物理合盖和真实管理员密码输入。
+
+`python3 scripts/test-sleep-failure-menu.py` 无窗口验证真实控制器与 `NSMenuItem`：授权失败、取消重试、运行失败和成功恢复。不打开询问框、不执行真实提权或 pmset；菜单错误状态改动优先运行此测试。

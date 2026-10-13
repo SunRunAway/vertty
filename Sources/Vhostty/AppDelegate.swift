@@ -126,7 +126,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: String(localized: "About Vhostty"), action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(item("Closed-Lid Sleep Protection…", #selector(configureSleepProtection), ""))
+        let sleepItem = item("Closed-Lid Sleep Protection…", #selector(configureSleepProtection), "")
+        sleepProtection.menuItem = sleepItem
+        appMenu.addItem(sleepItem)
         appMenu.addItem(item("Open Ghostty Config", #selector(openGhosttyConfig), ""))
         appMenu.addItem(item("Reload Config", #selector(reloadConfig), "r", [.command, .shift]))
         appMenu.addItem(.separator())

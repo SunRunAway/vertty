@@ -117,8 +117,9 @@ try:
     start(); prompt()
     (case / 'authorization-result').write_text('fail')
     button(['Allow', '允许'])
-    wait(lambda: any(x in read(case / 'alert.txt') for x in ['OK', '好']), 'failure alert missing')
-    button(['OK', '好']); stop()
+    wait(lambda: any(x in read(case / 'sleep-menu.txt') for x in ['Not Active', '未生效']), 'failure menu status missing')
+    assert read(case / 'alert.txt') == '', 'failure opened a modal alert'
+    stop()
     start(); prompt()
     print('PASS failed authorization reprompts', flush=True)
     (case / 'authorization-result').write_text('success')
