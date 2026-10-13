@@ -1018,8 +1018,8 @@ final class AppStore: ObservableObject {
         }
     }
 
-    var liveSessionCount: Int {
-        tabs.filter { $0.surface.map { !$0.processExited } ?? false }.count
+    var workingAgentCount: Int {
+        tabs.filter { $0.status == .working && ($0.surface.map { !$0.processExited } ?? false) }.count
     }
 }
 

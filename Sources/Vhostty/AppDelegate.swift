@@ -91,11 +91,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        let live = store.liveSessionCount
-        if live > 0 {
+        let working = store.workingAgentCount
+        if working > 0 {
             let alert = NSAlert()
             alert.messageText = String(localized: "Quit Vhostty?")
-            alert.informativeText = String(localized: "\(live) terminals are still running and will be ended. Your sessions are saved and can be resumed next time.")
+            alert.informativeText = String(localized: "\(working) agents are working. Quitting will interrupt their current tasks.")
             alert.addButton(withTitle: String(localized: "Quit"))
             alert.addButton(withTitle: String(localized: "Cancel"))
             if alert.runModal() != .alertFirstButtonReturn { return .terminateCancel }

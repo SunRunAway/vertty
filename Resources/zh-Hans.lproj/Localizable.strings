@@ -43,7 +43,7 @@
 /* Alerts and panels */
 "Failed to start the terminal engine" = "终端引擎初始化失败";
 "Quit Vhostty?" = "退出 Vhostty？";
-"%lld terminals are still running and will be ended. Your sessions are saved and can be resumed next time." = "有 %lld 个终端仍在运行，退出会结束它们。会话会被保存，下次打开时可以恢复。";
+"%lld agents are working. Quitting will interrupt their current tasks." = "有 %lld 个 Agent 正在执行任务，退出会中断当前任务。";
 "Quit" = "退出";
 "Cancel" = "取消";
 "OK" = "确定";

@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>%lld terminals are still running and will be ended. Your sessions are saved and can be resumed next time.</key>
+    <key>%lld agents are working. Quitting will interrupt their current tasks.</key>
     <dict>
         <key>NSStringLocalizedFormatKey</key>
         <string>%#@n@</string>
@@ -13,9 +13,9 @@
             <key>NSStringFormatValueTypeKey</key>
             <string>lld</string>
             <key>one</key>
-            <string>1 terminal is still running and will be ended. Your sessions are saved and can be resumed next time.</string>
+            <string>1 agent is working. Quitting will interrupt its current task.</string>
             <key>other</key>
-            <string>%lld terminals are still running and will be ended. Your sessions are saved and can be resumed next time.</string>
+            <string>%lld agents are working. Quitting will interrupt their current tasks.</string>
         </dict>
     </dict>
     <key>Its %lld open sessions will be closed (their history is kept and can be resumed later). No files are deleted.</key>
