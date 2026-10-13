@@ -221,6 +221,6 @@
 
 "Closed-Lid Sleep Protection…" = "防合盖睡眠…";
 "Keep tasks running with the lid closed?" = "合盖时继续运行任务？";
-"Your Mac stays awake with the lid closed while tasks run, then returns to normal sleep when they finish. Administrator authorization is required the first time." = "任务运行期间，合盖也不会让 Mac 睡眠；任务结束后恢复正常睡眠。首次使用需要管理员授权。";
+"Your Mac stays awake with the lid closed while tasks run, then returns to normal sleep when they finish. Administrator authorization only permits these two commands to run without a password:\n\n/usr/bin/pmset -a disablesleep 1 — prevent sleep\n/usr/bin/pmset -a disablesleep 0 — restore sleep" = "任务运行期间，合盖也不会让 Mac 睡眠；任务结束后恢复正常睡眠。管理员授权仅允许免密执行以下两条命令：\n\n/usr/bin/pmset -a disablesleep 1（禁止睡眠）\n/usr/bin/pmset -a disablesleep 0（恢复睡眠）";
 "Don’t Allow" = "不允许";
 "Closed-Lid Sleep Protection: Not Active…" = "防合盖睡眠：未生效…";

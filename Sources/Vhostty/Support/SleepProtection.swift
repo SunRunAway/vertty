@@ -30,7 +30,7 @@ final class SleepProtection {
         if hasFailed { retry(); return }
         let alert = NSAlert()
         alert.messageText = String(localized: "Keep tasks running with the lid closed?")
-        alert.informativeText = String(localized: "Your Mac stays awake with the lid closed while tasks run, then returns to normal sleep when they finish. Administrator authorization is required the first time.")
+        alert.informativeText = String(localized: "Your Mac stays awake with the lid closed while tasks run, then returns to normal sleep when they finish. Administrator authorization only permits these two commands to run without a password:\n\n/usr/bin/pmset -a disablesleep 1 — prevent sleep\n/usr/bin/pmset -a disablesleep 0 — restore sleep")
         alert.addButton(withTitle: String(localized: "Allow"))
         alert.addButton(withTitle: String(localized: "Don’t Allow"))
         let answer = alert.runModal()
