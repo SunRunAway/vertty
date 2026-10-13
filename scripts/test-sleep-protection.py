@@ -26,72 +26,79 @@ def read(path):
 case = root / 'watchdog'
 case.mkdir()
 (case / 'value').write_text('0')
-def helper():
-    return subprocess.Popen([str(binary / 'vhostty-sleep'), str(case), '--test-dir', str(case)], stdin=subprocess.PIPE)
-def send(p, value):
-    p.stdin.write(f'{value}\n'.encode()); p.stdin.flush()
+def helper(*extra):
+    return subprocess.Popen([str(binary / 'vhostty-sleep'), str(case), *extra, '--test-dir', str(case)],
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+def release():
+    return subprocess.run([str(binary / 'vhostty-sleep'), str(case), '--release', '--test-dir', str(case)],
+                          stdin=subprocess.DEVNULL, timeout=10).returncode
+def end(p):
+    p.stdin.close(); return p.wait(timeout=10)
 p = helper()
 try:
-    send(p, 1)
-    wait(lambda: read(case / 'value') == '1', 'busy did not acquire')
-    p.stdin.close(); p.wait(timeout=10)
-    assert read(case / 'value') == '0', 'EOF did not restore'
-    print('PASS busy / EOF restoration', flush=True)
-    p = helper(); send(p, 1)
-    wait(lambda: read(case / 'value') == '1', 'no acquire before kill')
+    assert p.stdout.readline() == b'active\n', 'lease did not report active'
+    assert read(case / 'value') == '1', 'lease did not acquire'
+    assert end(p) == 0 and read(case / 'value') == '0', 'EOF did not restore'
+    print('PASS lease / EOF restoration', flush=True)
+    p = helper(); p.stdout.readline()
+    p.send_signal(15); p.wait(timeout=10)
+    assert read(case / 'value') == '0', 'SIGTERM did not restore'
+    p = helper(); p.stdout.readline()
     p.kill(); p.wait()
-    p = helper(); send(p, 0)
-    wait(lambda: read(case / 'value') == '0', 'killed watchdog recovery')
-    p.stdin.close(); p.wait(timeout=10)
-    print('PASS killed watchdog recovery', flush=True)
+    assert read(case / 'value') == '1'
+    assert release() == 0 and read(case / 'value') == '0', 'killed helper not recovered by --release'
+    print('PASS SIGTERM restoration / killed helper recovery', flush=True)
     # Restore even a pre-existing 1; only Amphetamine's two true states exempt it.
     for state in [None, 'true,true', 'true,false', 'false,true', 'false,false', 'error']:
         amphetamine = case / 'amphetamine'
         if state is None: amphetamine.unlink(missing_ok=True)
         else: amphetamine.write_text(state)
         (case / 'value').write_text('1')
-        (case / 'sleep-status').unlink(missing_ok=True)
-        p = helper(); send(p, 0)
-        expected = 'external' if state == 'true,true' else 'idle'
-        wait(lambda: read(case / 'sleep-status') == expected, f'restore state {state}')
-        p.stdin.close(); p.wait(timeout=10)
-        assert read(case / 'value') == ('1' if expected != 'idle' else '0'), state
+        assert release() == 0, state
+        kept = '1' if state == 'true,true' else '0'
+        assert read(case / 'value') == kept, f'restore state {state}'
         # Enabling protection is independent of Amphetamine, including query failure.
         (case / 'value').write_text('0')
-        p = helper(); send(p, 1)
-        wait(lambda: read(case / 'value') == '1', f'enable state {state}')
-        p.stdin.close(); p.wait(timeout=10)
-        assert read(case / 'value') == ('1' if state == 'true,true' else '0'), f'EOF restore state {state}'
+        p = helper(); p.stdout.readline()
+        assert read(case / 'value') == '1', f'enable state {state}'
+        end(p)
+        assert read(case / 'value') == kept, f'EOF restore state {state}'
     print('PASS all Amphetamine states / query failure / unconditional enable', flush=True)
     (case / 'amphetamine').unlink()
     (case / 'value').write_text('0')
-    p = helper(); send(p, 1)
-    wait(lambda: read(case / 'value') == '1', 'late Amphetamine test acquire')
+    p = helper(); p.stdout.readline()
     (case / 'amphetamine').write_text('true,true')
-    p.stdin.close(); p.wait(timeout=10)
+    end(p)
     assert read(case / 'value') == '1', 'did not respect Amphetamine started after launch'
-    p = helper(); send(p, 0)
-    wait(lambda: read(case / 'sleep-status') == 'external', 'active Amphetamine not preserved')
-    (case / 'amphetamine').write_text('false,true'); send(p, 0)
-    wait(lambda: read(case / 'value') == '0', 'ended Amphetamine session not restored')
-    (case / 'value').write_text('1'); (case / 'amphetamine').write_text('true,true'); send(p, 0)
-    wait(lambda: read(case / 'sleep-status') == 'external', 'restarted Amphetamine not preserved')
-    (case / 'amphetamine').unlink(); send(p, 0)
-    wait(lambda: read(case / 'value') == '0', 'exited Amphetamine not restored')
-    p.stdin.close(); p.wait(timeout=10)
-    print('PASS live Amphetamine start / session end / exit transitions', flush=True)
-    p = helper(); send(p, 1)
-    wait(lambda: read(case / 'value') == '1', 'expired lease test acquire')
-    p.wait(timeout=20)
-    assert read(case / 'value') == '0', 'expired lease not restored'
-    print('PASS expired lease recovery', flush=True)
-    p = helper(); send(p, 1)
-    wait(lambda: read(case / 'value') == '1', 'idle test acquire')
-    for _ in range(18):
-        send(p, 0); time.sleep(1)
-    assert read(case / 'value') == '0', 'idle grace not restored'
-    p.stdin.close(); p.wait(timeout=10)
-    print('PASS idle grace restoration', flush=True)
+    (case / 'amphetamine').unlink(); assert release() == 0
+    print('PASS Amphetamine started during a lease', flush=True)
+    # A second lease waits until the first has finished restoring.
+    first = helper(); first.stdout.readline()
+    second = helper(); time.sleep(1)
+    assert second.poll() is None and read(case / 'value') == '1'
+    end(first)
+    assert second.stdout.readline() == b'active\n' and read(case / 'value') == '1', 'second lease not applied after first'
+    assert end(second) == 0 and read(case / 'value') == '0'
+    print('PASS second lease waits for the first to restore', flush=True)
+    # Without Amphetamine running, nothing checks pmset during a lease.
+    p = helper(); p.stdout.readline()
+    (case / 'value').write_text('0'); time.sleep(7)
+    assert read(case / 'value') == '0', 'lease without Amphetamine touched pmset'
+    end(p)
+    # With Amphetamine running at the start, re-apply after its session ends.
+    (case / 'amphetamine').write_text('true,true')
+    p = helper(); p.stdout.readline()
+    (case / 'amphetamine').write_text('false,true'); (case / 'value').write_text('0')
+    wait(lambda: read(case / 'value') == '1', 'Amphetamine session end not re-applied', timeout=8)
+    assert p.stdout.readline() == b'active\n'
+    (case / 'fail').touch(); (case / 'value').write_text('0')
+    assert p.stdout.readline() == b'error\n', 're-apply failure not reported'
+    (case / 'fail').unlink()
+    assert p.stdout.readline() == b'active\n', 're-apply recovery not reported'
+    end(p)
+    assert read(case / 'value') == '0'
+    (case / 'amphetamine').unlink()
+    print('PASS Amphetamine session end re-applied / failure reported', flush=True)
 finally:
     if p.poll() is None: p.kill(); p.wait()
 
@@ -153,8 +160,9 @@ try:
     start(); prompt()
     print('PASS failed authorization reprompts', flush=True)
     (case / 'authorization-result').write_text('success')
+    (case / 'value').write_text('1')
     button(['Allow', '允许'])
-    wait(lambda: read(case / 'sleep-status') == 'idle', 'authorized helper did not start')
+    wait(lambda: read(case / 'value') == '0', 'authorization did not run startup recovery')
     stop()
     assert (case / 'authorized').exists()
     assert not (case / 'sleep-declined').exists()
@@ -206,13 +214,32 @@ try:
     wait(lambda: 'Sleep fixture' in read(case / 'state.txt') and '--- tab ' in read(case / 'state.txt'), 'fixture terminal missing')
     tab = re.search(r'--- tab ([0-9A-Fa-f-]+)', read(case / 'state.txt')).group(1)
     drive(f'to {tab}\ntext busy\nenter')
-    wait(lambda: read(case / 'value') == '1' and read(case / 'sleep-status') == 'active', 'working terminal did not acquire sleep protection')
+    wait(lambda: read(case / 'value') == '1', 'working terminal did not acquire sleep protection')
     drive(f'to {tab}\ntext idle\nenter')
     wait(lambda: read(case / 'value') == '0', 'idle terminal did not restore sleep', timeout=30)
+    (case / 'value').write_text('1'); time.sleep(5)
+    assert read(case / 'value') == '1', 'idle app overwrote an external setting'
+    (case / 'value').write_text('0')
     drive(f'to {tab}\ntext busy\nenter')
     wait(lambda: read(case / 'value') == '1', 'second turn did not acquire')
     app.kill(); app.wait(timeout=10)
-    wait(lambda: read(case / 'value') == '0', 'app force-quit did not release protection')
-    print('PASS actual terminal title / idle / new turn / app SIGKILL recovery', flush=True)
+    # The terminal's shells must not hold the lease pipe open.
+    wait(lambda: read(case / 'value') == '0', 'app force-quit did not release protection', timeout=5)
+    print('PASS actual terminal title / idle / external setting kept / new turn / app SIGKILL recovery', flush=True)
+finally:
+    stop(); log.close()
+
+if '--skip-starting' in sys.argv:
+    sys.exit(0)
+# A card stuck in Starting stops counting after two minutes (plus the 15 s grace).
+(case / 'value').write_text('0')
+(case / 'state.json').write_text(json.dumps({'projects': [{'id': str(uuid.uuid4()), 'name': 'Sleep fixture', 'path': str(project), 'expanded': True}], 'tabs': []}))
+log = (case / 'app.log').open('a')
+try:
+    start()
+    drive('new codex')
+    wait(lambda: read(case / 'value') == '1', 'starting card did not acquire')
+    wait(lambda: read(case / 'value') == '0', 'stuck starting card kept the Mac awake', timeout=150)
+    print('PASS stuck Starting card released', flush=True)
 finally:
     stop(); log.close()

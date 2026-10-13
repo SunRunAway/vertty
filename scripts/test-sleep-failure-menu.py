@@ -12,14 +12,8 @@ shutil.copy('Resources/vhostty-sleep.sudoers', root / 'vhostty-sleep.sudoers')
 shutil.copy('build/Vhostty.app/Contents/MacOS/vhostty-sleep', root / 'vhostty-sleep')
 (root / 'stubs.swift').write_text('''import AppKit
 final class AppStore {
-    var tabs: [Tab] = []
-    var schedulePreparing: Set<Int> = []
+    var keepsAwake = false
 }
-struct Tab {
-    var isLaunched = true
-    var status: Status = .working
-}
-enum Status { case working, starting }
 enum AppPaths {
     static let support = URL(fileURLWithPath: ProcessInfo.processInfo.environment["VHOSTTY_SUPPORT_DIR"]!)
 }
@@ -29,8 +23,8 @@ let dir = AppPaths.support
 func write(_ name: String, _ value: String = "") {
     try! value.write(to: dir.appendingPathComponent(name), atomically: true, encoding: .utf8)
 }
-func wait(_ reason: String, _ condition: () -> Bool) {
-    let deadline = Date().addingTimeInterval(10)
+func wait(_ reason: String, timeout: TimeInterval = 10, _ condition: () -> Bool) {
+    let deadline = Date().addingTimeInterval(timeout)
     while !condition() && Date() < deadline {
         RunLoop.current.run(until: Date().addingTimeInterval(0.05))
     }
@@ -73,25 +67,38 @@ controller.configure() // Failed menu action retries directly; no onboarding ale
 for _ in 0..<10 { RunLoop.current.run(until: Date().addingTimeInterval(0.05)) }
 precondition(item.title == failed)
 print("PASS cancelled retry retains failure and writes no refusal")
+func value() -> String? { try? String(contentsOf: dir.appendingPathComponent("value"), encoding: .utf8) }
 write("authorization-result", "success")
+write("value", "1")
 controller.configure()
 wait("successful retry did not clear failure") { item.title == normal }
+wait("startup recovery did not restore sleep") { value() == "0" }
 write("fail")
-store.tabs = [Tab()]
+store.keepsAwake = true
 wait("runtime failure did not update menu") { item.title == failed }
 print("PASS runtime failure updates menu without alert")
 try! FileManager.default.removeItem(at: dir.appendingPathComponent("fail"))
-// Wait for the failed watchdog to finish cleanup before requesting another instance.
-RunLoop.current.run(until: Date().addingTimeInterval(0.5))
-controller.configure()
+controller.configure() // Menu retry during the same busy period.
 wait("runtime retry did not recover") { item.title == normal }
-wait("recovered protection not active") { (try? String(contentsOf: dir.appendingPathComponent("value"))) == "1" }
-controller.stop()
-wait("stop failed to restore sleep") { (try? String(contentsOf: dir.appendingPathComponent("value"))) == "0" }
+wait("recovered protection not active") { value() == "1" }
 print("PASS menu retry restores normal title and sleep protection")
+store.keepsAwake = false
+wait("idle grace did not restore sleep", timeout: 25) { value() == "0" }
+write("fail")
+store.keepsAwake = true
+wait("next busy period failure not shown") { item.title == failed }
+try! FileManager.default.removeItem(at: dir.appendingPathComponent("fail"))
+store.keepsAwake = false
+RunLoop.current.run(until: Date().addingTimeInterval(17))
+store.keepsAwake = true
+wait("next busy period did not retry automatically") { item.title == normal && value() == "1" }
+print("PASS failed lease retried automatically on the next busy period")
+controller.stop()
+wait("stop failed to restore sleep") { value() == "0" }
+print("PASS stop restores sleep")
 ''')
 sdk = '/Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk'
 subprocess.run(['swiftc', '-sdk', sdk, 'Sources/Vhostty/Support/SleepProtection.swift',
                 str(root / 'stubs.swift'), str(root / 'main.swift'), '-o', str(root / 'test')], check=True)
 env = dict(os.environ, VHOSTTY_SUPPORT_DIR=str(root), VHOSTTY_DEBUG_SNAPSHOT=str(root), VHOSTTY_SLEEP_TEST_DIR=str(root))
-subprocess.run([str(root / 'test')], env=env, check=True, timeout=35)
+subprocess.run([str(root / 'test')], env=env, check=True, timeout=120)

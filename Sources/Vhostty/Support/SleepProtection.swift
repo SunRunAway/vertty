@@ -1,4 +1,5 @@
 import AppKit
+import CoreServices
 
 /// Only an explicit refusal is persisted. Authorization is checked on every launch.
 final class SleepProtection {
@@ -6,8 +7,12 @@ final class SleepProtection {
     private(set) var hasFailed = false { didSet { updateMenuTitle() } }
     private let store: AppStore
     private var timer: Timer?
-    private var helper: Process?
+    /// The running lease; closing `input` ends it and restores sleep.
+    private var lease: Process?
     private var input: FileHandle?
+    /// Inside a busy period (tasks running, or within 15 s after they stopped).
+    private var active = false
+    private var lastBusy = Date.distantPast
     private var checking = false
     private let queue = DispatchQueue(label: "vhostty.sleep")
     private var declined: URL { AppPaths.support.appendingPathComponent("sleep-declined") }
@@ -36,7 +41,7 @@ final class SleepProtection {
         let answer = alert.runModal()
         if answer == .alertSecondButtonReturn {
             do { try Data().write(to: declined, options: .atomic); stop(); hasFailed = false }
-            catch { markFailed() }
+            catch { stop(); hasFailed = true }
         } else if answer == .alertFirstButtonReturn {
             // A previous refusal no longer applies, including when authorization is cancelled.
             try? FileManager.default.removeItem(at: declined)
@@ -49,7 +54,7 @@ final class SleepProtection {
             let allowed = self.hasPermission()
             DispatchQueue.main.async {
                 self.checking = false
-                if allowed { self.launchHelper() } else { self.configure() }
+                if allowed { self.enable() } else { self.configure() }
             }
         }
     }
@@ -117,7 +122,7 @@ final class SleepProtection {
             let ok = success, cancel = cancelled
             DispatchQueue.main.async {
                 self.checking = false
-                if ok { self.launchHelper() } else if !cancel { self.markFailed() }
+                if ok { self.enable() } else if !cancel { self.stop(); self.hasFailed = true }
             }
         }
     }
@@ -127,42 +132,84 @@ final class SleepProtection {
             ? String(localized: "Closed-Lid Sleep Protection: Not Active…")
             : String(localized: "Closed-Lid Sleep Protection…")
     }
-    private func markFailed() {
-        stop()
-        hasFailed = true
-    }
     func retry() {
         guard !checking, !isTest || fixture != nil else { return }
         authorize()
     }
-    private func launchHelper() {
-        guard helper == nil else { return }
-        try? FileManager.default.removeItem(at: AppPaths.support.appendingPathComponent("sleep-status"))
-        let p = Process(), pipe = Pipe()
-        p.executableURL = Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent("vhostty-sleep")
-        p.arguments = [AppPaths.support.path]
-        if let fixture { p.arguments! += ["--test-dir", fixture.path] }
-        p.standardInput = pipe; p.standardOutput = FileHandle.nullDevice; p.standardError = FileHandle.nullDevice
-        do { try p.run() } catch { markFailed(); return }
-        helper = p; input = pipe.fileHandleForWriting
-        _ = fcntl(pipe.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.tick() }
-        if let timer { RunLoop.main.add(timer, forMode: .common); RunLoop.main.add(timer, forMode: .modalPanel) }
-        tick()
+    /// Authorization is in place: start following task activity.
+    private func enable() {
+        hasFailed = false
+        if timer == nil {
+            requestAmphetamineConsent()
+            // Restore sleep a crashed helper may have left disabled.
+            spawn(release: true)
+            timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.tick() }
+            if let timer { RunLoop.main.add(timer, forMode: .common); RunLoop.main.add(timer, forMode: .modalPanel) }
+            tick()
+        } else if active && lease == nil {
+            spawn(release: false) // Retry from the menu during a busy period.
+        }
+    }
+    /// The only place that may show the automation consent prompt, so it comes at launch
+    /// (or when authorizing) and never from a helper started later.
+    private func requestAmphetamineConsent() {
+        guard fixture == nil else { return }
+        DispatchQueue.global().async {
+            guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.if.Amphetamine").first else { return }
+            let target = NSAppleEventDescriptor(processIdentifier: app.processIdentifier)
+            _ = AEDeterminePermissionToAutomateTarget(target.aeDesc, 0x616d7068, typeWildCard, true) // amph
+        }
     }
     private func tick() {
-        guard helper?.isRunning == true else { markFailed(); return }
-        let status = try? String(contentsOf: AppPaths.support.appendingPathComponent("sleep-status"))
-        if status == "error" { markFailed(); return }
-        if status == "idle" || status == "active" || status == "external" { hasFailed = false }
-        let busy = store.tabs.contains { $0.isLaunched && ($0.status == .working || $0.status == .starting) }
-            || !store.schedulePreparing.isEmpty
-        do { try input?.write(contentsOf: Data((busy ? "1\n" : "0\n").utf8)) }
-        catch { markFailed() }
+        if store.keepsAwake {
+            lastBusy = Date()
+            // Each busy period starts one lease; a failed one waits for the next period.
+            if !active { active = true; spawn(release: false) }
+        } else if active, -lastBusy.timeIntervalSinceNow >= 15 {
+            active = false
+            endLease()
+        }
+    }
+    private func spawn(release: Bool) {
+        let p = Process()
+        p.executableURL = Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent("vhostty-sleep")
+        p.arguments = [AppPaths.support.path] + (release ? ["--release"] : [])
+        if let fixture { p.arguments! += ["--test-dir", fixture.path] }
+        p.standardError = FileHandle.nullDevice
+        var stdin: Pipe?, stdout: Pipe?
+        if release {
+            p.standardInput = FileHandle.nullDevice; p.standardOutput = FileHandle.nullDevice
+        } else {
+            stdin = Pipe(); stdout = Pipe()
+            // Only the helper may hold the lease pipe, or a crash would not end the lease.
+            _ = fcntl(stdin!.fileHandleForWriting.fileDescriptor, F_SETFD, FD_CLOEXEC)
+            _ = fcntl(stdin!.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
+            p.standardInput = stdin; p.standardOutput = stdout
+            // The helper reports "active" once applied, then "active"/"error" on re-applying.
+            stdout!.fileHandleForReading.readabilityHandler = { [weak self] handle in
+                let data = handle.availableData
+                guard !data.isEmpty else { handle.readabilityHandler = nil; return }
+                let last = String(decoding: data, as: UTF8.self).split(separator: "\n").last
+                DispatchQueue.main.async { if self?.lease === p { self?.hasFailed = last == "error" } }
+            }
+        }
+        p.terminationHandler = { [weak self] p in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if self.lease === p { self.lease = nil; try? self.input?.close(); self.input = nil }
+                if p.terminationStatus != 0 { self.hasFailed = true }
+            }
+        }
+        do { try p.run() } catch { hasFailed = true; return }
+        if !release { lease = p; input = stdin?.fileHandleForWriting }
+    }
+    private func endLease() {
+        try? input?.close(); input = nil
+        lease = nil // The helper sees EOF and restores sleep on its own.
     }
     func stop() {
         timer?.invalidate(); timer = nil
-        try? input?.close(); input = nil
-        helper = nil // Watchdog receives EOF and restores its setting independently.
+        active = false
+        endLease()
     }
 }

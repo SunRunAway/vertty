@@ -3,16 +3,27 @@ import Darwin
 import AppKit
 import Carbon
 
-// Unprivileged watchdog: only the two fixed pmset commands run through sudo.
-// A pipe lease makes app crashes/force-quit release protection without UI cleanup.
+// Unprivileged lease: only the two fixed pmset commands run through sudo.
+// Vhostty starts it when tasks begin and closes stdin when they end; an app
+// crash or force-quit closes the pipe too, so sleep is restored either way.
+// `--release` only restores sleep (startup recovery after a crash of this helper).
 let args = CommandLine.arguments
 guard args.count >= 2 else { exit(2) }
 let directory = URL(fileURLWithPath: args[1], isDirectory: true)
-let test = args.count == 4 && args[2] == "--test-dir" ? URL(fileURLWithPath: args[3]) : nil
-let status = directory.appendingPathComponent("sleep-status")
-let lock = open(directory.appendingPathComponent("sleep.lock").path, O_CREAT | O_RDWR, 0o600)
-guard lock >= 0, flock(lock, LOCK_EX | LOCK_NB) == 0 else { exit(3) }
-func report(_ value: String) { try? value.write(to: status, atomically: true, encoding: .utf8) }
+let releaseOnly = args.contains("--release")
+let test = args.firstIndex(of: "--test-dir").flatMap { $0 + 1 < args.count ? URL(fileURLWithPath: args[$0 + 1]) : nil }
+// Writes to a closed stdout must not kill us before sleep is restored.
+signal(SIGPIPE, SIG_IGN)
+signal(SIGTERM, SIG_IGN)
+signal(SIGINT, SIG_IGN)
+let signals = [SIGTERM, SIGINT].map { sig -> DispatchSourceSignal in
+    let s = DispatchSource.makeSignalSource(signal: sig, queue: .global())
+    // Treat a signal like the lease ending: closing stdin ends the wait below.
+    s.setEventHandler { close(STDIN_FILENO) }; s.resume(); return s
+}
+// Wait for a previous helper to finish restoring so it can't undo our setting.
+let lock = open(directory.appendingPathComponent("sleep.lock").path, O_CREAT | O_RDWR | O_CLOEXEC, 0o600)
+guard lock >= 0, flock(lock, LOCK_EX) == 0 else { exit(3) }
 func run(_ path: String, _ arguments: [String]) -> (Int32, String) {
     let p = Process(), pipe = Pipe()
     p.executableURL = URL(fileURLWithPath: path); p.arguments = arguments
@@ -21,9 +32,10 @@ func run(_ path: String, _ arguments: [String]) -> (Int32, String) {
     let data = pipe.fileHandleForReading.readDataToEndOfFile(); p.waitUntilExit()
     return (p.terminationStatus, String(decoding: data, as: UTF8.self))
 }
-/// nil means denied, timed out, or unreadable.
-func amphetamineProtectsSleep(requestPermission: Bool = false) -> Bool? {
-    if let test, !FileManager.default.fileExists(atPath: test.appendingPathComponent("live-amphetamine").path) {
+/// nil means denied, timed out, or unreadable. Never asks for automation consent;
+/// Vhostty requests it at launch.
+func amphetamineProtectsSleep() -> Bool? {
+    if let test {
         guard FileManager.default.fileExists(atPath: test.appendingPathComponent("amphetamine").path) else { return false }
         let state = (try? String(contentsOf: test.appendingPathComponent("amphetamine"), encoding: .utf8)) ?? ""
         switch state {
@@ -36,7 +48,7 @@ func amphetamineProtectsSleep(requestPermission: Bool = false) -> Bool? {
     // Address the running PID so a race with quitting cannot launch Amphetamine.
     let target = NSAppleEventDescriptor(processIdentifier: app.processIdentifier)
     let eventClass: AEEventClass = 0x616d7068 // amph, from Amphetamine.sdef
-    guard AEDeterminePermissionToAutomateTarget(target.aeDesc, eventClass, typeWildCard, requestPermission) == noErr else { return nil }
+    guard AEDeterminePermissionToAutomateTarget(target.aeDesc, eventClass, typeWildCard, false) == noErr else { return nil }
     func query(_ eventID: AEEventID) -> Bool? {
         let event = NSAppleEventDescriptor(eventClass: eventClass, eventID: eventID,
                                           targetDescriptor: target, returnID: AEReturnID(kAutoGenerateReturnID),
@@ -68,45 +80,35 @@ func setDisabled(_ value: Bool) -> Bool {
     }
     return run("/usr/bin/sudo", ["-n", "-k", "/usr/bin/pmset", "-a", "disablesleep", value ? "1" : "0"]).0 == 0
 }
-func release() {
-    guard disabled() != false else { report("idle"); return }
-    if amphetamineProtectsSleep() == true { report("external"); return }
-    report(setDisabled(false) ? "idle" : "error")
+func release() -> Bool {
+    guard disabled() != false else { return true }
+    if amphetamineProtectsSleep() == true { return true }
+    return setDisabled(false)
 }
-// This is the only place that may request macOS automation consent.
-// Later checks (including after the parent exits) must never prompt.
-let initialAmphetamineState = amphetamineProtectsSleep(requestPermission: true)
-if let test, FileManager.default.fileExists(atPath: test.appendingPathComponent("live-amphetamine").path) {
-    try? (initialAmphetamineState.map(String.init) ?? "error").write(to: test.appendingPathComponent("amphetamine-result"), atomically: true, encoding: .utf8)
+if releaseOnly { exit(release() ? 0 : 1) }
+func amphetamineRunning() -> Bool {
+    if let test { return FileManager.default.fileExists(atPath: test.appendingPathComponent("amphetamine").path) }
+    return !NSRunningApplication.runningApplications(withBundleIdentifier: "com.if.Amphetamine").isEmpty
 }
-var lastBusy: TimeInterval = -100
-var pending = ""
-var done = false
-signal(SIGTERM, SIG_IGN)
-signal(SIGINT, SIG_IGN)
-let signals = [SIGTERM, SIGINT].map { sig -> DispatchSourceSignal in
-    let s = DispatchSource.makeSignalSource(signal: sig, queue: .global())
-    // Wake poll by closing stdin; normal app shutdown uses pipe EOF.
-    s.setEventHandler { close(STDIN_FILENO) }; s.resume(); return s
-}
-while !done {
-    var descriptor = pollfd(fd: STDIN_FILENO, events: Int16(POLLIN | POLLHUP), revents: 0)
-    let ready = poll(&descriptor, 1, 15_000)
-    if ready <= 0 { break } // Parent hung or stopped renewing its lease.
-    var bytes = [UInt8](repeating: 0, count: 4096)
-    let count = read(STDIN_FILENO, &bytes, bytes.count)
-    if count <= 0 { break }
-    pending += String(decoding: bytes.prefix(count), as: UTF8.self)
-    while let end = pending.firstIndex(of: "\n") {
-        let command = String(pending[..<end]); pending.removeSubrange(...end)
-        if command == "1" { lastBusy = ProcessInfo.processInfo.systemUptime }
-        else if command != "0" { done = true; break }
+func say(_ line: String) { _ = (line + "\n").withCString { write(STDOUT_FILENO, $0, strlen($0)) } }
+// Enabling protection never depends on Amphetamine or its automation permission.
+guard disabled() == true || setDisabled(true) else { exit(1) }
+say("active")
+// Amphetamine sets the value back to 0 when its own session ends. Only when it is
+// running at the start of the lease, check every few seconds and re-apply; otherwise
+// nothing touches pmset until the lease ends.
+let watch = amphetamineRunning()
+var byte: UInt8 = 0
+while true {
+    if watch {
+        var descriptor = pollfd(fd: STDIN_FILENO, events: Int16(POLLIN), revents: 0)
+        if poll(&descriptor, 1, 5_000) == 0 {
+            if disabled() == false { say(setDisabled(true) ? "active" : "error") }
+            continue
+        }
     }
-    if done { break }
-    let busy = ProcessInfo.processInfo.systemUptime - lastBusy < 15
-    if !busy { release(); continue }
-    // Enabling protection never depends on Amphetamine or its automation permission.
-    if disabled() == true || setDisabled(true) { report("active") } else { report("error") }
+    if read(STDIN_FILENO, &byte, 1) <= 0 { break }
 }
-release()
+let restored = release()
 withExtendedLifetime(signals) {}
+exit(restored ? 0 : 1)
