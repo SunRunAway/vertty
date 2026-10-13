@@ -198,6 +198,6 @@ App 启动或电脑唤醒时，检查启用中的任务。存在尚未处理的�
 
 - [Claude Code Desktop 定时任务](https://code.claude.com/docs/en/desktop-scheduled-tasks)：本地定时执行、任务详情内运行历史及跳过原因。
 - [Codex App 定时任务文档入口](https://developers.openai.com/codex/app/automations)：定时任务管理与本地项目执行。
-- [Vhostty 开发者文档](../DEVELOPER.md)：当前会话启动、身份绑定、状态来源和隔离验证方式。
+- [Vhostty 开发者文档](../../DEVELOPER.md)：当前会话启动、身份绑定、状态来源和隔离验证方式。
 
 参考产品不决定 Vhostty 的全部行为；补跑策略、继续指定会话及并发范围以本文为准。
