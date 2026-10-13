@@ -48,12 +48,10 @@ final class AppStore: ObservableObject {
     let schedules = ScheduleStore()
     /// The scheduled-task page replaces the terminal while shown.
     @Published var showingSchedules = false
-    /// The task whose detail the page shows (nil: the list).
-    @Published var scheduleDetailID: UUID?
     /// An agent's delete is waiting for the user's answer.
     var scheduleAsking = false
-    /// The open new/edit task sheet.
-    @Published var scheduleEditor: ScheduleEditorRequest?
+    /// The task panel on the right (a task, or a new one).
+    @Published var schedulePanel: SchedulePanel?
     var scheduleTimer: Timer?
     /// Since when a scheduled Claude turn has looked idle without a Stop hook.
     var scheduleIdleSince: [UUID: Date] = [:]
@@ -311,6 +309,8 @@ final class AppStore: ObservableObject {
 
     func select(_ tab: TabSession) {
         showingSchedules = false
+        // A task's panel goes with the page, unless it has changes to keep.
+        if schedulePanel != nil, !schedulePanelDirty { schedulePanel = nil }
         launchIfNeeded(tab)
         if tab.shellVisible { launchShellIfNeeded(tab) }
         tab.attention = false

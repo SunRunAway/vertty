@@ -44,7 +44,7 @@ extension AppStore {
             }
             return ["ok": true, "task": describe(schedules.task(id)!)]
         case "create", "edit", "delete":
-            guard scheduleEditor == nil, !scheduleAsking else {
+            guard !schedulePanelDirty, !scheduleAsking else {
                 return error("A scheduled-task form is already open in Vhostty. Ask the user to finish it, then try again.")
             }
             if op == "create" {

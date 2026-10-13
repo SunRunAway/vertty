@@ -418,8 +418,7 @@ extension AppStore {
         resumeSession(summary, in: project)
     }
 
-    func showSchedules(detail: UUID? = nil) {
-        scheduleDetailID = detail
+    func showSchedules() {
         showingSchedules = true
         showInContainer(nil)
     }

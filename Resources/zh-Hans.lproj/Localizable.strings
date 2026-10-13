@@ -224,3 +224,13 @@
 "Your Mac stays awake with the lid closed while tasks run, then returns to normal sleep when they finish. Administrator authorization only permits these two commands to run without a password:\n\n/usr/bin/pmset -a disablesleep 1 — prevent sleep\n/usr/bin/pmset -a disablesleep 0 — restore sleep" = "任务运行期间，合盖也不会让 Mac 睡眠；任务结束后恢复正常睡眠。管理员授权仅允许免密执行以下两条命令：\n\n/usr/bin/pmset -a disablesleep 1（禁止睡眠）\n/usr/bin/pmset -a disablesleep 0（恢复睡眠）";
 "Don’t Allow" = "不允许";
 "Closed-Lid Sleep Protection: Not Active…" = "防合盖睡眠：未生效…";
+"Active" = "已启用";
+"Date" = "日期";
+"Days" = "星期";
+"Deleted (%lld)" = "已删除（%lld）";
+"Details" = "详情";
+"Next: %@ · %@" = "下次：%1$@ · %2$@";
+"Run a prompt in a project at set times, in one session that each run resumes." = "在项目里按时运行一段提示词，每次都接着同一个会话。";
+"Task name" = "任务名称";
+"What should the agent do? It runs in a session of its own that hasn't seen this one." = "要让 agent 做什么？它会在单独的会话里运行，看不到当前对话。";
+"Last run failed" = "上次运行异常";

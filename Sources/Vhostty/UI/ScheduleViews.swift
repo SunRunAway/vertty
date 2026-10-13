@@ -1,172 +1,184 @@
 import SwiftUI
 
-/// What the editor sheet edits: a new task or a saved one.
-struct ScheduleEditorRequest: Identifiable {
+/// What the task panel on the right shows: a saved task, or a new one being
+/// filled in. The draft holds the panel's settings until they're saved.
+struct SchedulePanel: Identifiable {
     let id = UUID()
-    var task: ScheduleTask
-    var isNew: Bool
+    /// nil: a new task.
+    var taskID: UUID?
+    var draft: ScheduleTask
+    var isNew: Bool { taskID == nil }
 }
 
-/// The scheduled-task page, shown in the terminal's place.
+// MARK: - Page
+
+/// The scheduled-task page, shown in the terminal's place: tasks grouped by
+/// project. A task opens in the panel on the right.
 struct ScheduleManagerView: View {
     @ObservedObject var store: AppStore
     @ObservedObject var schedules: ScheduleStore
+    @State private var showDeleted = false
 
     var body: some View {
-        Group {
-            if let id = store.scheduleDetailID, let task = schedules.task(id) {
-                ScheduleDetailView(store: store, schedules: schedules, task: task)
-            } else {
-                ScheduleListView(store: store, schedules: schedules)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(store.terminalBackground)
-    }
-}
-
-private enum ListView: String, CaseIterable, Identifiable {
-    case tasks, deleted
-    var id: String { rawValue }
-}
-
-private struct ScheduleListView: View {
-    @ObservedObject var store: AppStore
-    @ObservedObject var schedules: ScheduleStore
-    @State private var view = ListView.tasks
-    @State private var projectFilter: UUID?
-
-    private var shown: [ScheduleTask] {
-        let all = view == .tasks ? schedules.activeTasks : schedules.deletedTasks
-        return all.filter { projectFilter == nil || $0.projectID == projectFilter }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 12) {
-                Text("Scheduled Tasks").font(.system(size: 20, weight: .semibold))
-                Spacer()
-                Picker("", selection: $projectFilter) {
-                    Text("All Projects").tag(UUID?.none)
-                    ForEach(store.projects) { Text($0.name).tag(UUID?.some($0.id)) }
+        let active = schedules.activeTasks
+        let deleted = schedules.deletedTasks
+        ScrollView {
+            VStack(alignment: .leading, spacing: 30) {
+                if active.isEmpty {
+                    emptyState
+                } else {
+                    ForEach(groups(active), id: \.0) { projectID, tasks in
+                        section(projectID, tasks)
+                    }
                 }
-                .labelsHidden()
-                .fixedSize()
-                Button { store.newScheduledTask(in: projectFilter.flatMap(store.project)) } label: {
-                    Label("New Task", systemImage: "plus")
-                }
-                .disabled(store.projects.isEmpty)
-            }
-            Picker("", selection: $view) {
-                Text("Tasks").tag(ListView.tasks)
-                Text("Deleted").tag(ListView.deleted)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-
-            if shown.isEmpty {
-                emptyState
-            } else {
-                ScrollView {
-                    VStack(spacing: 0) {
-                        header
-                        ForEach(shown) { task in
-                            ScheduleRow(store: store, schedules: schedules, task: task)
-                            Divider().opacity(0.4)
+                if !deleted.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Button {
+                            withAnimation(.easeOut(duration: 0.15)) { showDeleted.toggle() }
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .rotationEffect(.degrees(showDeleted ? 90 : 0))
+                                Text("Deleted (\(deleted.count))")
+                            }
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.tertiary)
+                            .padding(.leading, 12)
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                        if showDeleted { rows(deleted) }
                     }
                 }
             }
+            .frame(maxWidth: 900, alignment: .leading)
+            .padding(.horizontal, 32)
+            .padding(.top, 24)
+            .padding(.bottom, 32)
+            .frame(maxWidth: .infinity)
         }
-        .padding(.horizontal, 28)
-        .padding(.top, 18)
+        .background(store.terminalBackground)
     }
 
-    private var header: some View {
-        HStack(spacing: 12) {
-            Text("Task").frame(maxWidth: .infinity, alignment: .leading)
-            Text("Schedule").frame(width: 170, alignment: .leading)
-            Text("Next Run").frame(width: 150, alignment: .leading)
-            Text("Status").frame(width: 110, alignment: .leading)
-            Color.clear.frame(width: 28)
+    /// In sidebar order; tasks of removed projects last.
+    private func groups(_ tasks: [ScheduleTask]) -> [(UUID?, [ScheduleTask])] {
+        var result: [(UUID?, [ScheduleTask])] = store.projects.compactMap { p in
+            let mine = tasks.filter { $0.projectID == p.id }
+            return mine.isEmpty ? nil : (p.id, mine)
         }
-        .font(.system(size: 11.5, weight: .medium))
-        .foregroundStyle(.tertiary)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        let orphans = tasks.filter { store.project($0.projectID) == nil }
+        if !orphans.isEmpty { result.append((nil, orphans)) }
+        return result
     }
 
-    @ViewBuilder
-    private var emptyState: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "clock").font(.system(size: 34)).foregroundStyle(.tertiary)
-            if view == .tasks {
-                Text("No scheduled tasks yet").foregroundStyle(.secondary)
-                Button("New Task") { store.newScheduledTask(in: projectFilter.flatMap(store.project)) }
-                    .disabled(store.projects.isEmpty)
-            } else {
-                Text("No deleted tasks").foregroundStyle(.secondary)
+    private func section(_ projectID: UUID?, _ tasks: [ScheduleTask]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "folder").font(.system(size: 13, weight: .medium))
+                Text(projectID.flatMap(store.project)?.name ?? String(localized: "Removed project"))
+                    .font(.system(size: 14, weight: .semibold))
+                Spacer()
+                if let p = projectID.flatMap(store.project) {
+                    IconButton(systemName: "plus", help: "New Scheduled Task…") { store.newScheduledTask(in: p) }
+                }
+            }
+            .foregroundStyle(.secondary)
+            .padding(.leading, 12)
+            rows(tasks)
+        }
+    }
+
+    /// Flat rows with a hairline between them, like a list in Settings.
+    private func rows(_ tasks: [ScheduleTask]) -> some View {
+        VStack(spacing: 0) {
+            ForEach(Array(tasks.enumerated()), id: \.element.id) { i, task in
+                if i > 0 {
+                    Rectangle().fill(Color.white.opacity(0.07)).frame(height: 1).padding(.horizontal, 12)
+                }
+                ScheduleTaskRow(store: store, schedules: schedules, task: task)
             }
         }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "clock").font(.system(size: 30)).foregroundStyle(.tertiary)
+            Text("No scheduled tasks yet").foregroundStyle(.secondary)
+            Text("Run a prompt in a project at set times, in one session that each run resumes.")
+                .font(.system(size: 12))
+                .foregroundStyle(.tertiary)
+            Button { store.newScheduledTask() } label: { Label("New Scheduled Task…", systemImage: "plus") }
+                .buttonStyle(PanelButtonStyle(prominent: true))
+                .disabled(store.projects.isEmpty)
+        }
         .frame(maxWidth: .infinity)
-        .padding(.top, 80)
+        .padding(.top, 90)
     }
 }
 
-private struct ScheduleRow: View {
-    let store: AppStore
+/// A task in the list, drawn like a session card: what runs, and when.
+private struct ScheduleTaskRow: View {
+    @ObservedObject var store: AppStore
     @ObservedObject var schedules: ScheduleStore
     let task: ScheduleTask
     @State private var hover = false
 
+    private var selected: Bool { store.schedulePanel?.taskID == task.id }
+
     var body: some View {
+        let run = schedules.shownRun(of: task.id)
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(task.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                HStack(spacing: 4) {
-                    AgentIcon(kind: task.kind, size: 9.5).opacity(0.7)
-                    Text("\(store.project(task.projectID)?.name ?? String(localized: "Removed project")) · \(task.kind.name)")
+            TaskStateGlyph(task: task, run: run)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 7) {
+                    Text(task.name)
+                        .font(.system(size: 14.5, weight: .medium))
+                        .lineLimit(1)
+                    AgentIcon(kind: task.kind, size: 12)
                 }
-                .font(.system(size: 11.5))
+                HStack(spacing: 5) {
+                    Text(ScheduleText.when(task))
+                    if run?.state == .failed {
+                        Text("· \(String(localized: "Last run failed"))")
+                            .foregroundStyle(ScheduleText.red)
+                    }
+                }
+                .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            Text(task.enabled || task.isDeleted ? task.timing.summary : String(localized: "Paused"))
-                .foregroundStyle(task.enabled ? .primary : .secondary)
-                .frame(width: 170, alignment: .leading)
-            Text(ScheduleText.nextRun(task))
-                .foregroundStyle(.secondary)
-                .frame(width: 150, alignment: .leading)
-            RunStateLabel(run: schedules.shownRun(of: task.id))
-                .frame(width: 110, alignment: .leading)
-            if task.isDeleted {
-                Color.clear.frame(width: 28)
-            } else {
-                Menu {
-                    ScheduleActions(store: store, schedules: schedules, task: task)
-                } label: {
-                    Image(systemName: "ellipsis").frame(width: 22, height: 20)
+            Spacer(minLength: 8)
+            if !task.isDeleted {
+                HStack(spacing: 2) {
+                    IconButton(systemName: "play", help: "Run Now") { store.runScheduleNow(task.id) }
+                        .disabled(schedules.openRun(of: task.id) != nil || store.project(task.projectID) == nil)
+                    Menu {
+                        ScheduleActions(store: store, schedules: schedules, task: task)
+                    } label: {
+                        Image(systemName: "ellipsis").font(.system(size: 12.5, weight: .medium)).frame(width: 24, height: 22)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
                 }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .frame(width: 28)
+                .opacity(hover || selected ? 1 : 0)
             }
         }
-        .font(.system(size: 12.5))
-        .lineLimit(1)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 9)
-        .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(hover ? 0.05 : 0)))
-        .contentShape(Rectangle())
+        .padding(.leading, 12)
+        .padding(.trailing, 10)
+        .padding(.vertical, 14)
+        .background(RoundedRectangle(cornerRadius: 10)
+            .fill(Color.white.opacity(selected ? 0.09 : hover ? 0.05 : 0)))
+        .contentShape(RoundedRectangle(cornerRadius: 10))
+        .opacity(task.isDeleted ? 0.6 : 1)
         .onHover { hover = $0 }
-        .onTapGesture { store.scheduleDetailID = task.id }
-        .opacity(task.enabled || task.isDeleted ? 1 : 0.7)
+        .onTapGesture { store.showScheduledTask(task.id) }
+        .contextMenu { if !task.isDeleted { ScheduleActions(store: store, schedules: schedules, task: task) } }
     }
 }
 
-/// Run Now / Edit / Pause or Resume / Delete, for menus.
+/// Pause or Resume, Delete: for menus.
 private struct ScheduleActions: View {
     let store: AppStore
     @ObservedObject var schedules: ScheduleStore
@@ -175,40 +187,513 @@ private struct ScheduleActions: View {
     var body: some View {
         Button("Run Now") { store.runScheduleNow(task.id) }
             .disabled(schedules.openRun(of: task.id) != nil || store.project(task.projectID) == nil)
-        Button("Edit…") { store.editScheduledTask(task) }
         if task.enabled {
             Button("Pause") { schedules.setEnabled(task.id, false) }
         } else {
             Button("Resume") { schedules.setEnabled(task.id, true) }
                 .disabled(store.project(task.projectID) == nil || !task.timing.canResume)
         }
+        if let id = task.sessionID, !id.isEmpty {
+            Button("Open Session") {
+                store.openScheduleSession(kind: task.kind, sessionID: id, projectID: task.projectID, title: task.name)
+            }
+        }
         Divider()
         Button("Delete…") { store.confirmDeleteScheduledTask(task) }
     }
 }
 
-struct RunStateLabel: View {
+/// Like a session card's status: a spinner while running, a pause sign when
+/// paused, red after a failed run, else an empty ring.
+private struct TaskStateGlyph: View {
+    let task: ScheduleTask
     let run: ScheduleRun?
 
     var body: some View {
-        HStack(spacing: 5) {
-            Circle().fill(color).frame(width: 6, height: 6)
-            Text(ScheduleText.state(run))
+        Group {
+            if run?.state == .running {
+                ProgressView().controlSize(.small).scaleEffect(0.8)
+            } else if !task.enabled && !task.isDeleted {
+                Image(systemName: "pause.circle").font(.system(size: 15)).foregroundStyle(.secondary)
+            } else if run?.state == .failed {
+                Circle().fill(ScheduleText.red).frame(width: 9, height: 9)
+            } else {
+                Circle().strokeBorder(Color.gray.opacity(0.8), lineWidth: 1.3).frame(width: 14, height: 14)
+            }
         }
-        .foregroundStyle(run == nil ? .tertiary : .secondary)
+        .frame(width: 16, height: 16)
+    }
+}
+
+// MARK: - Panel
+
+/// The task panel on the right: a task's prompt, settings and runs, or a new
+/// task. Edits stay in the draft until Save.
+struct SchedulePanelView: View {
+    @ObservedObject var store: AppStore
+    @ObservedObject var schedules: ScheduleStore
+    @State private var notice: String?
+    @State private var visibleRuns = 15
+
+    static let width: CGFloat = 420
+    static let background = Color(red: 0.118, green: 0.118, blue: 0.125)
+
+    private var panel: SchedulePanel? { store.schedulePanel }
+    private var isNew: Bool { panel?.isNew ?? true }
+    private var task: ScheduleTask? { panel?.taskID.flatMap(schedules.task) }
+    private var readOnly: Bool { task?.isDeleted == true }
+    /// Project and agent stay with the session once there is one.
+    private var fixed: Bool { task.map(schedules.sessionFixed) ?? false }
+
+    private var draft: Binding<ScheduleTask> {
+        Binding(get: { store.schedulePanel?.draft ?? ScheduleTask(name: "", projectID: UUID(), kind: .claude, prompt: "", timing: ScheduleTiming()) },
+                set: { store.schedulePanel?.draft = $0 })
+    }
+
+    private var problems: [String] { store.schedulePanelProblems }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    TextField("", text: draft.name, prompt: Text("Task name"))
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 19, weight: .semibold))
+                    promptBox
+                    sessionGroup
+                    scheduleGroup
+                    if task != nil { runsSection }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 24)
+                .disabled(readOnly)
+            }
+            if store.schedulePanelDirty { footer }
+        }
+        .frame(width: Self.width)
+        .background(Self.background)
+    }
+
+    // MARK: Header
+
+    private var header: some View {
+        HStack(spacing: 2) {
+            Text(statusTitle)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(statusColor)
+                .padding(.leading, 20)
+            Spacer()
+            if let task, !task.isDeleted {
+                IconButton(systemName: "play", help: "Run Now") { store.runScheduleNow(task.id) }
+                    .disabled(schedules.openRun(of: task.id) != nil || store.project(task.projectID) == nil)
+                if task.enabled {
+                    IconButton(systemName: "pause", help: "Pause") { schedules.setEnabled(task.id, false) }
+                } else {
+                    IconButton(systemName: "arrow.clockwise", help: "Resume") { schedules.setEnabled(task.id, true) }
+                        .disabled(store.project(task.projectID) == nil || !task.timing.canResume)
+                }
+                Menu {
+                    ScheduleActions(store: store, schedules: schedules, task: task)
+                } label: {
+                    Image(systemName: "ellipsis").font(.system(size: 12.5, weight: .medium)).frame(width: 24, height: 22)
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+            }
+            IconButton(systemName: "xmark", help: "Close") { store.schedulePanel = nil }
+                .padding(.trailing, 8)
+        }
+        .frame(height: TitleStrip.height)
+        .background(WindowDragArea())
+    }
+
+    private var statusTitle: String {
+        guard let task else { return String(localized: "New Scheduled Task") }
+        if task.isDeleted { return String(localized: "Deleted") }
+        return task.enabled ? String(localized: "Active") : String(localized: "Paused")
+    }
+
+    private var statusColor: Color {
+        guard let task, !task.isDeleted else { return .secondary }
+        return task.enabled ? Color(red: 0.35, green: 0.62, blue: 1.0) : .secondary
+    }
+
+    // MARK: Prompt
+
+    private var promptBox: some View {
+        ZStack(alignment: .topLeading) {
+            if draft.wrappedValue.prompt.isEmpty {
+                Text("What should the agent do? It runs in a session of its own that hasn't seen this one.")
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 5)
+                    .allowsHitTesting(false)
+            }
+            TextEditor(text: draft.prompt)
+                .scrollContentBackground(.hidden)
+        }
+        .font(.system(size: 13, design: .monospaced))
+        .lineSpacing(3)
+        .frame(minHeight: 120, maxHeight: 300)
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.04)))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.white.opacity(0.08)))
+    }
+
+    // MARK: Settings
+
+    private var sessionGroup: some View {
+        PanelGroup(title: "Details") {
+            PanelRow("Project") {
+                PanelMenu(selection: draft.projectID,
+                          options: store.projects.map { ($0.id, $0.name) },
+                          fallback: String(localized: "Removed project"))
+                    .disabled(fixed)
+                    .onChange(of: draft.wrappedValue.projectID) { _, id in
+                        // Another project: its own default agent.
+                        if !fixed, let p = store.project(id) { draft.wrappedValue.kind = store.defaultKind(p) }
+                    }
+            }
+            PanelRow("Agent") {
+                AgentIcon(kind: draft.wrappedValue.kind, size: 11)
+                Menu {
+                    ForEach(AgentKind.allCases) { kind in
+                        Button(kind.name) { draft.wrappedValue.kind = kind }
+                    }
+                } label: {
+                    let name = Text(draft.wrappedValue.kind.name)
+                    fixed ? name : name + Text("  ") + MenuChevron.text
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .disabled(fixed)
+            }
+            PanelRow("Session", divider: false) {
+                if let task, let id = task.sessionID, !id.isEmpty {
+                    Button("Open Session") {
+                        store.openScheduleSession(kind: task.kind, sessionID: id, projectID: task.projectID, title: task.name)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.accentColor)
+                    .cursor(.pointingHand)
+                } else {
+                    Text("Created by the first run").foregroundStyle(.tertiary)
+                }
+            }
+        }
+    }
+
+    private var scheduleGroup: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            PanelGroup(title: "Schedule") {
+                PanelRow("Repeat") {
+                    PanelMenu(selection: draft.timing.repeatKind,
+                              options: [(.once, String(localized: "Once")), (.daily, String(localized: "Daily")),
+                                        (.weekdays, String(localized: "Weekdays")), (.weekly, String(localized: "Weekly"))])
+                }
+                if draft.wrappedValue.timing.repeatKind == .weekly {
+                    PanelRow("Days") { WeekdayPicker(weekdays: draft.timing.weekdays) }
+                }
+                if draft.wrappedValue.timing.repeatKind == .once {
+                    PanelRow("Date") {
+                        DatePicker("", selection: onceDay, displayedComponents: .date).labelsHidden().fixedSize()
+                    }
+                }
+                PanelRow("Time", divider: false) {
+                    DatePicker("", selection: timeOfDay, displayedComponents: .hourAndMinute).labelsHidden().fixedSize()
+                }
+            }
+            Text(nextLine)
+                .font(.system(size: 12.5))
+                .foregroundStyle(.tertiary)
+                .padding(.leading, 4)
+        }
+    }
+
+    private var nextLine: String {
+        let t = draft.wrappedValue
+        guard let next = t.timing.next(after: Date()) else { return String(localized: "No more plans") }
+        if let task, !task.enabled, !store.schedulePanelDirty { return String(localized: "Paused") }
+        return String(localized: "Next: \(ScheduleFormat.dateTime(next)) · \(ScheduleText.relative(next))")
+    }
+
+    /// The time of day, as a date (the picker shows the Mac's zone).
+    private var timeOfDay: Binding<Date> {
+        Binding(get: {
+            let t = draft.wrappedValue.timing
+            return t.calendar.date(bySettingHour: t.hour, minute: t.minute, second: 0, of: Date()) ?? Date()
+        }, set: { date in
+            let c = draft.wrappedValue.timing.calendar.dateComponents([.hour, .minute], from: date)
+            draft.wrappedValue.timing.hour = c.hour ?? 9
+            draft.wrappedValue.timing.minute = c.minute ?? 0
+        })
+    }
+
+    private var onceDay: Binding<Date> {
+        Binding(get: {
+            let t = draft.wrappedValue.timing
+            if let y = t.year, let m = t.month, let d = t.day,
+               let date = t.calendar.date(from: DateComponents(year: y, month: m, day: d, hour: 12)) { return date }
+            return Date()
+        }, set: { date in
+            let c = draft.wrappedValue.timing.calendar.dateComponents([.year, .month, .day], from: date)
+            draft.wrappedValue.timing.year = c.year
+            draft.wrappedValue.timing.month = c.month
+            draft.wrappedValue.timing.day = c.day
+        })
+    }
+
+    // MARK: Runs
+
+    private var runsSection: some View {
+        let runs = task.map { schedules.runs(of: $0.id) } ?? []
+        return VStack(alignment: .leading, spacing: 4) {
+            Text("Runs")
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(.tertiary)
+                .padding(.leading, 4)
+            if runs.isEmpty {
+                Text("Not run yet")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.tertiary)
+                    .padding(.leading, 4)
+                    .padding(.top, 2)
+            }
+            ForEach(runs.prefix(visibleRuns)) { run in
+                RunLine(store: store, task: task!, run: run)
+            }
+            if runs.count > visibleRuns {
+                Button("Show Earlier Runs") { visibleRuns += 20 }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.tertiary)
+                    .padding(.leading, 4)
+            }
+        }
+    }
+
+    // MARK: Footer
+
+    private var footer: some View {
+        HStack(spacing: 8) {
+            if let text = notice ?? problems.first {
+                Text(text)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(notice != nil ? Color.orange : Color.secondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 8)
+            Button("Cancel") { cancel() }
+                .buttonStyle(PanelButtonStyle())
+                .keyboardShortcut(.cancelAction)
+            Button(isNew ? "Create and Enable" : "Save") { save() }
+                .buttonStyle(PanelButtonStyle(prominent: true))
+                .keyboardShortcut(.defaultAction)
+                .disabled(!problems.isEmpty)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .overlay(alignment: .top) { Rectangle().fill(Color.black.opacity(0.35)).frame(height: 1) }
+    }
+
+    private func cancel() {
+        notice = nil
+        store.cancelSchedulePanel()
+    }
+
+    private func save() {
+        notice = store.saveSchedulePanel()
+    }
+}
+
+/// One run: its state and when; a click opens the session it ran in.
+private struct RunLine: View {
+    let store: AppStore
+    let task: ScheduleTask
+    let run: ScheduleRun
+    @State private var hover = false
+
+    private var canOpen: Bool { !(run.sessionID ?? "").isEmpty }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 7) {
+                Group {
+                    if run.state == .running {
+                        ProgressView().controlSize(.mini).scaleEffect(0.65)
+                    } else {
+                        Circle().fill(color).frame(width: 6, height: 6)
+                    }
+                }
+                .frame(width: 12, height: 12)
+                Text(ScheduleText.state(run)).foregroundStyle(.secondary)
+                Text([ScheduleText.trigger(run.trigger), ScheduleText.phase(run)].compactMap { $0 }.joined(separator: " · "))
+                    .foregroundStyle(.tertiary)
+                Spacer()
+                Text(RelativeTime.short(run.startedAt))
+                    .foregroundStyle(.tertiary)
+                    .help(ScheduleFormat.dateTime(run.startedAt))
+            }
+            if let reason = run.reason {
+                Text(reason)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(run.state == .failed ? ScheduleText.red.opacity(0.9) : Color.secondary)
+                    .padding(.leading, 19)
+                    .textSelection(.enabled)
+            }
+        }
+        .font(.system(size: 13))
+        .padding(.horizontal, 4)
+        .padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(hover && canOpen ? 0.05 : 0)))
+        .contentShape(Rectangle())
+        .onHover { hover = $0 }
+        .onTapGesture {
+            guard let id = run.sessionID, !id.isEmpty else { return }
+            store.openScheduleSession(kind: run.kind, sessionID: id, projectID: task.projectID, title: task.name)
+        }
+        .help(canOpen ? String(localized: "Open Session") : "")
     }
 
     private var color: Color {
-        switch run?.state {
-        case .running?: return Color(red: 0.35, green: 0.62, blue: 1.0)
-        case .failed?: return Color(red: 0.95, green: 0.42, blue: 0.42)
-        case .replied?: return Color.white.opacity(0.55)
-        case .skipped?, nil: return Color.white.opacity(0.22)
+        switch run.state {
+        case .failed: return ScheduleText.red
+        case .replied: return Color.white.opacity(0.55)
+        case .running: return Color(red: 0.35, green: 0.62, blue: 1.0)
+        case .skipped: return Color.white.opacity(0.22)
         }
     }
 }
 
+// MARK: - Panel pieces
+
+/// A titled, rounded group of rows.
+private struct PanelGroup<Content: View>: View {
+    let title: LocalizedStringKey
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(.tertiary)
+                .padding(.leading, 4)
+            VStack(spacing: 0) { content }
+                .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.035)))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.white.opacity(0.07)))
+        }
+    }
+}
+
+/// A label on the left, its control on the right.
+private struct PanelRow<Value: View>: View {
+    let label: LocalizedStringKey
+    var divider = true
+    @ViewBuilder let value: Value
+
+    init(_ label: LocalizedStringKey, divider: Bool = true, @ViewBuilder value: () -> Value) {
+        self.label = label
+        self.divider = divider
+        self.value = value()
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Text(label)
+                Spacer(minLength: 8)
+                value.foregroundStyle(.secondary)
+            }
+            .font(.system(size: 13.5))
+            .padding(.horizontal, 14)
+            .frame(minHeight: 46)
+            if divider {
+                Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1).padding(.horizontal, 14)
+            }
+        }
+    }
+}
+
+/// A value that opens a menu of choices.
+private struct PanelMenu<T: Hashable>: View {
+    @Binding var selection: T
+    let options: [(T, String)]
+    var fallback = "—"
+    @Environment(\.isEnabled) private var enabled
+
+    var body: some View {
+        Menu {
+            ForEach(options, id: \.0) { value, title in
+                Button(title) { selection = value }
+            }
+        } label: {
+            let title = Text(options.first { $0.0 == selection }?.1 ?? fallback)
+            enabled ? title + Text("  ") + MenuChevron.text : title
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+    }
+}
+
+/// The up-down mark after a menu's value.
+private enum MenuChevron {
+    static var text: Text {
+        Text(Image(systemName: "chevron.up.chevron.down"))
+            .font(.system(size: 8.5, weight: .semibold))
+            .foregroundColor(.secondary)
+    }
+}
+
+/// Rounded buttons in the panel's look; prominent for the main action.
+struct PanelButtonStyle: ButtonStyle {
+    var prominent = false
+    @Environment(\.isEnabled) private var enabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(prominent ? Color.white : Color.primary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .background(RoundedRectangle(cornerRadius: 8).fill(
+                prominent ? Color.accentColor.opacity(configuration.isPressed ? 0.7 : 0.9)
+                    : Color.white.opacity(configuration.isPressed ? 0.14 : 0.08)))
+            .opacity(enabled ? 1 : 0.45)
+    }
+}
+
+private struct WeekdayPicker: View {
+    @Binding var weekdays: [Int]
+
+    var body: some View {
+        let names = ScheduleFormat.weekdayNames
+        HStack(spacing: 3) {
+            ForEach([2, 3, 4, 5, 6, 7, 1], id: \.self) { day in
+                let on = weekdays.contains(day)
+                Button {
+                    if on { weekdays.removeAll { $0 == day } } else { weekdays.append(day) }
+                } label: {
+                    Text(names[day - 1])
+                        .font(.system(size: 11.5, weight: on ? .semibold : .regular))
+                        .foregroundStyle(on ? Color.white : Color.secondary)
+                        .frame(minWidth: 32, minHeight: 24)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(on ? Color.accentColor.opacity(0.75) : Color.white.opacity(0.07)))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+// MARK: - Text
+
 enum ScheduleText {
+    static let red = Color(red: 0.95, green: 0.42, blue: 0.42)
+
     static func state(_ run: ScheduleRun?) -> String {
         guard let run else { return String(localized: "Not run yet") }
         switch run.state {
@@ -236,11 +721,21 @@ enum ScheduleText {
         }
     }
 
-    static func nextRun(_ task: ScheduleTask) -> String {
-        if task.isDeleted { return "—" }
-        if !task.enabled { return String(localized: "Paused") }
-        guard let next = task.nextPlan else { return String(localized: "No more plans") }
-        return ScheduleFormat.dateTime(next)
+    /// "Every Sat 09:00 · in 3 days", "Paused · Every Sat 09:00"…
+    static func when(_ task: ScheduleTask) -> String {
+        let summary = task.timing.summary
+        if task.isDeleted { return summary }
+        if !task.enabled { return "\(String(localized: "Paused")) · \(summary)" }
+        guard let next = task.nextPlan else { return "\(summary) · \(String(localized: "No more plans"))" }
+        return "\(summary) · \(relative(next))"
+    }
+
+    /// "in 3 days", "in 2 hours".
+    static func relative(_ date: Date) -> String {
+        let f = RelativeDateTimeFormatter()
+        f.locale = ScheduleFormat.locale
+        f.unitsStyle = .full
+        return f.localizedString(for: date, relativeTo: Date())
     }
 }
 
@@ -249,410 +744,11 @@ extension ScheduleTiming {
     var canResume: Bool { repeatKind != .once || (onceDate ?? .distantPast) > Date() }
 }
 
-// MARK: - Detail
-
-private struct ScheduleDetailView: View {
-    @ObservedObject var store: AppStore
-    @ObservedObject var schedules: ScheduleStore
-    let task: ScheduleTask
-    @State private var visibleRuns = 20
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                Button { store.scheduleDetailID = nil } label: {
-                    Label("All Tasks", systemImage: "chevron.left").font(.system(size: 12.5))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text(task.name).font(.system(size: 20, weight: .semibold)).lineLimit(2)
-                    if task.isDeleted {
-                        Text("Deleted").font(.system(size: 11.5)).foregroundStyle(.secondary)
-                    } else if !task.enabled {
-                        Text("Paused").font(.system(size: 11.5)).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    if !task.isDeleted { actions }
-                }
-
-                config
-                runsSection
-            }
-            .padding(.horizontal, 28)
-            .padding(.vertical, 18)
-            .frame(maxWidth: 860, alignment: .leading)
-        }
-    }
-
-    private var actions: some View {
-        HStack(spacing: 8) {
-            Button("Run Now") { store.runScheduleNow(task.id) }
-                .disabled(schedules.openRun(of: task.id) != nil || store.project(task.projectID) == nil)
-            Button("Edit…") { store.editScheduledTask(task) }
-            if task.enabled {
-                Button("Pause") { schedules.setEnabled(task.id, false) }
-            } else {
-                Button("Resume") { schedules.setEnabled(task.id, true) }
-                    .disabled(store.project(task.projectID) == nil || !task.timing.canResume)
-            }
-            Menu {
-                Button("Delete…") { store.confirmDeleteScheduledTask(task) }
-            } label: {
-                Image(systemName: "ellipsis")
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-        }
-    }
-
-    private var config: some View {
-        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 16, verticalSpacing: 9) {
-            row("Project", store.project(task.projectID).map { "\($0.name)  \($0.path.abbreviatingHome)" }
-                ?? String(localized: "Removed project"))
-            row("Agent", task.kind.name)
-            row("Schedule", task.timing.summary)
-            row("Next Run", ScheduleText.nextRun(task))
-            GridRow {
-                Text("Session").foregroundStyle(.secondary)
-                if let id = task.sessionID, !id.isEmpty {
-                    Button(String(localized: "Open Session")) {
-                        store.openScheduleSession(kind: task.kind, sessionID: id, projectID: task.projectID, title: task.name)
-                    }
-                    .buttonStyle(.link)
-                } else {
-                    Text("Created by the first run").foregroundStyle(.secondary)
-                }
-            }
-            GridRow(alignment: .top) {
-                Text("Prompt").foregroundStyle(.secondary)
-                Text(task.prompt)
-                    .textSelection(.enabled)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.25)))
-            }
-        }
-        .font(.system(size: 12.5))
-    }
-
-    private func row(_ label: LocalizedStringKey, _ value: String) -> some View {
-        GridRow {
-            Text(label).foregroundStyle(.secondary)
-            Text(value).textSelection(.enabled)
-        }
-    }
-
-    private var runsSection: some View {
-        let runs = schedules.runs(of: task.id)
-        return VStack(alignment: .leading, spacing: 6) {
-            Text("Runs").font(.system(size: 14, weight: .semibold))
-            if runs.isEmpty {
-                Text("Not run yet").font(.system(size: 12.5)).foregroundStyle(.tertiary)
-            }
-            ForEach(runs.prefix(visibleRuns)) { run in
-                RunRow(store: store, schedules: schedules, task: task, run: run)
-                Divider().opacity(0.4)
-            }
-            if runs.count > visibleRuns {
-                Button("Show Earlier Runs") { visibleRuns += 20 }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .font(.system(size: 12.5))
-            }
-        }
-    }
-}
-
-private struct RunRow: View {
-    let store: AppStore
-    @ObservedObject var schedules: ScheduleStore
-    let task: ScheduleTask
-    let run: ScheduleRun
-    @State private var hover = false
-
-    private var canOpen: Bool { !(run.sessionID ?? "").isEmpty }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 12) {
-                Text(ScheduleFormat.dateTime(run.startedAt)).frame(width: 150, alignment: .leading)
-                Text(ScheduleText.trigger(run.trigger)).foregroundStyle(.secondary).frame(width: 90, alignment: .leading)
-                HStack(spacing: 6) {
-                    RunStateLabel(run: run)
-                    if let phase = ScheduleText.phase(run) {
-                        Text(phase).foregroundStyle(.tertiary)
-                    }
-                }
-                Spacer()
-                if canOpen {
-                    Button("Open Session") { open() }
-                }
-            }
-            .font(.system(size: 12.5))
-            details
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 7)
-        .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(hover && canOpen ? 0.05 : 0)))
-        .contentShape(Rectangle())
-        .onHover { hover = $0 }
-        .onTapGesture { if canOpen { open() } }
-    }
-
-    @ViewBuilder
-    private var details: some View {
-        let lines = detailLines
-        if !lines.isEmpty {
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(lines, id: \.self) { Text($0) }
-            }
-            .font(.system(size: 11.5))
-            .foregroundStyle(.secondary)
-            .padding(.leading, 2)
-            .textSelection(.enabled)
-        }
-    }
-
-    private var detailLines: [String] {
-        var lines: [String] = []
-        if let planned = run.plannedAt {
-            lines.append(String(localized: "Planned for \(ScheduleFormat.dateTime(planned))"))
-        }
-        if let ended = run.endedAt, run.state != .skipped {
-            lines.append(String(localized: "Ended \(ScheduleFormat.dateTime(ended))"))
-        }
-        if let reason = run.reason { lines.append(reason) }
-        return lines
-    }
-
-    private func open() {
-        guard let id = run.sessionID else { return }
-        store.openScheduleSession(kind: run.kind, sessionID: id, projectID: task.projectID, title: task.name)
-    }
-}
-
-// MARK: - Editor
-
-struct ScheduleEditorView: View {
-    @ObservedObject var store: AppStore
-    let request: ScheduleEditorRequest
-    @State private var task: ScheduleTask
-    @State private var notice: String?
-    @Environment(\.dismiss) private var dismiss
-
-    init(store: AppStore, request: ScheduleEditorRequest) {
-        self.store = store
-        self.request = request
-        _task = State(initialValue: request.task)
-    }
-
-    private var bound: Bool { !request.isNew && store.schedules.sessionFixed(task) }
-
-    private var problems: [String] {
-        var p: [String] = []
-        if task.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { p.append(String(localized: "Enter a name.")) }
-        if task.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { p.append(String(localized: "Enter a prompt.")) }
-        if store.project(task.projectID) == nil { p.append(String(localized: "Choose a project.")) }
-        if task.timing.repeatKind == .weekly && task.timing.weekdays.isEmpty { p.append(String(localized: "Choose at least one day.")) }
-        if task.timing.repeatKind == .once && !task.timing.canResume { p.append(String(localized: "Choose a time in the future.")) }
-        return p
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(request.isNew ? "New Scheduled Task" : "Edit Scheduled Task")
-                .font(.system(size: 15, weight: .semibold))
-
-            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 12) {
-                GridRow {
-                    Text("Name").gridColumnAlignment(.trailing)
-                    TextField("", text: $task.name, prompt: Text("Weekly dependency check"))
-                }
-                GridRow {
-                    Text("Project")
-                    HStack {
-                        Picker("", selection: $task.projectID) {
-                            ForEach(store.projects) { Text($0.name).tag($0.id) }
-                        }
-                        .labelsHidden()
-                        .fixedSize()
-                        .disabled(bound)
-                        // Another project: its own default agent.
-                        .onChange(of: task.projectID) { _, id in
-                            if !bound, let p = store.project(id) { task.kind = store.defaultKind(p) }
-                        }
-                        Picker("", selection: $task.kind) {
-                            ForEach(AgentKind.allCases) { Text($0.name).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .fixedSize()
-                        .disabled(bound)
-                    }
-                }
-                if bound {
-                    GridRow {
-                        Color.clear.frame(width: 1, height: 1)
-                        Text("Project and agent are fixed once the task has its session.")
-                            .font(.system(size: 11.5)).foregroundStyle(.secondary)
-                    }
-                }
-                GridRow(alignment: .top) {
-                    Text("Prompt")
-                    TextEditor(text: $task.prompt)
-                        .font(.system(size: 12.5))
-                        .frame(minHeight: 120)
-                        .scrollContentBackground(.hidden)
-                        .padding(4)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.25)))
-                }
-                GridRow {
-                    Text("Repeat")
-                    Picker("", selection: $task.timing.repeatKind) {
-                        Text("Once").tag(ScheduleRepeat.once)
-                        Text("Daily").tag(ScheduleRepeat.daily)
-                        Text("Weekdays").tag(ScheduleRepeat.weekdays)
-                        Text("Weekly").tag(ScheduleRepeat.weekly)
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .fixedSize()
-                }
-                if task.timing.repeatKind == .weekly {
-                    GridRow {
-                        Color.clear.frame(width: 1, height: 1)
-                        WeekdayPicker(weekdays: $task.timing.weekdays)
-                    }
-                }
-                GridRow {
-                    Text("Time")
-                    HStack(spacing: 10) {
-                        if task.timing.repeatKind == .once {
-                            DatePicker("", selection: onceDay, displayedComponents: .date).labelsHidden().fixedSize()
-                        }
-                        DatePicker("", selection: timeOfDay, displayedComponents: .hourAndMinute).labelsHidden().fixedSize()
-                    }
-                }
-                GridRow {
-                    Color.clear.frame(width: 1, height: 1)
-                    Text(planSummary).font(.system(size: 12)).foregroundStyle(.secondary)
-                }
-            }
-            .font(.system(size: 12.5))
-
-            Divider()
-            HStack {
-                if let text = notice ?? problems.first {
-                    Text(text).font(.system(size: 11.5)).foregroundStyle(notice != nil ? .orange : .secondary)
-                }
-                Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button(request.isNew ? "Create and Enable" : "Save") { save() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!problems.isEmpty)
-            }
-        }
-        .padding(20)
-        .frame(width: 560)
-    }
-
-    private var planSummary: String {
-        let next = task.timing.next(after: Date()).map { ScheduleFormat.dateTime($0) }
-        return String(localized: "\(task.timing.summary) · Next: \(next ?? "—")")
-    }
-
-    /// The time of day, as a date in the task's zone (the picker shows that zone).
-    private var timeOfDay: Binding<Date> {
-        Binding(get: {
-            let cal = task.timing.calendar
-            return cal.date(bySettingHour: task.timing.hour, minute: task.timing.minute, second: 0, of: Date()) ?? Date()
-        }, set: { date in
-            let c = task.timing.calendar.dateComponents([.hour, .minute], from: date)
-            task.timing.hour = c.hour ?? 9
-            task.timing.minute = c.minute ?? 0
-        })
-    }
-
-    private var onceDay: Binding<Date> {
-        Binding(get: {
-            let t = task.timing
-            let cal = t.calendar
-            if let y = t.year, let m = t.month, let d = t.day,
-               let date = cal.date(from: DateComponents(year: y, month: m, day: d, hour: 12)) { return date }
-            return Date()
-        }, set: { date in
-            let c = task.timing.calendar.dateComponents([.year, .month, .day], from: date)
-            task.timing.year = c.year
-            task.timing.month = c.month
-            task.timing.day = c.day
-        })
-    }
-
-    private func save() {
-        guard problems.isEmpty else { return }
-        var t = task
-        t.name = t.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        t.prompt = t.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        if t.timing.repeatKind != .once {
-            t.timing.year = nil
-            t.timing.month = nil
-            t.timing.day = nil
-        }
-        if request.isNew {
-            store.schedules.create(t)
-            store.showSchedules(detail: t.id)
-        } else if let problem = store.schedules.applyEdit(t) {
-            notice = problem
-            return
-        }
-        dismiss()
-    }
-}
-
-private struct WeekdayPicker: View {
-    @Binding var weekdays: [Int]
-
-    var body: some View {
-        let names = ScheduleFormat.weekdayNames
-        HStack(spacing: 4) {
-            ForEach([2, 3, 4, 5, 6, 7, 1], id: \.self) { day in
-                let on = weekdays.contains(day)
-                Button {
-                    if on { weekdays.removeAll { $0 == day } } else { weekdays.append(day) }
-                } label: {
-                    Text(names[day - 1])
-                        .font(.system(size: 11.5, weight: on ? .semibold : .regular))
-                        .frame(minWidth: 34, minHeight: 22)
-                        .background(RoundedRectangle(cornerRadius: 5).fill(on ? Color.accentColor.opacity(0.75) : Color.white.opacity(0.07)))
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-}
-
 // MARK: - Store actions
 
 extension AppStore {
-    func newScheduledTask(in project: Project? = nil) {
-        guard let project = project ?? currentProject else { return }
-        var timing = ScheduleTiming()
-        let cal = timing.calendar
-        let tomorrow = cal.date(byAdding: .day, value: 1, to: Date()) ?? Date()
-        let c = cal.dateComponents([.year, .month, .day, .weekday], from: tomorrow)
-        timing.year = c.year
-        timing.month = c.month
-        timing.day = c.day
-        timing.weekdays = [c.weekday ?? 7]
-        let task = ScheduleTask(name: "", projectID: project.id, kind: defaultKind(project), prompt: "", timing: timing)
-        scheduleEditor = ScheduleEditorRequest(task: task, isNew: true)
-    }
-
-    /// The same form, filled in by an agent through the schedule skill.
-    func newScheduledTask(filledIn task: ScheduleTask) {
+    /// The panel's draft of a task: its date filled in for the date picker.
+    static func formDraft(_ task: ScheduleTask) -> ScheduleTask {
         var t = task
         if t.timing.year == nil {
             let c = t.timing.calendar.dateComponents([.year, .month, .day], from: Date().addingTimeInterval(86400))
@@ -660,18 +756,91 @@ extension AppStore {
             t.timing.month = c.month
             t.timing.day = c.day
         }
-        scheduleEditor = ScheduleEditorRequest(task: t, isNew: true)
+        return t
     }
 
-    func editScheduledTask(_ task: ScheduleTask) {
-        var t = task
-        if t.timing.repeatKind != .once, t.timing.year == nil {
-            let c = t.timing.calendar.dateComponents([.year, .month, .day], from: Date().addingTimeInterval(86400))
-            t.timing.year = c.year
-            t.timing.month = c.month
-            t.timing.day = c.day
+    /// The panel has changes not saved yet (or a new task).
+    var schedulePanelDirty: Bool {
+        guard let panel = schedulePanel else { return false }
+        guard let id = panel.taskID, let task = schedules.task(id) else { return true }
+        func settings(_ t: ScheduleTask) -> [AnyHashable] {
+            var timing = t.timing
+            if timing.repeatKind != .once {
+                timing.year = nil
+                timing.month = nil
+                timing.day = nil
+            }
+            if timing.repeatKind != .weekly { timing.weekdays = [] }
+            return [t.name, t.prompt, t.projectID, t.kind, timing.repeatKind, timing.hour, timing.minute,
+                    timing.weekdays.sorted(), timing.year, timing.month, timing.day]
         }
-        scheduleEditor = ScheduleEditorRequest(task: t, isNew: false)
+        return settings(panel.draft) != settings(task)
+    }
+
+    /// Why the panel's draft can't be saved yet.
+    var schedulePanelProblems: [String] {
+        guard let t = schedulePanel?.draft else { return [] }
+        var p: [String] = []
+        if t.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { p.append(String(localized: "Enter a name.")) }
+        if t.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { p.append(String(localized: "Enter a prompt.")) }
+        if project(t.projectID) == nil { p.append(String(localized: "Choose a project.")) }
+        if t.timing.repeatKind == .weekly && t.timing.weekdays.isEmpty { p.append(String(localized: "Choose at least one day.")) }
+        if t.timing.repeatKind == .once && !t.timing.canResume { p.append(String(localized: "Choose a time in the future.")) }
+        return p
+    }
+
+    /// Saves the panel's draft (creates a new task). Returns why it couldn't.
+    @discardableResult
+    func saveSchedulePanel() -> String? {
+        guard let panel = schedulePanel else { return nil }
+        if let problem = schedulePanelProblems.first { return problem }
+        var t = panel.draft
+        t.name = t.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        t.prompt = t.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.timing.repeatKind != .once {
+            t.timing.year = nil
+            t.timing.month = nil
+            t.timing.day = nil
+        }
+        if panel.isNew {
+            schedules.create(t)
+        } else if let problem = schedules.applyEdit(t) {
+            return problem
+        }
+        showScheduledTask(t.id, page: false)
+        return nil
+    }
+
+    /// Drops the panel's changes; a new task's panel closes.
+    func cancelSchedulePanel() {
+        guard let id = schedulePanel?.taskID, let task = schedules.task(id) else { return schedulePanel = nil }
+        schedulePanel?.draft = Self.formDraft(task)
+    }
+
+    /// Opens a task in the panel; with `page`, on the scheduled-task page.
+    func showScheduledTask(_ id: UUID, page: Bool = true) {
+        guard let task = schedules.task(id) else { return }
+        schedulePanel = SchedulePanel(taskID: id, draft: Self.formDraft(task))
+        if page { showSchedules() }
+    }
+
+    func newScheduledTask(in project: Project? = nil) {
+        guard let project = project ?? currentProject else { return }
+        var timing = ScheduleTiming()
+        let c = timing.calendar.dateComponents([.weekday], from: Date().addingTimeInterval(86400))
+        timing.weekdays = [c.weekday ?? 7]
+        let task = ScheduleTask(name: "", projectID: project.id, kind: defaultKind(project), prompt: "", timing: timing)
+        schedulePanel = SchedulePanel(taskID: nil, draft: Self.formDraft(task))
+    }
+
+    /// The same panel, filled in by an agent.
+    func newScheduledTask(filledIn task: ScheduleTask) {
+        schedulePanel = SchedulePanel(taskID: nil, draft: Self.formDraft(task))
+    }
+
+    /// A task in the panel with an agent's changes filled in, not saved yet.
+    func editScheduledTask(_ changed: ScheduleTask) {
+        schedulePanel = SchedulePanel(taskID: changed.id, draft: Self.formDraft(changed))
     }
 
     /// An agent's delete, asked on the window as a sheet: a modal alert would

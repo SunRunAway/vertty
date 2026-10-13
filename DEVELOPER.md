@@ -59,7 +59,7 @@ hooks 事件的传递路径：`vhostty-hook`（App 里自带的一个小程序�
 - **计划**：每个任务记着下一次还没处理的计划时间 `nextPlan`。每 20 秒、启动和唤醒时检查一次：到点的计划里只运行最近一次，更早的直接丢掉；先把新的 `nextPlan` 写盘再启动，所以重复检查、唤醒或重启都不会重复提交。时间按本机系统时区计算，系统时区变了就重算 `nextPlan`（`Calendar.nextDate`，夏令时跳过的时刻顺延，重复的时刻只取第一次）。
 - **执行**：提示词作为 agent 的命令行参数传入（`claude --session-id/--resume <id> <提示词>`、`codex [resume <id>] <提示词>`），从不往终端里打字。首次运行在项目顶部新建一张后台卡片；之后 resume 任务绑定的会话 ID。这个会话开在某张卡片里时，先释放那张卡片的终端，等它的 agent 进程（Claude 看 `~/.claude/sessions`，外加带这张卡片 `VHOSTTY_TAB_ID` 的 `claude`、`vhostty-hook` 进程；Codex 看带 `tui.terminal_title` 参数的 TUI 进程）都退出后，再在同一张卡片里 resume。确认不了已停止就记异常，不启动第二个实例；卡片的终端已经没了也照样先查一遍进程。停止期间选中这张卡片不会重新拉起它。Claude 会话如果在 Vhostty 之外（别的终端、底部终端、后台任务）还有进程，不碰它，直接记异常，因为再 resume 会让会话分叉。
 - **状态**：Claude 靠 hooks：`UserPromptSubmit` 表示已提交，`Stop` 表示已完成，没有 `Stop` 就空闲下来算中断。Codex 没有 hooks，查 `thread_history_<n>.sqlite`：本轮的 `userMessage` 出现表示已提交，同一轮有 `phase` 为 `final_answer` 的 `agentMessage` 表示已回复。App 重启时还在运行的记录记为异常。
-- **对话里管理**：内置 skill 在 `Resources/plugin/vhostty/skills/schedule/SKILL.md`，Claude 由 `vhostty-claude` 加 `--plugin-dir` 加载，技能名 `vhostty:schedule`，它调用 `$VHOSTTY_SCHEDULE_CLI`（即 `vhostty-schedule`）。Codex 没有只对单个会话加 skill 的办法，所以改用 MCP：`vhostty-codex` 用 `-c mcp_servers.vhostty…` 给这张卡片挂上 `vhostty-schedule mcp`，同样的操作做成工具，使用说明写在工具描述和 server 的 instructions 里，不写 Codex 的配置文件。`vhostty-schedule` 它通过 hook socket 发 `schedule\n<JSON>` 请求并读回 JSON。接口能查询，能直接暂停、恢复、立即运行（跟界面上一样一键完成）；新建、编辑和删除只是弹出平时用的表单或删除确认框，参数已填好，用户确认才保存，取消就什么都不留。接口没有批准操作，请求里多出的字段会被拒绝；已有表单或确认框开着时，新的请求直接报错。`claude-settings.json` 里的 `sandbox.network.allowUnixSockets` 只放行这个 socket，让 skill 在 Claude Code 的沙箱里也能连上。
+- **对话里管理**：内置 skill 在 `Resources/plugin/vhostty/skills/schedule/SKILL.md`，Claude 由 `vhostty-claude` 加 `--plugin-dir` 加载，技能名 `vhostty:schedule`，它调用 `$VHOSTTY_SCHEDULE_CLI`（即 `vhostty-schedule`）。Codex 没有只对单个会话加 skill 的办法，所以改用 MCP：`vhostty-codex` 用 `-c mcp_servers.vhostty…` 给这张卡片挂上 `vhostty-schedule mcp`，同样的操作做成工具，使用说明写在工具描述和 server 的 instructions 里，不写 Codex 的配置文件。`vhostty-schedule` 它通过 hook socket 发 `schedule\n<JSON>` 请求并读回 JSON。接口能查询，能直接暂停、恢复、立即运行（跟界面上一样一键完成）；新建、编辑和删除只是打开平时用的任务侧栏或删除确认框，参数已填好，用户确认才保存，取消就什么都不留。接口没有批准操作，请求里多出的字段会被拒绝；侧栏有未保存的改动或确认框开着时，新的请求直接报错。`claude-settings.json` 里的 `sandbox.network.allowUnixSockets` 只放行这个 socket，让 skill 在 Claude Code 的沙箱里也能连上。
 - **显示器休眠**：显示器全部休眠时没有可用的显示器，libghostty 原本会因为建不了 CVDisplayLink 而创建终端失败；补丁里改成这时不用 display link，靠内容变化驱动绘制，这样定时任务在显示器关着时也能启动。
 
 ## 为了不装 Xcode 做的处理
@@ -104,12 +104,13 @@ build/Vhostty.app/Contents/MacOS/Vhostty
 | `focus claude` / `focus shell` | 聚焦上面 / 下面的终端 |
 | `menukey <ctrl\|cmd> <字符>` | 把快捷键直接交给主菜单处理 |
 | `post <ctrl\|cmd\|none> <字符>` | 模拟一次真实按键，走 AppKit 正常的分发流程 |
-| `schedules` / `schedule <任务 UUID>` | 打开定时任务列表 / 某个任务的详情 |
+| `schedules` / `schedule <任务 UUID>` | 打开定时任务列表 / 某个任务的侧栏 |
 | `runschedule <任务 UUID>` / `tickschedules` | 立即运行一个任务 / 立即检查到点的计划 |
-| `newschedule` / `closesheet` | 打开新建任务表单 / 关闭表单 |
+| `newschedule` / `closepanel` | 打开新建任务侧栏 / 关闭侧栏 |
+| `panelsave` / `panelcancel` | 保存 / 撤销侧栏里的改动（等于点“保存”/“取消”） |
 | `cmdj-through-terminal` | 检查 ⌘J 是被终端吃掉还是交给了菜单，结果写到 `keyequiv.txt` |
 
-按键和文字只会发给用 `to` / `toshell` 明确指定的会话。截图时如果有表单（sheet）打开，另存为 `sheet.png`；`state.txt` 末尾列出定时任务及其运行记录。
+按键和文字只会发给用 `to` / `toshell` 明确指定的会话。截图时如果有确认框（sheet）打开，另存为 `sheet.png`；`state.txt` 末尾列出定时任务及其运行记录。
 
 `make app` 后运行 `python3 scripts/test-codex-history.py`，可在临时状态目录和数据库里验证 Codex 历史在最后一个数据库写连接关闭、数据库暂时被锁、恢复和真正清空时的行为；测试不会启动终端会话，并按 PID 停止自己的 App 实例。
 

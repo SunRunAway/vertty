@@ -25,12 +25,15 @@ struct RootView: View {
                     }
                 }
             }
+            if store.schedulePanel != nil {
+                Rectangle().fill(Color.black.opacity(0.35)).frame(width: 1)
+                SchedulePanelView(store: store, schedules: store.schedules)
+                    .id(store.schedulePanel?.id)
+                    .transition(.move(edge: .trailing))
+            }
         }
         .ignoresSafeArea()
         .preferredColorScheme(.dark)
-        .sheet(item: $store.scheduleEditor) { request in
-            ScheduleEditorView(store: store, request: request)
-        }
     }
 
     private var resizeHandle: some View {
@@ -66,6 +69,12 @@ struct TitleStrip: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
                     .allowsHitTesting(false)
+                HStack {
+                    Spacer()
+                    IconButton(systemName: "plus", help: "New Scheduled Task…") { store.newScheduledTask() }
+                        .disabled(store.projects.isEmpty)
+                }
+                .padding(.trailing, 10)
             } else if let tab = store.selectedTab {
                 TitleStripLabel(tab: tab, project: store.project(tab.projectID))
                     .allowsHitTesting(false)

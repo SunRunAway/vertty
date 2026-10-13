@@ -28,7 +28,8 @@ final class DebugSnapshot {
     ///   to <uuid> / toshell <uuid> · text <s> · enter · down · up · esc ·
     ///   select <uuid> · new · notify · toggleshell · focus claude|shell ·
     ///   post <ctrl|cmd|none> <char> · schedules · schedule <task uuid> ·
-    ///   runschedule <task uuid> · tickschedules · newschedule · closesheet ·
+    ///   runschedule <task uuid> · tickschedules · newschedule · closepanel ·
+    ///   panelsave · panelcancel ·
     ///   sheetkey return|escape (the open sheet or alert)
     private func drive() {
         let url = directory.appendingPathComponent("input.txt")
@@ -141,7 +142,7 @@ final class DebugSnapshot {
                 continue
             }
             if line.hasPrefix("schedule "), let id = UUID(uuidString: String(line.dropFirst(9))) {
-                store.showSchedules(detail: id)
+                store.showScheduledTask(id)
                 continue
             }
             if line.hasPrefix("runschedule "), let id = UUID(uuidString: String(line.dropFirst(12))) {
@@ -170,8 +171,16 @@ final class DebugSnapshot {
                 }
                 continue
             }
-            if line == "closesheet" {
-                store.scheduleEditor = nil
+            if line == "closepanel" {
+                store.schedulePanel = nil
+                continue
+            }
+            if line == "panelsave" {
+                if let problem = store.saveSchedulePanel() { NSLog("Vhostty debug: panel not saved: %@", problem) }
+                continue
+            }
+            if line == "panelcancel" {
+                store.cancelSchedulePanel()
                 continue
             }
             if line == "refreshhistory" {
@@ -250,7 +259,7 @@ final class DebugSnapshot {
                     .map { "    | " + $0 }.joined(separator: "\n"))
             }
         }
-        lines.append("schedulesShown=\(store.showingSchedules) detail=\(store.scheduleDetailID?.uuidString ?? "-") editor=\(store.scheduleEditor != nil)")
+        lines.append("schedulesShown=\(store.showingSchedules) panel=\(store.schedulePanel.map { $0.taskID?.uuidString ?? "new" } ?? "-") dirty=\(store.schedulePanelDirty) draft=\(store.schedulePanel?.draft.name ?? "-")")
         if self.window?.attachedSheet != nil || NSApp.modalWindow != nil { lines.append("sheet=open") }
         for task in store.schedules.tasks {
             lines.append("=== task \(task.id) \(task.name) kind=\(task.kind) enabled=\(task.enabled) deleted=\(task.isDeleted) session=\(task.sessionID ?? "-") next=\(task.nextPlan.map { "\($0)" } ?? "-")")
