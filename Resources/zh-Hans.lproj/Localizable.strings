@@ -255,3 +255,8 @@
 "This draft can no longer be applied." = "这个草稿已无法应用。";
 "This task can't be resumed as it is. Edit it first." = "这个任务目前无法恢复，请先编辑。";
 "The task is running now." = "任务正在运行。";
+"The task has its session now, so its project and agent can't change." = "任务已建立会话，项目和 agent 不能再更改。";
+"The session's card changed while it was being stopped, so nothing was resumed." = "停止期间会话卡片发生了变化，因此没有恢复执行。";
+"Couldn't confirm that the session was created or the prompt submitted. Check the card, then end this record." = "无法确认会话是否已创建、提示词是否已提交。请检查卡片后结束本次记录。";
+"Codex reported an error in this turn." = "Codex 本轮执行出错。";
+"The turn stopped without an answer or a recorded status. Check the card, then end this record." = "本轮停止了，但没有最终回复，也没有记录状态。请检查卡片后结束本次记录。";

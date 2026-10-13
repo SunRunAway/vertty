@@ -750,13 +750,10 @@ struct ScheduleEditorView: View {
                     notice = String(localized: "The task changed while you were reviewing. Check it again, then save.")
                     return
                 }
-                var updated = current
-                updated.name = t.name
-                updated.prompt = t.prompt
-                updated.timing = t.timing
-                updated.projectID = t.projectID
-                updated.kind = t.kind
-                store.schedules.update(updated)
+                if let problem = store.schedules.applyEdit(t) {
+                    notice = problem
+                    return
+                }
             } else {
                 store.schedules.create(t)
             }
@@ -765,8 +762,9 @@ struct ScheduleEditorView: View {
         } else if request.isNew {
             store.schedules.create(t)
             store.showSchedules(detail: t.id)
-        } else {
-            store.schedules.update(t)
+        } else if let problem = store.schedules.applyEdit(t) {
+            notice = problem
+            return
         }
         dismiss()
     }

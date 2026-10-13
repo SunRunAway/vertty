@@ -142,9 +142,11 @@ enum CodexThreads {
     }
 
     /// How far a prompt given to a thread at `since` got: whether it was submitted
-    /// (a user message with that text), and whether Codex gave its final answer in
-    /// that turn. nil when the history can't be read.
-    static func turnProgress(threadID: String, prompt: String, since: Date) -> (submitted: Bool, answered: Bool)? {
+    /// (a user message with that text), whether Codex gave its final answer in that
+    /// turn, and the turn's status (completed, failed, interrupted, inProgress) when
+    /// recorded. nil when the history can't be read.
+    static func turnProgress(threadID: String, prompt: String, since: Date)
+        -> (submitted: Bool, answered: Bool, status: String?)? {
         let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let turns = rows(newest("thread_history_"), """
             SELECT turn_id, json_extract(part.value, '$.text')
@@ -157,7 +159,7 @@ enum CodexThreads {
                 return turn
             })
         else { return nil }
-        guard let turn = turns.first else { return (false, false) }
+        guard let turn = turns.first else { return (false, false, nil) }
         guard let answers = rows(newest("thread_history_"), """
             SELECT 1 FROM thread_items
             WHERE thread_id = ? AND turn_id = ? AND item_type = 'agentMessage'
@@ -165,7 +167,9 @@ enum CodexThreads {
             LIMIT 1
             """, [threadID, turn], { _ in true })
         else { return nil }
-        return (true, !answers.isEmpty)
+        let status = rows(newest("thread_history_"), "SELECT status FROM thread_turns WHERE thread_id = ? AND turn_id = ?",
+                          [threadID, turn], { self.text($0, 0) })?.first
+        return (true, !answers.isEmpty, status)
     }
 
     /// The query as it appears inside a JSON string written by Codex (serde_json).

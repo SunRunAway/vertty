@@ -129,6 +129,12 @@ extension AppStore {
                 ? LiveSessions.processes(sessionID: sessionID).filter { $0.tab == nil || $0.tab != tab?.id } : []
             DispatchQueue.main.async {
                 guard let self, self.schedules.run(runID)?.state == .running else { return }
+                // Meanwhile the card may have moved to another session (/clear, /new,
+                // /resume) or another card may have opened this one: check again.
+                guard self.tabs.first(where: { $0.kind == task.kind && $0.sessionID == sessionID }) === tab,
+                      tab.map({ t in self.tabs.contains { $0 === t } }) ?? true else {
+                    return self.resumeSession(runID, task, sessionID, project)
+                }
                 guard outside.isEmpty else {
                     return self.schedules.modifyRun(runID) {
                         self.markFailed(&$0, String(localized: "The session is open outside this Vhostty window. It wasn't touched."))
@@ -183,7 +189,12 @@ extension AppStore {
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.scheduleStopping.remove(runID)
-                guard self.schedules.run(runID)?.state == .running, self.tabs.contains(where: { $0 === tab }) else { return }
+                guard self.schedules.run(runID)?.state == .running else { return }
+                guard self.tabs.contains(where: { $0 === tab }), tab.kind == kind, tab.sessionID == sessionID else {
+                    return self.schedules.modifyRun(runID) {
+                        self.markFailed(&$0, String(localized: "The session's card changed while it was being stopped, so nothing was resumed."))
+                    }
+                }
                 guard stopped else {
                     return self.schedules.modifyRun(runID) {
                         self.markFailed(&$0, String(localized: "The session's earlier instance couldn't be confirmed stopped, so it wasn't resumed."))
@@ -322,9 +333,14 @@ extension AppStore {
     private func evaluateCodex(_ run: ScheduleRun, _ tab: TabSession, _ age: TimeInterval) {
         let threadID = tab.sessionID
         guard !threadID.isEmpty else {
+            // The session may exist without its id being readable yet: keep the task
+            // held (unresolved) rather than let the next run start another one.
             if age > 120 {
                 tab.scheduleRunID = nil
-                schedules.modifyRun(run.id) { self.markFailed(&$0, String(localized: "Couldn't confirm that the prompt was submitted.")) }
+                schedules.modifyRun(run.id) {
+                    self.markFailed(&$0, String(localized: "Couldn't confirm that the session was created or the prompt submitted. Check the card, then end this record."))
+                    $0.unresolved = true
+                }
             }
             return
         }
@@ -335,10 +351,25 @@ extension AppStore {
             DispatchQueue.main.async {
                 guard let self, let progress, tab.scheduleRunID == run.id,
                       let current = self.schedules.run(run.id), current.state == .running else { return }
-                if progress.answered {
+                if progress.answered || progress.status == "completed" {
                     self.finish(tab, run.id)
+                } else if progress.status == "failed" || progress.status == "interrupted" {
+                    tab.scheduleRunID = nil
+                    self.schedules.modifyRun(run.id) {
+                        self.markFailed(&$0, progress.status == "failed"
+                            ? String(localized: "Codex reported an error in this turn.")
+                            : String(localized: "The turn was interrupted."))
+                    }
                 } else if progress.submitted {
                     if current.phase == .starting { self.schedules.modifyRun(run.id) { $0.phase = .executing } }
+                    // Submitted, idle, and no status recorded for the turn: its end is unknown.
+                    if progress.status == nil && idle && age > 120 {
+                        tab.scheduleRunID = nil
+                        self.schedules.modifyRun(run.id) {
+                            self.markFailed(&$0, String(localized: "The turn stopped without an answer or a recorded status. Check the card, then end this record."))
+                            $0.unresolved = true
+                        }
+                    }
                 } else if idle && age > 60 {
                     // The thread may be open elsewhere (Codex then refuses the prompt).
                     tab.scheduleRunID = nil

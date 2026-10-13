@@ -29,10 +29,15 @@ final class ScheduleStore: ObservableObject {
     }
 
     /// Written at once: a claimed plan must be on disk before its prompt goes out.
-    func save() {
+    @discardableResult
+    func save() -> Bool {
         let file = ScheduleFile(tasks: tasks, runs: runs, drafts: drafts)
-        if let data = try? JSONEncoder.schedule.encode(file) {
-            try? data.write(to: url, options: .atomic)
+        do {
+            try JSONEncoder.schedule.encode(file).write(to: url, options: .atomic)
+            return true
+        } catch {
+            NSLog("Vhostty: couldn't save scheduled tasks: %@", error.localizedDescription)
+            return false
         }
     }
 
@@ -75,17 +80,31 @@ final class ScheduleStore: ObservableObject {
         save()
     }
 
-    /// Edits only affect later runs. A new time rule plans from now on, without
-    /// catching up what the old rule missed.
-    func update(_ task: ScheduleTask) {
-        guard let i = tasks.firstIndex(where: { $0.id == task.id }) else { return }
-        let old = tasks[i]
-        var t = task
-        if t.timing != old.timing || t.enabled != old.enabled {
+    /// Applies an edit's settings (name, prompt, schedule, project, agent) to the
+    /// task as it is now, keeping what the scheduler changed meanwhile (next plan,
+    /// session). Edits only affect later runs; a new time rule plans from now on,
+    /// without catching up what the old rule missed. Returns why it can't apply.
+    @discardableResult
+    func applyEdit(_ edit: ScheduleTask) -> String? {
+        guard let i = tasks.firstIndex(where: { $0.id == edit.id }), !tasks[i].isDeleted else {
+            return String(localized: "The task no longer exists.")
+        }
+        var t = tasks[i]
+        // The task may have got its session since the edit was made.
+        if t.isBound && (edit.projectID != t.projectID || edit.kind != t.kind) {
+            return String(localized: "The task has its session now, so its project and agent can't change.")
+        }
+        t.name = edit.name
+        t.prompt = edit.prompt
+        t.projectID = edit.projectID
+        t.kind = edit.kind
+        if edit.timing != t.timing {
+            t.timing = edit.timing
             t.nextPlan = t.enabled ? t.timing.next(after: Date()) : nil
         }
         tasks[i] = t
         save()
+        return nil
     }
 
     func modify(_ id: UUID, _ body: (inout ScheduleTask) -> Void) {
@@ -190,6 +209,7 @@ final class ScheduleStore: ObservableObject {
     /// ones (missed while asleep or quit) become one skip record. Each plan is
     /// claimed (saved as handled) before it's returned, so it can't run twice.
     func claimDue(now: Date = Date()) -> [Due] {
+        let before = (tasks, runs)
         var due: [Due] = []
         for i in tasks.indices {
             let t = tasks[i]
@@ -208,7 +228,11 @@ final class ScheduleStore: ObservableObject {
             // Late by more than a couple of minutes: that's catching up, not on time.
             due.append(Due(task: tasks[i], plannedAt: latest, trigger: now.timeIntervalSince(latest) > 120 ? .catchUp : .scheduled))
         }
-        if !due.isEmpty { save() }
+        // Unsaved, a claim could run again after a restart: then don't run it now.
+        if !due.isEmpty && !save() {
+            (tasks, runs) = before
+            return []
+        }
         return due
     }
 }
