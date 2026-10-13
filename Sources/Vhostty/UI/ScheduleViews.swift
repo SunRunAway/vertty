@@ -213,7 +213,7 @@ enum ScheduleText {
         guard let run else { return String(localized: "Not run yet") }
         switch run.state {
         case .running: return String(localized: "Running")
-        case .replied: return String(localized: "Replied")
+        case .replied: return String(localized: "Done")
         case .failed: return String(localized: "Error")
         case .skipped: return String(localized: "Skipped")
         }
@@ -277,11 +277,6 @@ private struct ScheduleDetailView: View {
                     if !task.isDeleted { actions }
                 }
 
-                if !task.isDeleted {
-                    banner(String(localized: "When the task runs, it stops and resumes this session, which may interrupt what you're doing in it."),
-                           systemImage: "info.circle")
-                }
-
                 config
                 runsSection
             }
@@ -311,16 +306,6 @@ private struct ScheduleDetailView: View {
             .menuIndicator(.hidden)
             .fixedSize()
         }
-    }
-
-    private func banner(_ text: String, systemImage: String) -> some View {
-        Label(text, systemImage: systemImage)
-            .font(.system(size: 12))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(0.05)))
     }
 
     private var config: some View {
@@ -559,10 +544,6 @@ struct ScheduleEditorView: View {
             .font(.system(size: 12.5))
 
             Divider()
-            Label("Needs Vhostty running. When the task runs, it may interrupt what you're doing in its session.",
-                  systemImage: "info.circle")
-                .font(.system(size: 11.5))
-                .foregroundStyle(.secondary)
             HStack {
                 if let text = notice ?? problems.first {
                     Text(text).font(.system(size: 11.5)).foregroundStyle(notice != nil ? .orange : .secondary)

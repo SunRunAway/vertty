@@ -149,7 +149,7 @@
 "It stops being scheduled and moves to Deleted, where its runs stay visible. Its session and any current run are left alone." = "任务不再调度，移到“已删除”，运行记录仍可查看。它的会话和正在进行的运行不受影响。";
 "Not run yet" = "尚未运行";
 "Running" = "运行中";
-"Replied" = "已回复";
+"Done" = "已完成";
 "Error" = "异常";
 "Skipped" = "已跳过";
 "Starting" = "正在启动";
@@ -159,7 +159,6 @@
 "Caught up" = "补跑";
 "Run by hand" = "手动运行";
 "All Tasks" = "全部任务";
-"When the task runs, it stops and resumes this session, which may interrupt what you're doing in it." = "任务触发时会停止并恢复此会话，可能打断你的操作。";
 "Project" = "项目";
 "Agent" = "Agent";
 "Session" = "会话";
@@ -187,7 +186,6 @@
 "Weekdays" = "工作日";
 "Weekly" = "每周";
 "Time" = "时间";
-"Needs Vhostty running. When the task runs, it may interrupt what you're doing in its session." = "需要 Vhostty 运行；任务触发时可能打断此会话中的操作。";
 "Create and Enable" = "创建并启用";
 "Save" = "保存";
 "Enter a name." = "请填写名称。";
