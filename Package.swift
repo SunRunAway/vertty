@@ -28,6 +28,7 @@ let package = Package(
                 .linkedFramework("UserNotifications"),
             ]
         ),
+        .executableTarget(name: "vhostty-sleep", path: "Sources/VhosttySleep"),
         .executableTarget(
             name: "vhostty-hook",
             path: "Sources/VhosttyHook"

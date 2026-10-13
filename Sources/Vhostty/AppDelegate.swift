@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     UNUserNotificationCenterDelegate, NSMenuDelegate {
     let store = AppStore.shared
     var window: NSWindow!
+    private lazy var sleepProtection = SleepProtection(store: store)
     private var hookServer: HookServer?
     private var debugSnapshot: DebugSnapshot?
     private var fileMenu: NSMenu?
@@ -54,7 +55,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         } else {
             NSApp.activate(ignoringOtherApps: true)
         }
+        DispatchQueue.main.async { self.sleepProtection.start() }
     }
+
+    @objc private func configureSleepProtection() { sleepProtection.configure() }
 
     private func createWindow() {
         window = NSWindow(
@@ -101,6 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        sleepProtection.stop()
         store.save()
         unlink(AppPaths.hookSocket)
     }
@@ -121,6 +126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: String(localized: "About Vhostty"), action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
+        appMenu.addItem(item("Closed-Lid Sleep Protection…", #selector(configureSleepProtection), ""))
         appMenu.addItem(item("Open Ghostty Config", #selector(openGhosttyConfig), ""))
         appMenu.addItem(item("Reload Config", #selector(reloadConfig), "r", [.command, .shift]))
         appMenu.addItem(.separator())

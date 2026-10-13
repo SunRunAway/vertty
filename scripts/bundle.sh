@@ -18,6 +18,7 @@ build() {
     | sed "\\#ld: warning: search path '/Library/Developer/CommandLineTools/Developer/#d"
 }
 build Vhostty
+build vhostty-sleep
 build vhostty-hook
 build vhostty-schedule
 BIN="$(swift build -c release --show-bin-path)"
@@ -31,6 +32,7 @@ if [ -n "${VHOSTTY_VERSION:-}" ]; then
   plutil -replace CFBundleShortVersionString -string "$VHOSTTY_VERSION" "$APP/Contents/Info.plist"
 fi
 cp "$BIN/Vhostty" "$APP/Contents/MacOS/Vhostty"
+cp "$BIN/vhostty-sleep" "$APP/Contents/MacOS/vhostty-sleep"
 cp "$BIN/vhostty-hook" "$APP/Contents/MacOS/vhostty-hook"
 cp "$BIN/vhostty-schedule" "$APP/Contents/MacOS/vhostty-schedule"
 cp -R Resources/plugin "$APP/Contents/Resources/plugin"

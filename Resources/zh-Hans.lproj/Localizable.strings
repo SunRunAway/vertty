@@ -218,3 +218,10 @@
 "Codex's session records couldn't be read." = "无法读取 Codex 的会话记录。";
 
 "Vhostty quit during the run." = "运行期间 Vhostty 退出了。";
+
+"Closed-Lid Sleep Protection…" = "防合盖睡眠…";
+"Could not enable sleep protection" = "未能启用防合盖睡眠";
+"Keep tasks running with the lid closed?" = "合盖时继续运行任务？";
+"Your Mac stays awake with the lid closed while tasks run, then returns to normal sleep when they finish. Administrator authorization is required the first time." = "任务运行期间，合盖也不会让 Mac 睡眠；任务结束后恢复正常睡眠。首次使用需要管理员授权。";
+"Don’t Allow" = "不允许";
+"Try again from the Vhostty menu." = "请从 Vhostty 菜单重试。";

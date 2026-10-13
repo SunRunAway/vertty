@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+"""Real watchdog with fake pmset; real AppKit onboarding via the debug driver.
+Never authorizes or changes the host's power settings.
+"""
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+import time
+
+root = Path(tempfile.mkdtemp(prefix='vhostty-sleep-', dir='/private/tmp'))
+print(f'Artifacts: {root}', flush=True)
+binary = Path('build/Vhostty.app/Contents/MacOS').resolve()
+
+def wait(check, message, timeout=25):
+    until = time.monotonic() + timeout
+    while time.monotonic() < until:
+        if check(): return
+        time.sleep(.15)
+    raise AssertionError(message)
+
+def read(path):
+    return path.read_text() if path.exists() else ''
+
+case = root / 'watchdog'
+case.mkdir()
+(case / 'value').write_text('0')
+def helper():
+    return subprocess.Popen([str(binary / 'vhostty-sleep'), str(case), '--test-dir', str(case)], stdin=subprocess.PIPE)
+def send(p, value):
+    p.stdin.write(f'{value}\n'.encode()); p.stdin.flush()
+p = helper()
+try:
+    send(p, 1)
+    wait(lambda: read(case / 'value') == '1', 'busy did not acquire')
+    p.stdin.close(); p.wait(timeout=10)
+    assert read(case / 'value') == '0', 'EOF did not restore'
+    print('PASS busy / EOF restoration', flush=True)
+    p = helper(); send(p, 1)
+    wait(lambda: read(case / 'value') == '1', 'no acquire before kill')
+    p.kill(); p.wait()
+    p = helper(); send(p, 0)
+    wait(lambda: read(case / 'value') == '0', 'killed watchdog recovery')
+    p.stdin.close(); p.wait(timeout=10)
+    print('PASS killed watchdog journal recovery', flush=True)
+    (case / 'value').write_text('1')
+    p = helper(); send(p, 1)
+    wait(lambda: read(case / 'sleep-status') == 'external', 'pre-existing protection')
+    p.stdin.close(); p.wait(timeout=10)
+    assert read(case / 'value') == '1', 'changed external setting'
+    print('PASS preserves pre-existing protection', flush=True)
+    (case / 'value').write_text('0'); (case / 'amphetamine').touch()
+    p = helper(); send(p, 1)
+    time.sleep(.5)
+    assert read(case / 'value') == '0'
+    (case / 'amphetamine').unlink(); send(p, 1)
+    wait(lambda: read(case / 'value') == '1', 'did not acquire after Amphetamine exit')
+    p.wait(timeout=20)
+    assert read(case / 'value') == '0', 'expired lease not restored'
+    print('PASS Amphetamine exclusion / expired lease recovery', flush=True)
+    p = helper(); send(p, 1)
+    wait(lambda: read(case / 'value') == '1', 'idle test acquire')
+    for _ in range(18):
+        send(p, 0); time.sleep(1)
+    assert read(case / 'value') == '0', 'idle grace not restored'
+    p.stdin.close(); p.wait(timeout=10)
+    print('PASS idle grace restoration', flush=True)
+finally:
+    if p.poll() is None: p.kill(); p.wait()
+
+case = root / 'app'
+case.mkdir()
+(case / 'value').write_text('0')
+(case / 'state.json').write_text('{"projects":[],"tabs":[]}')
+env = dict(os.environ, VHOSTTY_SUPPORT_DIR=str(case), VHOSTTY_DEBUG_SNAPSHOT=str(case),
+           VHOSTTY_SLEEP_TEST_DIR=str(case))
+log = (case / 'app.log').open('w')
+app = None
+
+def start():
+    global app
+    (case / 'alert.txt').unlink(missing_ok=True)
+    (case / 'state.txt').unlink(missing_ok=True)
+    app = subprocess.Popen([str(binary / 'Vhostty')], env=env, stdout=log, stderr=log)
+    wait(lambda: (case / 'state.txt').exists(), 'app debug driver did not start')
+
+def stop():
+    if app and app.poll() is None:
+        app.terminate(); app.wait(timeout=20)
+
+def button(title):
+    previous = read(case / 'alert.txt')
+    titles = previous.splitlines()
+    index = next(i for i, t in enumerate(titles) if t in title)
+    (case / 'input.txt').write_text(f'alertbutton {index}\n')
+    wait(lambda: not (case / 'input.txt').exists(), 'alert action not consumed')
+    wait(lambda: read(case / 'alert.txt') != previous, 'alert action did not complete')
+    time.sleep(.3)
+
+def prompt():
+    wait(lambda: any(x in read(case / 'alert.txt') for x in ['Don’t Allow', '不允许']), 'onboarding did not appear')
+
+try:
+    start(); prompt()
+    (case / 'authorization-result').write_text('cancel')
+    button(['Allow', '允许'])
+    time.sleep(2); stop()
+    assert not (case / 'sleep-declined').exists()
+    start(); prompt()
+    print('PASS authorization cancellation reprompts on restart', flush=True)
+    button(['Don’t Allow', '不允许']); stop()
+    assert (case / 'sleep-declined').exists()
+    start(); time.sleep(2)
+    assert read(case / 'alert.txt') == ''
+    stop(); print('PASS explicit refusal persists', flush=True)
+    (case / 'sleep-declined').unlink()
+    start(); prompt()
+    (case / 'authorization-result').write_text('fail')
+    button(['Allow', '允许'])
+    wait(lambda: any(x in read(case / 'alert.txt') for x in ['OK', '好']), 'failure alert missing')
+    button(['OK', '好']); stop()
+    start(); prompt()
+    print('PASS failed authorization reprompts', flush=True)
+    (case / 'authorization-result').write_text('success')
+    button(['Allow', '允许'])
+    wait(lambda: read(case / 'sleep-status') == 'idle', 'authorized helper did not start')
+    stop()
+    assert (case / 'authorized').exists()
+    assert not (case / 'sleep-declined').exists()
+    start(); time.sleep(2)
+    assert read(case / 'alert.txt') == ''
+    stop()
+    (case / 'authorized').unlink()
+    start(); prompt()
+    print('PASS permission-based startup / revoked permission reprompts; no enabled flag', flush=True)
+finally:
+    stop(); log.close()
+
+# Exercise the app's real terminal-title -> task status -> watchdog path.
+# All shells, agents, HOME, project and input are isolated fixtures.
+import json
+import re
+import uuid
+case = root / 'terminal'
+case.mkdir()
+home = case / 'home'; home.mkdir()
+bin_dir = case / 'bin'; bin_dir.mkdir()
+project = case / 'project'; project.mkdir()
+(home / '.zshenv').write_text(f'export PATH="{bin_dir}:/usr/bin:/bin:/usr/sbin:/sbin"\nunsetopt GLOBAL_RCS\n')
+agent = bin_dir / 'codex'
+agent.write_text('''#!/bin/sh
+printf '\\033]0;Sleep fixture\\007'
+while IFS= read -r line; do
+    case "$line" in
+        busy) printf '\\033]0;⠋ Sleep fixture\\007' ;;
+        idle) printf '\\033]0;Sleep fixture\\007' ;;
+    esac
+done
+''')
+agent.chmod(0o755)
+for name in ['claude', 'gh']:
+    path = bin_dir / name; path.write_text('#!/bin/sh\nexit 1\n'); path.chmod(0o755)
+(case / 'value').write_text('0'); (case / 'authorized').touch()
+(case / 'state.json').write_text(json.dumps({'projects': [{'id': str(uuid.uuid4()), 'name': 'Sleep fixture', 'path': str(project), 'expanded': True}], 'tabs': []}))
+env = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home), ZDOTDIR=str(home),
+           CODEX_HOME=str(home / '.codex'), VHOSTTY_SUPPORT_DIR=str(case),
+           VHOSTTY_DEBUG_SNAPSHOT=str(case), VHOSTTY_SLEEP_TEST_DIR=str(case))
+log = (case / 'app.log').open('w')
+def drive(command):
+    (case / 'input.txt').write_text(command + '\n')
+    wait(lambda: not (case / 'input.txt').exists(), 'terminal debug command not consumed')
+try:
+    start()
+    drive('new codex')
+    wait(lambda: 'Sleep fixture' in read(case / 'state.txt') and '--- tab ' in read(case / 'state.txt'), 'fixture terminal missing')
+    tab = re.search(r'--- tab ([0-9A-Fa-f-]+)', read(case / 'state.txt')).group(1)
+    drive(f'to {tab}\ntext busy\nenter')
+    wait(lambda: read(case / 'value') == '1' and read(case / 'sleep-status') == 'active', 'working terminal did not acquire sleep protection')
+    drive(f'to {tab}\ntext idle\nenter')
+    wait(lambda: read(case / 'value') == '0', 'idle terminal did not restore sleep', timeout=30)
+    drive(f'to {tab}\ntext busy\nenter')
+    wait(lambda: read(case / 'value') == '1', 'second turn did not acquire')
+    app.kill(); app.wait(timeout=10)
+    wait(lambda: read(case / 'value') == '0', 'app force-quit did not release protection')
+    print('PASS actual terminal title / idle / new turn / app SIGKILL recovery', flush=True)
+finally:
+    stop(); log.close()
