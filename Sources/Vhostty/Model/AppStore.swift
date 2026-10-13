@@ -50,8 +50,8 @@ final class AppStore: ObservableObject {
     @Published var showingSchedules = false
     /// The task whose detail the page shows (nil: the list).
     @Published var scheduleDetailID: UUID?
-    /// Open the page on its Pending view.
-    var scheduleShowPending = false
+    /// An agent's pause, resume, delete or run is waiting for the user's answer.
+    var scheduleAsking = false
     /// The open new/edit task sheet.
     @Published var scheduleEditor: ScheduleEditorRequest?
     var scheduleTimer: Timer?

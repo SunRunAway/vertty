@@ -1,20 +1,19 @@
 import Foundation
 
-// vhostty-schedule: reads Vhostty's scheduled tasks and submits drafts for the
-// user to confirm in Vhostty. It can't approve anything. Used by the built-in
-// schedule skill; talks to the running app over its hook socket.
+// vhostty-schedule: reads Vhostty's scheduled tasks, and for a change opens
+// Vhostty's own form or confirmation, filled in, for the user to confirm. It
+// can't change anything itself. Used by the built-in schedule skill; talks to
+// the running app over its hook socket.
 
 let usage = """
 usage: vhostty-schedule <command> [options]
 
-  list                      tasks and drafts waiting for confirmation
+  list                      tasks
   show <task-id>            one task with its recent runs
-  create [fields]           draft a new task
-  edit <task-id> [fields]   draft changes to a task
+  create [fields]           open the new-task form, filled in
+  edit <task-id> [fields]   open the task's edit form with these changes
   pause|resume|delete|run <task-id>
-                            draft that action ("run" = run now)
-  status <draft-id>         pending, approved, rejected or withdrawn
-  withdraw <draft-id>       take back a pending draft
+                            ask the user to confirm that ("run" = run now)
 
 fields:
   --name TEXT
@@ -27,7 +26,7 @@ fields:
   --project PATH|NAME       default: the project of this session
   --agent claude|codex      default: this session's agent
 
-Drafts do nothing until the user confirms them in Vhostty.
+Nothing changes until the user confirms it in Vhostty; cancelling drops it.
 """
 
 func fail(_ message: String) -> Never {
@@ -53,10 +52,6 @@ case "list":
 case "show", "edit", "pause", "resume", "delete", "run":
     guard let id = args.first, !id.hasPrefix("--") else { fail("\(command) needs a task id.") }
     request["taskID"] = id
-    args.removeFirst()
-case "status", "withdraw":
-    guard let id = args.first, !id.hasPrefix("--") else { fail("\(command) needs a draft id.") }
-    request["draftID"] = id
     args.removeFirst()
 case "create":
     break

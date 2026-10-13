@@ -184,37 +184,7 @@ struct ScheduleRun: Codable, Identifiable, Equatable {
     var isOpen: Bool { state == .running || unresolved == true }
 }
 
-enum DraftAction: String, Codable {
-    case create, edit, pause, resume, delete, run
-}
-
-enum DraftStatus: String, Codable {
-    case pending, approved, rejected, withdrawn
-}
-
-/// A change an agent asked for through the schedule skill. It does nothing until
-/// a person confirms it in Vhostty.
-struct ScheduleDraft: Codable, Identifiable, Equatable {
-    var id = UUID()
-    var createdAt = Date()
-    var action: DraftAction
-    /// The task to change (all but create).
-    var taskID: UUID?
-    /// The proposed task (create, edit).
-    var task: ScheduleTask?
-    /// The task as it was when the edit was proposed, to show what changes.
-    var base: ScheduleTask?
-    var status: DraftStatus = .pending
-    var decidedAt: Date?
-    /// The session that asked.
-    var sourceTabID: UUID?
-    var sourceKind: AgentKind?
-    var sourceSessionID: String?
-    var sourceTitle: String?
-}
-
 struct ScheduleFile: Codable {
     var tasks: [ScheduleTask] = []
     var runs: [ScheduleRun] = []
-    var drafts: [ScheduleDraft]? = nil
 }

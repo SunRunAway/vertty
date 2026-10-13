@@ -1,12 +1,12 @@
 import Foundation
 
 /// Requests from `vhostty-schedule` (the command the built-in schedule skill
-/// runs). Agents can read tasks and submit or withdraw drafts. Nothing here
-/// changes a task: there is deliberately no way to approve a draft from outside
-/// the Vhostty window.
+/// runs). Agents can read tasks. A change only opens the form or confirmation
+/// the user would use anyway, filled in; nothing is saved unless the user
+/// confirms it there, and cancelling leaves nothing behind.
 extension AppStore {
     func handleScheduleRequest(_ request: [String: Any]) -> [String: Any] {
-        let allowed: Set<String> = ["op", "taskID", "draftID", "fields", "tabID", "threadID", "cwd"]
+        let allowed: Set<String> = ["op", "taskID", "fields", "tabID", "threadID", "cwd"]
         if let extra = request.keys.first(where: { !allowed.contains($0) }) {
             return error("Unknown request field: \(extra)")
         }
@@ -20,64 +20,60 @@ extension AppStore {
 
         switch op {
         case "list":
-            return ["ok": true,
-                    "tasks": schedules.tasks.filter { !$0.isDeleted }.map(describe),
-                    "pendingDrafts": schedules.pendingDrafts.map(describe)]
+            return ["ok": true, "tasks": schedules.tasks.filter { !$0.isDeleted }.map(describe)]
         case "show":
             guard let id = taskID, let task = schedules.task(id) else { return error("No task with that id.") }
             var d = describe(task)
             d["recentRuns"] = schedules.runs(of: id).prefix(10).map(describe)
             return ["ok": true, "task": d]
-        case "status", "withdraw":
-            guard let id = (request["draftID"] as? String).flatMap(UUID.init(uuidString:)), let draft = schedules.draft(id) else {
-                return error("No draft with that id.")
+        case "create", "edit", "pause", "resume", "delete", "run":
+            guard scheduleEditor == nil, !scheduleAsking else {
+                return error("A scheduled-task form is already open in Vhostty. Ask the user to finish it, then try again.")
             }
-            if op == "withdraw" {
-                guard draft.status == .pending else { return error("The draft was already \(draft.status.rawValue).") }
-                schedules.decide(id, .withdrawn)
+            if op == "create" {
+                switch filledTask(nil, fields, source: source, cwd: cwd) {
+                case .failure(let e): return error(e.message)
+                case .success(let task): newScheduledTask(filledIn: task)
+                }
+                return opened("The New Scheduled Task form")
             }
-            return ["ok": true, "draft": describe(schedules.draft(id)!)]
-        case "create":
-            switch draftTask(nil, fields, source: source, cwd: cwd) {
-            case .failure(let e): return error(e.message)
-            case .success(let task): return submitted(ScheduleDraft(action: .create, task: task), source)
-            }
-        case "edit", "pause", "resume", "delete", "run":
             guard let id = taskID, let task = schedules.task(id), !task.isDeleted else { return error("No task with that id.") }
-            let action = DraftAction(rawValue: op)!
-            if action != .edit, !fields.isEmpty { return error("\(op) takes no fields.") }
-            if action == .edit {
-                switch draftTask(task, fields, source: source, cwd: cwd) {
+            if op != "edit", !fields.isEmpty { return error("\(op) takes no fields.") }
+            if op == "edit" {
+                switch filledTask(task, fields, source: source, cwd: cwd) {
                 case .failure(let e): return error(e.message)
                 case .success(let changed):
                     if changed == task { return error("Nothing would change.") }
-                    return submitted(ScheduleDraft(action: .edit, taskID: id, task: changed, base: task), source)
+                    editScheduledTask(changed)
+                }
+                return opened("The Edit Scheduled Task form")
+            }
+            if op == "resume" {
+                guard project(task.projectID) != nil, task.timing.canResume else {
+                    return error("This task can't be resumed as it is: its project is gone or its one-time date has passed. Edit it first.")
                 }
             }
-            return submitted(ScheduleDraft(action: action, taskID: id, base: task), source)
+            if op == "run" {
+                guard project(task.projectID) != nil else { return error("The task's project is gone.") }
+                guard schedules.openRun(of: id) == nil else { return error("The task is running now.") }
+            }
+            askScheduleAction(op, task)
+            return opened("A confirmation")
         default:
             return error("Unknown op: \(op)")
         }
     }
 
-    private func submitted(_ draft: ScheduleDraft, _ source: TabSession?) -> [String: Any] {
-        var d = draft
-        if let source {
-            d.sourceTabID = source.id
-            d.sourceKind = source.kind
-            d.sourceSessionID = source.sessionID.nonEmpty
-            d.sourceTitle = source.title
-        }
-        let saved = schedules.submit(d)
-        return ["ok": true, "draft": describe(saved),
-                "message": "Submitted as a draft. It does nothing until the user confirms it in Vhostty: from the button at the top right of the asking session, or the pending list on the Scheduled Tasks page."]
+    private func opened(_ what: String) -> [String: Any] {
+        ["ok": true,
+         "message": "\(what) is open in Vhostty, filled in. Nothing changes unless the user confirms it there; cancelling drops it. Use list or show to see whether it took effect."]
     }
 
     struct APIError: Error { let message: String }
 
-    /// Builds the task a create or edit proposes. Project and agent come from the
+    /// Builds the task a create or edit fills in. Project and agent come from the
     /// asking session unless given, and can't change once the task has its session.
-    private func draftTask(_ existing: ScheduleTask?, _ f: [String: Any], source: TabSession?,
+    private func filledTask(_ existing: ScheduleTask?, _ f: [String: Any], source: TabSession?,
                            cwd: String?) -> Result<ScheduleTask, APIError> {
         let known: Set<String> = ["name", "prompt", "repeat", "days", "date", "time", "timezone", "project", "agent"]
         if let extra = f.keys.first(where: { !known.contains($0) }) { return .failure(APIError(message: "Unknown field: \(extra)")) }
@@ -197,10 +193,6 @@ extension AppStore {
          "reason": r.reason ?? NSNull(), "unresolved": r.unresolved ?? false]
     }
 
-    private func describe(_ d: ScheduleDraft) -> [String: Any] {
-        ["id": d.id.uuidString, "action": d.action.rawValue, "status": d.status.rawValue,
-         "taskID": d.taskID?.uuidString ?? NSNull(), "taskName": (d.task ?? d.base)?.name ?? NSNull()]
-    }
 
     private func iso(_ date: Date) -> String { ISO8601DateFormatter().string(from: date) }
 

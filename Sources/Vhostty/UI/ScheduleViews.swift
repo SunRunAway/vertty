@@ -5,8 +5,6 @@ struct ScheduleEditorRequest: Identifiable {
     let id = UUID()
     var task: ScheduleTask
     var isNew: Bool
-    /// The agent's draft this sheet reviews, if any.
-    var draftID: UUID? = nil
 }
 
 /// The scheduled-task page, shown in the terminal's place.
@@ -28,21 +26,15 @@ struct ScheduleManagerView: View {
 }
 
 private enum ListView: String, CaseIterable, Identifiable {
-    case tasks, pending, deleted
+    case tasks, deleted
     var id: String { rawValue }
 }
 
 private struct ScheduleListView: View {
     @ObservedObject var store: AppStore
     @ObservedObject var schedules: ScheduleStore
-    @State private var view: ListView
+    @State private var view = ListView.tasks
     @State private var projectFilter: UUID?
-
-    init(store: AppStore, schedules: ScheduleStore) {
-        self.store = store
-        self.schedules = schedules
-        _view = State(initialValue: store.scheduleShowPending ? .pending : .tasks)
-    }
 
     private var shown: [ScheduleTask] {
         let all = view == .tasks ? schedules.activeTasks : schedules.deletedTasks
@@ -67,16 +59,13 @@ private struct ScheduleListView: View {
             }
             Picker("", selection: $view) {
                 Text("Tasks").tag(ListView.tasks)
-                Text("Pending (\(schedules.pendingDrafts.count))").tag(ListView.pending)
                 Text("Deleted").tag(ListView.deleted)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
             .fixedSize()
 
-            if view == .pending {
-                pendingList
-            } else if shown.isEmpty {
+            if shown.isEmpty {
                 emptyState
             } else {
                 ScrollView {
@@ -92,32 +81,6 @@ private struct ScheduleListView: View {
         }
         .padding(.horizontal, 28)
         .padding(.top, 18)
-    }
-
-    @ViewBuilder
-    private var pendingList: some View {
-        let drafts = schedules.pendingDrafts.filter { d in
-            projectFilter == nil || (d.task ?? d.base)?.projectID == projectFilter
-        }
-        if drafts.isEmpty {
-            VStack(spacing: 14) {
-                Image(systemName: "tray").font(.system(size: 34)).foregroundStyle(.tertiary)
-                Text("No drafts waiting").foregroundStyle(.secondary)
-                Text("Drafts come from Claude or Codex when you ask them to schedule something.")
-                    .font(.system(size: 12)).foregroundStyle(.tertiary)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.top, 80)
-        } else {
-            ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(drafts) { draft in
-                        DraftRow(store: store, draft: draft)
-                        Divider().opacity(0.4)
-                    }
-                }
-            }
-        }
     }
 
     private var header: some View {
@@ -274,24 +237,6 @@ enum ScheduleText {
         }
     }
 
-    static func draftTitle(_ d: ScheduleDraft) -> String {
-        let name = (d.task ?? d.base)?.name ?? "?"
-        switch d.action {
-        case .create: return String(localized: "Create “\(name)”")
-        case .edit: return String(localized: "Change “\(name)”")
-        case .pause: return String(localized: "Pause “\(name)”")
-        case .resume: return String(localized: "Resume “\(name)”")
-        case .delete: return String(localized: "Delete “\(name)”")
-        case .run: return String(localized: "Run “\(name)” now")
-        }
-    }
-
-    static func draftSource(_ d: ScheduleDraft) -> String {
-        let agent = d.sourceKind?.name ?? String(localized: "an agent")
-        if let title = d.sourceTitle { return String(localized: "From \(agent) session “\(title)”") }
-        return String(localized: "From \(agent)")
-    }
-
     static func nextRun(_ task: ScheduleTask) -> String {
         if task.isDeleted { return "—" }
         if !task.enabled { return String(localized: "Paused") }
@@ -303,31 +248,6 @@ enum ScheduleText {
 extension ScheduleTiming {
     /// A once task whose time has passed can't be resumed as it is.
     var canResume: Bool { repeatKind != .once || (onceDate ?? .distantPast) > Date() }
-}
-
-private struct DraftRow: View {
-    let store: AppStore
-    let draft: ScheduleDraft
-    @State private var hover = false
-
-    var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(ScheduleText.draftTitle(draft)).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                Text(ScheduleText.draftSource(draft)).font(.system(size: 11.5)).foregroundStyle(.secondary).lineLimit(1)
-            }
-            Spacer()
-            Text(ScheduleFormat.dateTime(draft.createdAt)).foregroundStyle(.secondary)
-            Button("Review…") { store.reviewDraft(draft.id) }
-        }
-        .font(.system(size: 12.5))
-        .padding(.horizontal, 10)
-        .padding(.vertical, 9)
-        .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(hover ? 0.05 : 0)))
-        .contentShape(Rectangle())
-        .onHover { hover = $0 }
-        .onTapGesture { store.reviewDraft(draft.id) }
-    }
 }
 
 // MARK: - Detail
@@ -547,8 +467,6 @@ struct ScheduleEditorView: View {
     @ObservedObject var store: AppStore
     let request: ScheduleEditorRequest
     @State private var task: ScheduleTask
-    /// For a draft that changes a task: that task as shown when the sheet opened.
-    @State private var shownTask: ScheduleTask?
     @State private var notice: String?
     @Environment(\.dismiss) private var dismiss
 
@@ -556,10 +474,7 @@ struct ScheduleEditorView: View {
         self.store = store
         self.request = request
         _task = State(initialValue: request.task)
-        _shownTask = State(initialValue: request.isNew ? nil : store.schedules.task(request.task.id))
     }
-
-    private var draft: ScheduleDraft? { request.draftID.flatMap(store.schedules.draft) }
 
     private var bound: Bool { task.isBound }
 
@@ -575,15 +490,8 @@ struct ScheduleEditorView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(draft != nil ? (request.isNew ? "Review Draft: New Task" : "Review Draft: Change Task")
-                 : request.isNew ? "New Scheduled Task" : "Edit Scheduled Task")
+            Text(request.isNew ? "New Scheduled Task" : "Edit Scheduled Task")
                 .font(.system(size: 15, weight: .semibold))
-            if let draft {
-                DraftSourceLine(store: store, draft: draft)
-                if draft.action == .edit, let base = draft.base, let proposed = draft.task {
-                    DraftChanges(store: store, old: base, new: proposed)
-                }
-            }
 
             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 12) {
                 GridRow {
@@ -674,16 +582,8 @@ struct ScheduleEditorView: View {
                     Text(text).font(.system(size: 11.5)).foregroundStyle(notice != nil ? .orange : .secondary)
                 }
                 Spacer()
-                if let draft {
-                    Button("Discard") {
-                        store.schedules.decide(draft.id, .rejected)
-                        dismiss()
-                    }
-                    Button("Later") { dismiss() }.keyboardShortcut(.cancelAction)
-                } else {
-                    Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                }
-                Button(request.isNew ? "Create and Enable" : draft != nil ? "Save Changes" : "Save") { save() }
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(request.isNew ? "Create and Enable" : "Save") { save() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(!problems.isEmpty)
             }
@@ -734,192 +634,13 @@ struct ScheduleEditorView: View {
             t.timing.month = nil
             t.timing.day = nil
         }
-        if let id = request.draftID {
-            // Only what this sheet showed gets confirmed.
-            guard store.schedules.draft(id)?.status == .pending else {
-                notice = String(localized: "This draft is no longer waiting for confirmation.")
-                return
-            }
-            if !request.isNew {
-                guard let current = store.schedules.task(t.id), !current.isDeleted else {
-                    notice = String(localized: "The task no longer exists.")
-                    return
-                }
-                guard current == shownTask else {
-                    shownTask = current
-                    notice = String(localized: "The task changed while you were reviewing. Check it again, then save.")
-                    return
-                }
-                if let problem = store.schedules.applyEdit(t) {
-                    notice = problem
-                    return
-                }
-            } else {
-                store.schedules.create(t)
-            }
-            store.schedules.decide(id, .approved, taskID: t.id)
-            store.showSchedules(detail: t.id)
-        } else if request.isNew {
+        if request.isNew {
             store.schedules.create(t)
             store.showSchedules(detail: t.id)
         } else if let problem = store.schedules.applyEdit(t) {
             notice = problem
             return
         }
-        dismiss()
-    }
-}
-
-/// "From Claude session “…”", with a way back to it.
-private struct DraftSourceLine: View {
-    let store: AppStore
-    let draft: ScheduleDraft
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "sparkles").foregroundStyle(.secondary)
-            Text(ScheduleText.draftSource(draft)).foregroundStyle(.secondary)
-            if let id = draft.sourceTabID, let tab = store.tab(withID: id) {
-                Button("Open Session") {
-                    dismiss()
-                    store.select(tab)
-                }
-                .buttonStyle(.link)
-            }
-        }
-        .font(.system(size: 12))
-    }
-}
-
-/// What an edit draft changes: each field before and after.
-private struct DraftChanges: View {
-    let store: AppStore
-    let old: ScheduleTask
-    let new: ScheduleTask
-
-    var body: some View {
-        let rows = changes
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Changes").font(.system(size: 12, weight: .semibold))
-            ForEach(rows, id: \.0) { label, before, after in
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(label).font(.system(size: 11.5, weight: .medium)).foregroundStyle(.orange)
-                    Text("− " + before).foregroundStyle(.secondary).lineLimit(3)
-                    Text("+ " + after).lineLimit(3)
-                }
-                .font(.system(size: 11.5))
-            }
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 7).fill(Color.orange.opacity(0.08)))
-    }
-
-    private var changes: [(String, String, String)] {
-        var c: [(String, String, String)] = []
-        if old.name != new.name { c.append((String(localized: "Name"), old.name, new.name)) }
-        if old.projectID != new.projectID {
-            c.append((String(localized: "Project"), store.project(old.projectID)?.name ?? "?", store.project(new.projectID)?.name ?? "?"))
-        }
-        if old.kind != new.kind { c.append((String(localized: "Agent"), old.kind.name, new.kind.name)) }
-        if old.timing != new.timing { c.append((String(localized: "Schedule"), old.timing.summaryWithZone, new.timing.summaryWithZone)) }
-        if old.prompt != new.prompt { c.append((String(localized: "Prompt"), old.prompt, new.prompt)) }
-        return c
-    }
-}
-
-/// Reviewing a draft that pauses, resumes, deletes or runs a task: just the
-/// task and what the action does.
-struct ScheduleDraftActionView: View {
-    @ObservedObject var store: AppStore
-    let draftID: UUID
-    @State private var notice: String?
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        let draft = store.schedules.draft(draftID)
-        let task = draft?.taskID.flatMap(store.schedules.task)
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Review Draft").font(.system(size: 15, weight: .semibold))
-            if let draft {
-                DraftSourceLine(store: store, draft: draft)
-                Text(ScheduleText.draftTitle(draft)).font(.system(size: 14, weight: .medium))
-            }
-            if let task {
-                Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 6) {
-                    GridRow { Text("Project").foregroundStyle(.secondary); Text(store.project(task.projectID)?.name ?? "?") }
-                    GridRow { Text("Agent").foregroundStyle(.secondary); Text(task.kind.name) }
-                    GridRow { Text("Schedule").foregroundStyle(.secondary); Text(task.timing.summaryWithZone) }
-                    GridRow { Text("Next Run").foregroundStyle(.secondary); Text(ScheduleText.nextRun(task)) }
-                }
-                .font(.system(size: 12.5))
-            }
-            if let draft { Text(impact(draft.action, task)).font(.system(size: 12)).foregroundStyle(.secondary) }
-            HStack {
-                if let notice { Text(notice).font(.system(size: 11.5)).foregroundStyle(.orange) }
-                Spacer()
-                Button("Discard") {
-                    store.schedules.decide(draftID, .rejected)
-                    dismiss()
-                }
-                Button("Later") { dismiss() }.keyboardShortcut(.cancelAction)
-                if let draft {
-                    Button(confirmTitle(draft.action)) { confirm(draft) }
-                        .keyboardShortcut(.defaultAction)
-                        .disabled(task == nil || draft.status != .pending)
-                }
-            }
-        }
-        .padding(20)
-        .frame(width: 480)
-    }
-
-    private func impact(_ action: DraftAction, _ task: ScheduleTask?) -> String {
-        switch action {
-        case .pause: return String(localized: "Stops its future runs. A run going on now isn't stopped.")
-        case .resume:
-            let next = task.flatMap { t in t.timing.next(after: Date()).map { ScheduleFormat.dateTime($0, zone: t.timing.zone) } } ?? "—"
-            return String(localized: "Runs on its schedule again from now on, without catching up what was missed. Next: \(next)")
-        case .delete: return String(localized: "Stops scheduling it and moves it to Deleted. Its session and runs are kept.")
-        case .run: return String(localized: "Runs it once now with its current settings; its schedule stays as it is. Its session is stopped and resumed, which may interrupt you.")
-        case .create, .edit: return ""
-        }
-    }
-
-    private func confirmTitle(_ action: DraftAction) -> LocalizedStringKey {
-        switch action {
-        case .pause: return "Confirm Pause"
-        case .resume: return "Confirm Resume"
-        case .delete: return "Confirm Delete"
-        case .run: return "Confirm Run"
-        case .create, .edit: return "Confirm"
-        }
-    }
-
-    private func confirm(_ draft: ScheduleDraft) {
-        guard draft.status == .pending, let id = draft.taskID, let task = store.schedules.task(id), !task.isDeleted else {
-            notice = String(localized: "This draft can no longer be applied.")
-            return
-        }
-        switch draft.action {
-        case .pause: store.schedules.setEnabled(id, false)
-        case .resume:
-            guard store.project(task.projectID) != nil, task.timing.canResume else {
-                notice = String(localized: "This task can't be resumed as it is. Edit it first.")
-                return
-            }
-            store.schedules.setEnabled(id, true)
-        case .delete: store.schedules.delete(id)
-        case .run:
-            guard store.schedules.openRun(of: id) == nil else {
-                notice = String(localized: "The task is running now.")
-                return
-            }
-            store.runScheduleNow(id)
-        case .create, .edit: return
-        }
-        store.schedules.decide(draft.id, .approved)
         dismiss()
     }
 }
@@ -963,34 +684,16 @@ extension AppStore {
         scheduleEditor = ScheduleEditorRequest(task: task, isNew: true)
     }
 
-    /// Opens the review sheet for an agent's draft.
-    func reviewDraft(_ id: UUID) {
-        guard let draft = schedules.draft(id), draft.status == .pending else { return }
-        switch draft.action {
-        case .create, .edit:
-            guard var task = draft.task else { return }
-            if draft.action == .edit, let current = draft.taskID.flatMap(schedules.task) {
-                // The proposal's fields over the task as it is now.
-                var t = current
-                t.name = task.name
-                t.prompt = task.prompt
-                t.timing = task.timing
-                t.projectID = task.projectID
-                t.kind = task.kind
-                task = t
-            }
-            if task.timing.year == nil {
-                let c = task.timing.calendar.dateComponents([.year, .month, .day], from: Date().addingTimeInterval(86400))
-                task.timing.year = c.year
-                task.timing.month = c.month
-                task.timing.day = c.day
-            }
-            scheduleEditor = ScheduleEditorRequest(task: task, isNew: draft.action == .create, draftID: id)
-        default:
-            scheduleEditor = ScheduleEditorRequest(task: draft.base ?? ScheduleTask(name: "", projectID: UUID(), kind: .claude,
-                                                                                    prompt: "", timing: ScheduleTiming()),
-                                                   isNew: false, draftID: id)
+    /// The same form, filled in by an agent through the schedule skill.
+    func newScheduledTask(filledIn task: ScheduleTask) {
+        var t = task
+        if t.timing.year == nil {
+            let c = t.timing.calendar.dateComponents([.year, .month, .day], from: Date().addingTimeInterval(86400))
+            t.timing.year = c.year
+            t.timing.month = c.month
+            t.timing.day = c.day
         }
+        scheduleEditor = ScheduleEditorRequest(task: t, isNew: true)
     }
 
     func editScheduledTask(_ task: ScheduleTask) {
@@ -1004,13 +707,59 @@ extension AppStore {
         scheduleEditor = ScheduleEditorRequest(task: t, isNew: false)
     }
 
-    func confirmDeleteScheduledTask(_ task: ScheduleTask) {
+    /// An agent's pause, resume, delete or run, asked on the window as a sheet:
+    /// a modal alert would hold up the main thread (and the hook socket) for as
+    /// long as the user is away. Delete asks what the Delete menu item asks.
+    func askScheduleAction(_ op: String, _ task: ScheduleTask) {
+        let alert: NSAlert
+        switch op {
+        case "pause":
+            alert = scheduleAlert(String(localized: "Pause “\(task.name)”?"), String(localized: "Pause"),
+                                  String(localized: "Its future runs stop. A run going on now isn't stopped."))
+        case "resume":
+            let next = task.timing.next(after: Date()).map { ScheduleFormat.dateTime($0, zone: task.timing.zone) } ?? "—"
+            alert = scheduleAlert(String(localized: "Resume “\(task.name)”?"), String(localized: "Resume"),
+                                  String(localized: "It runs on its schedule again from now on, without catching up what was missed. Next: \(next)"))
+        case "delete":
+            alert = deleteAlert(task)
+        default:
+            alert = scheduleAlert(String(localized: "Run “\(task.name)” now?"), String(localized: "Run Now"),
+                                  String(localized: "It runs once now; its schedule stays as it is. Its session is stopped and resumed, which may interrupt you."))
+        }
+        guard let window = (NSApp.delegate as? AppDelegate)?.window else { return }
+        scheduleAsking = true
+        alert.beginSheetModal(for: window) { [self] answer in
+            scheduleAsking = false
+            guard answer == .alertFirstButtonReturn, let t = schedules.task(task.id), !t.isDeleted else { return }
+            switch op {
+            case "pause": schedules.setEnabled(t.id, false)
+            case "resume":
+                guard project(t.projectID) != nil, t.timing.canResume else { return }
+                schedules.setEnabled(t.id, true)
+            case "delete": schedules.delete(t.id)
+            default:
+                guard project(t.projectID) != nil, schedules.openRun(of: t.id) == nil else { return }
+                runScheduleNow(t.id)
+            }
+        }
+    }
+
+    private func scheduleAlert(_ title: String, _ button: String, _ info: String) -> NSAlert {
         let alert = NSAlert()
-        alert.messageText = String(localized: "Delete “\(task.name)”?")
-        alert.informativeText = String(localized: "It stops being scheduled and moves to Deleted, where its runs stay visible. Its session and any current run are left alone.")
-        alert.addButton(withTitle: String(localized: "Delete"))
+        alert.messageText = title
+        alert.informativeText = info
+        alert.addButton(withTitle: button)
         alert.addButton(withTitle: String(localized: "Cancel"))
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        return alert
+    }
+
+    private func deleteAlert(_ task: ScheduleTask) -> NSAlert {
+        scheduleAlert(String(localized: "Delete “\(task.name)”?"), String(localized: "Delete"),
+                      String(localized: "It stops being scheduled and moves to Deleted, where its runs stay visible. Its session and any current run are left alone."))
+    }
+
+    func confirmDeleteScheduledTask(_ task: ScheduleTask) {
+        guard deleteAlert(task).runModal() == .alertFirstButtonReturn else { return }
         schedules.delete(task.id)
     }
 }

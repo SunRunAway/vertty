@@ -16,7 +16,10 @@ final class DebugSnapshot {
         self.window = window
         self.store = store
         try? FileManager.default.createDirectory(at: self.directory, withIntermediateDirectories: true)
-        timer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in self?.capture() }
+        let timer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in self?.capture() }
+        // Keep driving while an alert is up.
+        RunLoop.main.add(timer, forMode: .modalPanel)
+        self.timer = timer
     }
 
     /// Commands from <dir>/input.txt (consumed on read), one per line. Input only
@@ -26,7 +29,7 @@ final class DebugSnapshot {
     ///   select <uuid> · new · notify · toggleshell · focus claude|shell ·
     ///   post <ctrl|cmd|none> <char> · schedules · schedule <task uuid> ·
     ///   runschedule <task uuid> · tickschedules · newschedule · closesheet ·
-    ///   reviewdraft <draft uuid> · sheetkey return|escape
+    ///   sheetkey return|escape (the open sheet or alert)
     private func drive() {
         let url = directory.appendingPathComponent("input.txt")
         guard let content = try? String(contentsOf: url, encoding: .utf8) else { return }
@@ -147,11 +150,7 @@ final class DebugSnapshot {
                 store.newScheduledTask()
                 continue
             }
-            if line.hasPrefix("reviewdraft "), let id = UUID(uuidString: String(line.dropFirst(12))) {
-                store.reviewDraft(id)
-                continue
-            }
-            if line == "sheetkey return" || line == "sheetkey escape", let sheet = window?.attachedSheet {
+            if line == "sheetkey return" || line == "sheetkey escape", let sheet = window?.attachedSheet ?? NSApp.modalWindow {
                 // A real key press on the open sheet, as the user would type it.
                 let ret = line.hasSuffix("return")
                 sheet.makeKey()
@@ -230,9 +229,7 @@ final class DebugSnapshot {
             }
         }
         lines.append("schedulesShown=\(store.showingSchedules) detail=\(store.scheduleDetailID?.uuidString ?? "-") editor=\(store.scheduleEditor != nil)")
-        for d in store.schedules.drafts {
-            lines.append("+++ draft \(d.id) \(d.action) \(d.status) task=\(d.taskID?.uuidString ?? "-") name=\((d.task ?? d.base)?.name ?? "-") source=\(d.sourceTabID?.uuidString ?? "-")")
-        }
+        if self.window?.attachedSheet != nil || NSApp.modalWindow != nil { lines.append("sheet=open") }
         for task in store.schedules.tasks {
             lines.append("=== task \(task.id) \(task.name) kind=\(task.kind) enabled=\(task.enabled) deleted=\(task.isDeleted) session=\(task.sessionID ?? "-") next=\(task.nextPlan.map { "\($0)" } ?? "-") note=\(task.reviewNote ?? "-")")
             for run in store.schedules.runs(of: task.id) {
