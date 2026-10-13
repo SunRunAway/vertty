@@ -30,7 +30,7 @@ extension AppStore {
     private func startRun(_ task: ScheduleTask, plannedAt: Date?, trigger: RunTrigger) {
         var run = ScheduleRun(taskID: task.id, trigger: trigger, plannedAt: plannedAt, state: .running, phase: .starting,
                               kind: task.kind, sessionID: task.sessionID)
-        if let open = schedules.openRun(of: task.id) {
+        if schedules.openRun(of: task.id) != nil {
             run.state = .skipped
             run.phase = nil
             run.endedAt = Date()

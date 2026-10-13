@@ -54,7 +54,7 @@ Skill 发起创建或修改时，Vhostty 直接弹出人工新建 / 编辑时用
 - 确认边界由 Vhostty 的任务管理接口落实，不只写在 skill 提示词里。Agent 接口只能查询、暂停、恢复、立即运行和弹出表单，不提供批准接口，不接受 `approved=true` 等绕过参数，也不让 agent 直接编辑生效任务存储。
 - 对话中的“确认”、agent 自己的工具批准、模拟键盘或自动化点击都不算人类确认；此流程要求人类在 Vhostty 界面操作，不承诺抵御拥有任意本地代码执行和界面控制权限的攻击者。
 
-技术建议：Claude Code 通过启动参数 `--plugin-dir` 加载内置插件中的 skill；Codex 通过 Vhostty 专用 App Server 的 `skills/extraRoots/set` 加载内置 skill 目录，并将现有 CLI 启动命令中的 `-c` 配置（包括 `tui.terminal_title`）迁移到该 App Server 的启动命令，CLI 改为通过 `--remote` 连接；终端标题配置在连接后的生效情况需集成验证。
+技术实现：Claude Code 通过启动参数 `--plugin-dir` 加载内置插件中的 skill。Codex 没有只对单个会话加 skill 的办法（用 `--remote` 连专用 App Server 会被当作远程工作区，失去 `/worktree` 等本地功能），所以 Codex 卡片用 `--no-daemon` 保持本地会话，同样的操作通过启动参数 `-c mcp_servers…` 以 MCP 工具提供，不写入 Codex 的配置和全局 skill 目录。
 
 ## 界面与操作
 

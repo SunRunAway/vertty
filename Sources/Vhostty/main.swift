@@ -6,10 +6,9 @@ for key in ProcessInfo.processInfo.environment.keys
 where key.hasPrefix("CLAUDE") || key.hasPrefix("GHOSTTY_") || key == "AI_AGENT" || key == "TMPPREFIX" {
     unsetenv(key)
 }
-// Nor the variables a Vhostty card sets for its own session (Vhostty started from
-// a card would hand them to its Codex server and attribute requests to that card).
+// Nor the variables a Vhostty card sets for its own session.
 for key in ["VHOSTTY_TAB_ID", "VHOSTTY_SOCK", "VHOSTTY_CLAUDE_SETTINGS", "VHOSTTY_HOOK", "VHOSTTY_PLUGIN_DIR",
-            "VHOSTTY_SCHEDULE_CLI", "VHOSTTY_CODEX_REMOTE", "VHOSTTY_SCHEDULE_RUN"] {
+            "VHOSTTY_SCHEDULE_CLI", "VHOSTTY_SCHEDULE_RUN"] {
     unsetenv(key)
 }
 var tmpBuf = [CChar](repeating: 0, count: Int(PATH_MAX))

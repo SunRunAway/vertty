@@ -61,7 +61,6 @@ enum ClaudeLauncher {
             // The built-in schedule skill and the command it runs.
             "VHOSTTY_PLUGIN_DIR": pluginDir,
             "VHOSTTY_SCHEDULE_CLI": scheduleCLIPath,
-            "VHOSTTY_CODEX_REMOTE": CodexServer.shared.socketPath,
         ]
         // Tells the launcher not to swap a scheduled resume for `claude attach`.
         if let scheduleRunID { env["VHOSTTY_SCHEDULE_RUN"] = scheduleRunID.uuidString }
@@ -69,9 +68,6 @@ enum ClaudeLauncher {
     }
 
     static var pluginDir: String { (Bundle.main.resourcePath ?? "") + "/plugin/vhostty" }
-
-    /// Where Codex finds the same skill (its skills root).
-    static var skillsDir: String { pluginDir + "/skills" }
 
     static var scheduleCLIPath: String {
         Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent("vhostty-schedule").path ?? ""

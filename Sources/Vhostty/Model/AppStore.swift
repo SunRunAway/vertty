@@ -130,7 +130,6 @@ final class AppStore: ObservableObject {
             detectedKind = first
             scheduleSave()
         }
-        if ShellEnvironment.installedAgents?.contains(.codex) == true { CodexServer.shared.start() }
         objectWillChange.send()  // VHOSTTY_DEFAULT_AGENT may have changed defaultKind
         watchHistory()
         refreshHistory()  // Codex's history depends on the shell's CODEX_HOME.

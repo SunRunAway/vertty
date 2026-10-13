@@ -1,21 +1,24 @@
 #!/bin/sh
-# Started by Vhostty in each Codex tab. Codex's TUI talks to a shared background
-# server, so Vhostty can't see from processes when it quits; tell it here, through
-# the same helper Claude Code's hooks use.
-# Connect to Vhostty's own app server when it's up: it carries Vhostty's
-# built-in skills and the environment they need.
-if [ -n "$VHOSTTY_CODEX_REMOTE" ] && [ -S "$VHOSTTY_CODEX_REMOTE" ]; then
-  if [ "$1" = "resume" ]; then
-    shift
-    codex resume --remote "unix://$VHOSTTY_CODEX_REMOTE" "$@"
-  else
-    # The server runs elsewhere: tell it this card's directory.
-    codex --remote "unix://$VHOSTTY_CODEX_REMOTE" -C "$PWD" "$@"
-  fi
-else
-  codex "$@"
+# Started by Vhostty in each Codex tab. --no-daemon: the card runs its own app
+# server instead of Codex's shared background one, so the session stays local
+# (worktrees work) and ends with the card. Vhostty's scheduled-task tools come in
+# as an MCP server for this session only.
+sub=
+if [ "$1" = "resume" ]; then
+  sub=resume
+  shift
 fi
+if [ -n "$VHOSTTY_SCHEDULE_CLI" ] && [ -x "$VHOSTTY_SCHEDULE_CLI" ]; then
+  set -- \
+    -c "mcp_servers.vhostty.command=\"$VHOSTTY_SCHEDULE_CLI\"" \
+    -c 'mcp_servers.vhostty.args=["mcp"]' \
+    -c "mcp_servers.vhostty.env.VHOSTTY_TAB_ID=\"$VHOSTTY_TAB_ID\"" \
+    -c "mcp_servers.vhostty.env.VHOSTTY_SOCK=\"$VHOSTTY_SOCK\"" \
+    "$@"
+fi
+codex $sub --no-daemon "$@"
 status=$?
+# Tell Vhostty it quit, through the same helper Claude Code's hooks use.
 if [ -n "$VHOSTTY_HOOK" ] && [ -x "$VHOSTTY_HOOK" ]; then
   printf '{"hook_event_name":"SessionEnd"}' | "$VHOSTTY_HOOK"
 fi
