@@ -32,5 +32,9 @@ let package = Package(
             name: "vhostty-hook",
             path: "Sources/VhosttyHook"
         ),
+        .executableTarget(
+            name: "vhostty-schedule",
+            path: "Sources/VhosttySchedule"
+        ),
     ]
 )

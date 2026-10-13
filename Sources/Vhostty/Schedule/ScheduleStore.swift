@@ -5,6 +5,7 @@ import Foundation
 final class ScheduleStore: ObservableObject {
     @Published private(set) var tasks: [ScheduleTask] = []
     @Published private(set) var runs: [ScheduleRun] = []
+    @Published private(set) var drafts: [ScheduleDraft] = []
 
     private var url: URL { AppPaths.support.appendingPathComponent("schedules.json") }
 
@@ -13,6 +14,7 @@ final class ScheduleStore: ObservableObject {
               let file = try? JSONDecoder.schedule.decode(ScheduleFile.self, from: data) else { return }
         tasks = file.tasks
         runs = file.runs
+        drafts = file.drafts ?? []
         // Runs left running by the last launch: their terminals are gone, but
         // whether their turn finished is unknown, so don't count them as done.
         var changed = false
@@ -28,7 +30,7 @@ final class ScheduleStore: ObservableObject {
 
     /// Written at once: a claimed plan must be on disk before its prompt goes out.
     func save() {
-        let file = ScheduleFile(tasks: tasks, runs: runs)
+        let file = ScheduleFile(tasks: tasks, runs: runs, drafts: drafts)
         if let data = try? JSONEncoder.schedule.encode(file) {
             try? data.write(to: url, options: .atomic)
         }
@@ -141,6 +143,38 @@ final class ScheduleStore: ObservableObject {
             tasks[i].nextPlan = nil
             tasks[i].reviewNote = note
         }
+        save()
+    }
+
+    // MARK: - Drafts
+
+    var pendingDrafts: [ScheduleDraft] { drafts.filter { $0.status == .pending }.sorted { $0.createdAt > $1.createdAt } }
+
+    func draft(_ id: UUID) -> ScheduleDraft? { drafts.first { $0.id == id } }
+
+    /// Adds a draft; the same request already waiting is returned instead of a duplicate.
+    func submit(_ draft: ScheduleDraft) -> ScheduleDraft {
+        if let same = pendingDrafts.first(where: { d in
+            d.action == draft.action && d.taskID == draft.taskID && d.sourceTabID == draft.sourceTabID
+                && Self.sameContent(d.task, draft.task)
+        }) { return same }
+        drafts.append(draft)
+        save()
+        return draft
+    }
+
+    private static func sameContent(_ a: ScheduleTask?, _ b: ScheduleTask?) -> Bool {
+        guard var a, var b else { return a == nil && b == nil }
+        a.id = b.id
+        a.createdAt = b.createdAt
+        return a == b
+    }
+
+    func decide(_ id: UUID, _ status: DraftStatus, taskID: UUID? = nil) {
+        guard let i = drafts.firstIndex(where: { $0.id == id }), drafts[i].status == .pending else { return }
+        drafts[i].status = status
+        drafts[i].decidedAt = Date()
+        if let taskID { drafts[i].taskID = taskID }
         save()
     }
 

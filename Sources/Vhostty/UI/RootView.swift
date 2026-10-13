@@ -29,7 +29,11 @@ struct RootView: View {
         .ignoresSafeArea()
         .preferredColorScheme(.dark)
         .sheet(item: $store.scheduleEditor) { request in
-            ScheduleEditorView(store: store, request: request)
+            if let id = request.draftID, let draft = store.schedules.draft(id), draft.action != .create, draft.action != .edit {
+                ScheduleDraftActionView(store: store, draftID: id)
+            } else {
+                ScheduleEditorView(store: store, request: request)
+            }
         }
     }
 
@@ -69,8 +73,9 @@ struct TitleStrip: View {
             } else if let tab = store.selectedTab {
                 TitleStripLabel(tab: tab, project: store.project(tab.projectID))
                     .allowsHitTesting(false)
-                HStack {
+                HStack(spacing: 6) {
                     Spacer()
+                    DraftButton(store: store, schedules: store.schedules, tab: tab)
                     ShellToggleButton(store: store, tab: tab)
                 }
                 .padding(.trailing, 10)
@@ -96,6 +101,25 @@ private struct TitleStripLabel: View {
         }
         .font(.system(size: 12, weight: .medium))
         .padding(.horizontal, 16)
+    }
+}
+
+/// A draft this session's agent submitted through the schedule skill, waiting for review.
+private struct DraftButton: View {
+    let store: AppStore
+    @ObservedObject var schedules: ScheduleStore
+    let tab: TabSession
+
+    var body: some View {
+        if let draft = schedules.pendingDrafts.first(where: { $0.sourceTabID == tab.id }) {
+            Button { store.reviewDraft(draft.id) } label: {
+                Label("Review Draft", systemImage: "clock.badge.questionmark")
+                    .font(.system(size: 11.5, weight: .medium))
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .help(ScheduleText.draftTitle(draft))
+        }
     }
 }
 

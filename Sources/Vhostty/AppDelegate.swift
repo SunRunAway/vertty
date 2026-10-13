@@ -33,6 +33,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         hookServer = HookServer(socketPath: AppPaths.hookSocket) { [weak self] event in
             self?.store.handleHook(event)
         }
+        hookServer?.onScheduleRequest = { [weak self] request in
+            self?.store.handleScheduleRequest(request) ?? ["ok": false, "error": "Vhostty is quitting."]
+        }
         hookServer?.start()
 
         let center = UNUserNotificationCenter.current()

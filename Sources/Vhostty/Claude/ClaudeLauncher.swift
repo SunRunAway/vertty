@@ -5,7 +5,8 @@ enum ClaudeLauncher {
     static let hookEvents = ["SessionStart", "UserPromptSubmit", "PostToolUse", "Notification", "Stop", "SessionEnd"]
 
     /// Writes the extra settings file passed via `claude --settings`. It only adds
-    /// hooks (merged with the user's own settings); the user's config is untouched.
+    /// hooks and access to Vhostty's socket (merged with the user's own settings);
+    /// the user's config is untouched.
     static func writeSettings() {
         guard !hookPath.isEmpty else { return }
         let hook: [String: Any] = ["type": "command", "command": ShellQuote.quote(hookPath), "timeout": 5]
@@ -15,7 +16,10 @@ enum ClaudeLauncher {
             if name == "PostToolUse" { entry["matcher"] = "*" }
             hooks[name] = [entry]
         }
-        let settings: [String: Any] = ["hooks": hooks]
+        // The schedule skill's command talks to Vhostty over this socket; let it
+        // through Claude Code's sandbox (only this socket).
+        let settings: [String: Any] = ["hooks": hooks,
+                                       "sandbox": ["network": ["allowUnixSockets": [AppPaths.hookSocket]]]]
         if let data = try? JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys]) {
             try? data.write(to: AppPaths.claudeSettings, options: .atomic)
         }
@@ -54,10 +58,22 @@ enum ClaudeLauncher {
             "VHOSTTY_SOCK": AppPaths.hookSocket,
             "VHOSTTY_CLAUDE_SETTINGS": AppPaths.claudeSettings.path,
             "VHOSTTY_HOOK": hookPath,
+            // The built-in schedule skill and the command it runs.
+            "VHOSTTY_PLUGIN_DIR": pluginDir,
+            "VHOSTTY_SCHEDULE_CLI": scheduleCLIPath,
         ]
         // Tells the launcher not to swap a scheduled resume for `claude attach`.
         if let scheduleRunID { env["VHOSTTY_SCHEDULE_RUN"] = scheduleRunID.uuidString }
         return env
+    }
+
+    static var pluginDir: String { (Bundle.main.resourcePath ?? "") + "/plugin/vhostty" }
+
+    /// Where Codex finds the same skill (its skills root).
+    static var skillsDir: String { pluginDir + "/skills" }
+
+    static var scheduleCLIPath: String {
+        Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent("vhostty-schedule").path ?? ""
     }
 
     static var hookPath: String {

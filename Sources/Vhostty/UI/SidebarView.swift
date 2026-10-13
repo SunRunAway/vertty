@@ -64,6 +64,16 @@ private struct ScheduleEntry: View {
             Text("Scheduled Tasks")
                 .font(.system(size: 13.5, weight: .medium))
             Spacer(minLength: 4)
+            let pending = schedules.pendingDrafts.count
+            if pending > 0 {
+                Text("\(pending)")
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(Capsule().fill(Color.orange.opacity(0.85)))
+                    .foregroundStyle(.white)
+                    .help(String(localized: "\(pending) drafts waiting for confirmation"))
+            }
             let running = schedules.runs.filter { $0.state == .running }.count
             if running > 0 {
                 ProgressView().controlSize(.mini).scaleEffect(0.75)
@@ -78,7 +88,7 @@ private struct ScheduleEntry: View {
             .fill(Color.white.opacity(store.showingSchedules ? 0.11 : hover ? 0.07 : 0)))
         .contentShape(Rectangle())
         .onHover { hover = $0 }
-        .onTapGesture { store.showSchedules() }
+        .onTapGesture { store.showSchedules(pending: schedules.pendingDrafts.count > 0) }
     }
 }
 

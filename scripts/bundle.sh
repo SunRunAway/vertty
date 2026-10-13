@@ -19,6 +19,7 @@ build() {
 }
 build Vhostty
 build vhostty-hook
+build vhostty-schedule
 BIN="$(swift build -c release --show-bin-path)"
 
 APP="$ROOT/build/Vhostty.app"
@@ -31,6 +32,8 @@ if [ -n "${VHOSTTY_VERSION:-}" ]; then
 fi
 cp "$BIN/Vhostty" "$APP/Contents/MacOS/Vhostty"
 cp "$BIN/vhostty-hook" "$APP/Contents/MacOS/vhostty-hook"
+cp "$BIN/vhostty-schedule" "$APP/Contents/MacOS/vhostty-schedule"
+cp -R Resources/plugin "$APP/Contents/Resources/plugin"
 cp Resources/ghostty-defaults.conf "$APP/Contents/Resources/"
 cp -R Resources/*.lproj "$APP/Contents/Resources/"
 cp Resources/bin/* "$APP/Contents/Resources/bin/"

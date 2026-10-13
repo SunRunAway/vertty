@@ -91,6 +91,22 @@ index 9276c99..bb3bd48 100644
          });
      }
  
+diff --git a/src/renderer/generic.zig b/src/renderer/generic.zig
+index ff632f6..ca4e0bb 100644
+--- a/src/renderer/generic.zig
++++ b/src/renderer/generic.zig
+@@ -690,8 +690,10 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+             };
+ 
+             const display_link: ?DisplayLink = switch (builtin.os.tag) {
++                // Vhostty: with every display asleep there is no display to
++                // link to; draw on changes instead of failing the surface.
+                 .macos => if (options.config.vsync)
+-                    try macos.video.DisplayLink.createWithActiveCGDisplays()
++                    macos.video.DisplayLink.createWithActiveCGDisplays() catch null
+                 else
+                     null,
+                 else => null,
 diff --git a/src/renderer/metal/shaders.zig b/src/renderer/metal/shaders.zig
 index 0be0235..408e021 100644
 --- a/src/renderer/metal/shaders.zig

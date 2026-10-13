@@ -25,7 +25,8 @@ final class DebugSnapshot {
     ///   to <uuid> / toshell <uuid> · text <s> · enter · down · up · esc ·
     ///   select <uuid> · new · notify · toggleshell · focus claude|shell ·
     ///   post <ctrl|cmd|none> <char> · schedules · schedule <task uuid> ·
-    ///   runschedule <task uuid> · tickschedules · newschedule · closesheet
+    ///   runschedule <task uuid> · tickschedules · newschedule · closesheet ·
+    ///   reviewdraft <draft uuid> · sheetkey return|escape
     private func drive() {
         let url = directory.appendingPathComponent("input.txt")
         guard let content = try? String(contentsOf: url, encoding: .utf8) else { return }
@@ -146,6 +147,24 @@ final class DebugSnapshot {
                 store.newScheduledTask()
                 continue
             }
+            if line.hasPrefix("reviewdraft "), let id = UUID(uuidString: String(line.dropFirst(12))) {
+                store.reviewDraft(id)
+                continue
+            }
+            if line == "sheetkey return" || line == "sheetkey escape", let sheet = window?.attachedSheet {
+                // A real key press on the open sheet, as the user would type it.
+                let ret = line.hasSuffix("return")
+                sheet.makeKey()
+                for type in [NSEvent.EventType.keyDown, .keyUp] {
+                    if let ev = NSEvent.keyEvent(
+                        with: type, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                        windowNumber: sheet.windowNumber, context: nil, characters: ret ? "\r" : "\u{1b}",
+                        charactersIgnoringModifiers: ret ? "\r" : "\u{1b}", isARepeat: false, keyCode: ret ? 0x24 : 0x35) {
+                        NSApp.postEvent(ev, atStart: false)
+                    }
+                }
+                continue
+            }
             if line == "closesheet" {
                 store.scheduleEditor = nil
                 continue
@@ -211,6 +230,9 @@ final class DebugSnapshot {
             }
         }
         lines.append("schedulesShown=\(store.showingSchedules) detail=\(store.scheduleDetailID?.uuidString ?? "-") editor=\(store.scheduleEditor != nil)")
+        for d in store.schedules.drafts {
+            lines.append("+++ draft \(d.id) \(d.action) \(d.status) task=\(d.taskID?.uuidString ?? "-") name=\((d.task ?? d.base)?.name ?? "-") source=\(d.sourceTabID?.uuidString ?? "-")")
+        }
         for task in store.schedules.tasks {
             lines.append("=== task \(task.id) \(task.name) kind=\(task.kind) enabled=\(task.enabled) deleted=\(task.isDeleted) session=\(task.sessionID ?? "-") next=\(task.nextPlan.map { "\($0)" } ?? "-") note=\(task.reviewNote ?? "-")")
             for run in store.schedules.runs(of: task.id) {

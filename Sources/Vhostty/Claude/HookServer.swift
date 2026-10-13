@@ -15,9 +15,12 @@ struct HookEvent {
 /// Listens on a Unix socket for hook events sent by the `vhostty-hook` helper.
 ///
 /// Wire format: "<tab uuid>\n<hook JSON from Claude Code's stdin>", then EOF.
+/// `vhostty-schedule` sends "schedule\n<request JSON>", then EOF, and reads the
+/// JSON answer back.
 final class HookServer {
     let socketPath: String
     private let onEvent: (HookEvent) -> Void
+    var onScheduleRequest: (([String: Any]) -> [String: Any])?
     private var fd: Int32 = -1
     private let queue = DispatchQueue(label: "vhostty.hooks.handle")
 
@@ -75,6 +78,9 @@ final class HookServer {
             if data.count > 4 << 20 { break }
         }
 
+        if let nl = data.firstIndex(of: UInt8(ascii: "\n")), data[..<nl].elementsEqual("schedule".utf8) {
+            return answerSchedule(client, data[(nl + 1)...])
+        }
         guard let nl = data.firstIndex(of: UInt8(ascii: "\n")),
               let tabID = UUID(uuidString: String(decoding: data[..<nl], as: UTF8.self).trimmingCharacters(in: .whitespaces)),
               let obj = (try? JSONSerialization.jsonObject(with: data[(nl + 1)...])) as? [String: Any],
@@ -90,6 +96,25 @@ final class HookServer {
             notificationType: obj["notification_type"] as? String,
             source: obj["source"] as? String)
         DispatchQueue.main.async { self.onEvent(event) }
+    }
+}
+
+extension HookServer {
+    fileprivate func answerSchedule(_ client: Int32, _ body: Data) {
+        var reply: [String: Any] = ["ok": false, "error": "Bad request."]
+        if let request = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any], let handler = onScheduleRequest {
+            reply = DispatchQueue.main.sync { handler(request) }
+        }
+        guard let out = try? JSONSerialization.data(withJSONObject: reply, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]) else { return }
+        out.withUnsafeBytes { raw in
+            guard let base = raw.baseAddress else { return }
+            var offset = 0
+            while offset < raw.count {
+                let n = write(client, base + offset, raw.count - offset)
+                if n <= 0 { break }
+                offset += n
+            }
+        }
     }
 }
 

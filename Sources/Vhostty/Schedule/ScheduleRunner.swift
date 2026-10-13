@@ -375,8 +375,9 @@ extension AppStore {
         resumeSession(summary, in: project)
     }
 
-    func showSchedules(detail: UUID? = nil) {
+    func showSchedules(detail: UUID? = nil, pending: Bool = false) {
         scheduleDetailID = detail
+        scheduleShowPending = pending
         showingSchedules = true
         showInContainer(nil)
     }

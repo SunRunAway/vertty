@@ -1,0 +1,5 @@
+{
+  "name": "vhostty",
+  "description": "Vhostty's built-in skills, loaded only in sessions Vhostty starts.",
+  "version": "1.0.0"
+}

@@ -16,6 +16,10 @@ if [ "$1" = "--resume" ] && [ -n "$2" ]; then
     exec claude attach "$job"
   fi
 fi
+# Vhostty's built-in skills (scheduled tasks), for this session only.
+if [ -n "$VHOSTTY_PLUGIN_DIR" ] && [ -d "$VHOSTTY_PLUGIN_DIR" ]; then
+  set -- --plugin-dir "$VHOSTTY_PLUGIN_DIR" "$@"
+fi
 if [ -n "$VHOSTTY_CLAUDE_SETTINGS" ] && [ -f "$VHOSTTY_CLAUDE_SETTINGS" ]; then
   exec claude --settings "$VHOSTTY_CLAUDE_SETTINGS" "$@"
 fi
