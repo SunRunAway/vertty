@@ -6,12 +6,14 @@ import Foundation
 /// the Vhostty window.
 extension AppStore {
     func handleScheduleRequest(_ request: [String: Any]) -> [String: Any] {
-        let allowed: Set<String> = ["op", "taskID", "draftID", "fields", "tabID", "cwd"]
+        let allowed: Set<String> = ["op", "taskID", "draftID", "fields", "tabID", "threadID", "cwd"]
         if let extra = request.keys.first(where: { !allowed.contains($0) }) {
             return error("Unknown request field: \(extra)")
         }
         guard let op = request["op"] as? String else { return error("Missing op.") }
+        let thread = (request["threadID"] as? String)?.lowercased()
         let source = (request["tabID"] as? String).flatMap(UUID.init(uuidString:)).flatMap(tab(withID:))
+            ?? thread.flatMap { id in tabs.first { $0.kind == .codex && !id.isEmpty && $0.sessionID == id } }
         let cwd = request["cwd"] as? String
         let taskID = (request["taskID"] as? String).flatMap(UUID.init(uuidString:))
         let fields = request["fields"] as? [String: Any] ?? [:]

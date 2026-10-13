@@ -61,6 +61,7 @@ enum ClaudeLauncher {
             // The built-in schedule skill and the command it runs.
             "VHOSTTY_PLUGIN_DIR": pluginDir,
             "VHOSTTY_SCHEDULE_CLI": scheduleCLIPath,
+            "VHOSTTY_CODEX_REMOTE": CodexServer.shared.socketPath,
         ]
         // Tells the launcher not to swap a scheduled resume for `claude attach`.
         if let scheduleRunID { env["VHOSTTY_SCHEDULE_RUN"] = scheduleRunID.uuidString }

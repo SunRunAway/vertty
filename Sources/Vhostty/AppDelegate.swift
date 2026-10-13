@@ -102,6 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
 
     func applicationWillTerminate(_ notification: Notification) {
         store.save()
+        CodexServer.shared.stop()
         unlink(AppPaths.hookSocket)
     }
 

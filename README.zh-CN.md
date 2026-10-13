@@ -22,7 +22,7 @@ Vhostty 是一个 macOS 原生终端，专门用来同时跑好几个 Claude Cod
   2. 会话最后记录的分支（同一工作区的其他会话切分支不会覆盖它）
   3. worktree 名称；不在 worktree 里时显示「主工作区」
   4. PR 号，比如 `#123`。颜色表示状态：open 绿 / merged 紫 / closed 红，点击会在浏览器打开
-- **新建会话**：自动 `cd` 到项目目录，然后启动 `claude` 或 `codex`。项目的 ⋯ 菜单里两种都有；「设置默认会话」按项目分别设置，决定在这个项目里 ⌘T 和 ✎ 按钮新建哪一种；没设置过的项目用全局默认（见[配置](#配置)）。agent 退出后，终端会留在你的 shell 里。新建的 Codex 会话在你发出第一条消息后才会和卡片对上。Vhostty 卡片里 Codex 的终端标题由 Vhostty 设置（会话 ID 从这里读），所以你的 `tui.terminal_title` 设置在卡片里不生效。
+- **新建会话**：自动 `cd` 到项目目录，然后启动 `claude` 或 `codex`。项目的 ⋯ 菜单里两种都有；「设置默认会话」按项目分别设置，决定在这个项目里 ⌘T 和 ✎ 按钮新建哪一种；没设置过的项目用全局默认（见[配置](#配置)）。agent 退出后，终端会留在你的 shell 里。新建的 Codex 会话在你发出第一条消息后才会和卡片对上。Codex 卡片连接 Vhostty 为它们启动的 app server（`codex app-server`，Vhostty 退出时停止），内置 skill 就是这样加载的。Vhostty 卡片里 Codex 的终端标题由 Vhostty 设置（会话 ID 从这里读），所以你的 `tui.terminal_title` 设置在卡片里不生效。
 - **状态实时显示**：
   - 转圈 = agent 正在干活
   - ✋ = 等你确认权限（仅 Claude）

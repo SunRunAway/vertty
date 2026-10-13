@@ -44,6 +44,8 @@ args.removeFirst()
 
 var request: [String: Any] = ["op": command, "cwd": FileManager.default.currentDirectoryPath]
 if let tab = ProcessInfo.processInfo.environment["VHOSTTY_TAB_ID"] { request["tabID"] = tab }
+// Codex runs commands in its server, away from the card: name the thread instead.
+if let thread = ProcessInfo.processInfo.environment["CODEX_THREAD_ID"] { request["threadID"] = thread }
 
 switch command {
 case "list":

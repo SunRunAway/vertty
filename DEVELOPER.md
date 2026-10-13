@@ -25,6 +25,7 @@ Codex 每张卡片跑的是 `vhostty-codex -c tui.terminal_title=…`（新建�
 - 不注入 Codex hooks（Codex 的 hooks 要用户手动信任，而且在 daemon 里运行，拿不到卡片的环境变量）。状态来自终端标题：有转圈就是工作中。启动和恢复时 Codex 也会转一会儿，这一段不算一轮工作。
 - 历史会话、标题、分支也来自 `threads` 表（只列用户自己发起的会话，不含子代理、自动化和已归档的）。除了 cwd 是项目目录或现存 worktree 的会话，同一仓库（`git_origin_url` 和项目的 origin 一致）里 worktree 已删除的会话也算：cwd 在 Codex 自己的 worktree 目录 `$CODEX_HOME/worktrees/<id>/<项目目录名>` 下，或者 cwd 已经不存在。项目的子目录算别的项目，不计入。
 - Codex 的数据目录是 `CODEX_HOME`（默认 `~/.codex`）。卡片里的 Codex 由交互式登录 shell 启动，所以 Vhostty 启动时也用 `$SHELL -l -i -c` 读这个变量。
+- Vhostty 自己起一个 Codex app server（`codex app-server --listen unix://<状态目录>/codex.sock`，同样经交互式登录 shell 启动），卡片里的 TUI 用 `--remote` 连它；新会话另加 `-C "$PWD"`，否则会话会用 server 的工作目录。连上后用 `skills/extraRoots/set` 加入内置 skill 目录，这个设置对整个 server 生效。agent 的命令在 server 里执行，带的是 server 的环境（`VHOSTTY_SOCK`、`VHOSTTY_SCHEDULE_CLI`），没有卡片的 `VHOSTTY_TAB_ID`，所以 `vhostty-schedule` 改用 Codex 给命令设的 `CODEX_THREAD_ID` 找回卡片。server 没起来时卡片照常直连 Codex，只是没有内置 skill。server 的 stdin 接着 Vhostty 的一根管道，Vhostty 退出（包括被杀）时管道关闭，server 随之停止。同一会话在共享 daemon 里打开时，这边会被锁成只读，反之亦然。
 
 ### 历史会话的范围和搜索
 
@@ -58,7 +59,7 @@ hooks 事件的传递路径：`vhostty-hook`（App 里自带的一个小程序�
 - **计划**：每个任务记着下一次还没处理的计划时间 `nextPlan`。每 20 秒、启动和唤醒时检查一次：到点的计划里只运行最近一次，更早的合成一条“已跳过”；先把新的 `nextPlan` 写盘再启动，所以重复检查、唤醒或重启都不会重复提交。时间按任务固定时区的日历计算（`Calendar.nextDate`，夏令时跳过的时刻顺延，重复的时刻只取第一次）。
 - **执行**：提示词作为 agent 的命令行参数传入（`claude --session-id/--resume <id> <提示词>`、`codex [resume <id>] <提示词>`），从不往终端里打字。首次运行在项目顶部新建一张后台卡片；之后 resume 任务绑定的会话 ID。这个会话开在某张卡片里时，先释放那张卡片的终端，等它的 agent 进程（Claude 看 `~/.claude/sessions`，外加带这张卡片 `VHOSTTY_TAB_ID` 的 `claude`、`vhostty-hook` 进程；Codex 看带 `tui.terminal_title` 参数的 TUI 进程）都退出后，再在同一张卡片里 resume。确认不了已停止就记异常，不启动第二个实例。Claude 会话如果在 Vhostty 之外（别的终端、底部终端、后台任务）还有进程，不碰它，直接记异常，因为再 resume 会让会话分叉。
 - **状态**：Claude 靠 hooks：`UserPromptSubmit` 表示已提交，`Stop` 表示已回复，没有 `Stop` 就空闲下来算中断。Codex 没有 hooks，查 `thread_history_<n>.sqlite`：本轮的 `userMessage` 出现表示已提交，同一轮有 `phase` 为 `final_answer` 的 `agentMessage` 表示已回复。App 重启时还在运行的记录标为“执行状态待确认”，在用户结束这条记录之前，这个任务不再运行。
-- **对话里管理**：内置 skill 在 `Resources/plugin/vhostty/skills/schedule/SKILL.md`，Claude 由 `vhostty-claude` 加 `--plugin-dir` 加载（技能名 `vhostty:schedule`）。skill 调用 `$VHOSTTY_SCHEDULE_CLI`（即 `vhostty-schedule`），它通过 hook socket 发 `schedule\n<JSON>` 请求并读回 JSON。接口只能查询、提交草稿和撤回草稿，没有批准操作；请求里多出的字段会被拒绝。草稿只能在界面里确认（编辑类用同一张表单，暂停/恢复/删除/立即运行用确认框），确认时任务若在查看期间被改过，要求重新核对。`claude-settings.json` 里的 `sandbox.network.allowUnixSockets` 只放行这个 socket，让 skill 在 Claude Code 的沙箱里也能连上。
+- **对话里管理**：内置 skill 在 `Resources/plugin/vhostty/skills/schedule/SKILL.md`，Claude 由 `vhostty-claude` 加 `--plugin-dir` 加载，Codex 由 Vhostty 的 app server 加载（见“Codex 会话”），技能名都是 `vhostty:schedule`。skill 调用 `$VHOSTTY_SCHEDULE_CLI`（即 `vhostty-schedule`），它通过 hook socket 发 `schedule\n<JSON>` 请求并读回 JSON。接口只能查询、提交草稿和撤回草稿，没有批准操作；请求里多出的字段会被拒绝。草稿只能在界面里确认（编辑类用同一张表单，暂停/恢复/删除/立即运行用确认框），确认时任务若在查看期间被改过，要求重新核对。`claude-settings.json` 里的 `sandbox.network.allowUnixSockets` 只放行这个 socket，让 skill 在 Claude Code 的沙箱里也能连上。
 - **显示器休眠**：显示器全部休眠时没有可用的显示器，libghostty 原本会因为建不了 CVDisplayLink 而创建终端失败；补丁里改成这时不用 display link，靠内容变化驱动绘制，这样定时任务在显示器关着时也能启动。
 
 ## 为了不装 Xcode 做的处理
