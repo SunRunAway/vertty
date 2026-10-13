@@ -37,6 +37,7 @@ cp "$BIN/vhostty-hook" "$APP/Contents/MacOS/vhostty-hook"
 cp "$BIN/vhostty-schedule" "$APP/Contents/MacOS/vhostty-schedule"
 cp -R Resources/plugin "$APP/Contents/Resources/plugin"
 cp Resources/ghostty-defaults.conf "$APP/Contents/Resources/"
+cp Resources/vhostty-sleep.sudoers "$APP/Contents/Resources/"
 cp -R Resources/*.lproj "$APP/Contents/Resources/"
 cp Resources/bin/* "$APP/Contents/Resources/bin/"
 chmod +x "$APP/Contents/Resources/bin/"*

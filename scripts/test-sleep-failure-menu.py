@@ -8,6 +8,7 @@ import tempfile
 
 root = Path(tempfile.mkdtemp(prefix='vhostty-sleep-menu-', dir='/private/tmp'))
 print(f'Artifacts: {root}', flush=True)
+shutil.copy('Resources/vhostty-sleep.sudoers', root / 'vhostty-sleep.sudoers')
 shutil.copy('build/Vhostty.app/Contents/MacOS/vhostty-sleep', root / 'vhostty-sleep')
 (root / 'stubs.swift').write_text('''import AppKit
 final class AppStore {
@@ -36,7 +37,8 @@ func wait(_ reason: String, _ condition: () -> Bool) {
     precondition(condition(), reason)
 }
 // Validate the production file checker without touching /etc or opening an alert.
-let ownRule = dir.appendingPathComponent("vhostty_sleep_\\(getuid())")
+precondition(SleepProtection.authorizationRule.contains("%admin ALL=(root) NOPASSWD:"))
+let ownRule = dir.appendingPathComponent("vhostty_sleep")
 write("amphetamine_PowerProtect", SleepProtection.authorizationRule)
 precondition(!SleepProtection.hasInstalledRule(at: ownRule, owner: getuid()))
 try! SleepProtection.authorizationRule.write(to: ownRule, atomically: true, encoding: .utf8)

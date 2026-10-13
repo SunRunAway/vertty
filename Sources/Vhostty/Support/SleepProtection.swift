@@ -30,7 +30,7 @@ final class SleepProtection {
         if hasFailed { retry(); return }
         let alert = NSAlert()
         alert.messageText = String(localized: "Keep tasks running with the lid closed?")
-        alert.informativeText = String(localized: "Your Mac stays awake with the lid closed while tasks run, then returns to normal sleep when they finish. Administrator authorization only permits these two commands to run without a password:\n\n/usr/bin/pmset -a disablesleep 1 — prevent sleep\n/usr/bin/pmset -a disablesleep 0 — restore sleep")
+        alert.informativeText = String(localized: "Your Mac stays awake with the lid closed while tasks run, then returns to normal sleep when they finish. Administrator authorization allows this Mac’s administrator accounts to run only these two commands without a password:\n\n/usr/bin/pmset -a disablesleep 1 — prevent sleep\n/usr/bin/pmset -a disablesleep 0 — restore sleep")
         alert.addButton(withTitle: String(localized: "Allow"))
         alert.addButton(withTitle: String(localized: "Don’t Allow"))
         let answer = alert.runModal()
@@ -54,13 +54,18 @@ final class SleepProtection {
         }
     }
     private static var ruleURL: URL {
-        URL(fileURLWithPath: "/private/etc/sudoers.d/vhostty_sleep_\(getuid())")
+        URL(fileURLWithPath: "/private/etc/sudoers.d/vhostty_sleep")
+    }
+    private static var ruleResourceURL: URL? {
+        Bundle.main.url(forResource: "vhostty-sleep", withExtension: "sudoers")
     }
     static var authorizationRule: String {
-        "# Vhostty closed-display sleep protection\n#\(getuid()) ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a disablesleep 0\n"
+        guard let url = ruleResourceURL else { return "" }
+        return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
     }
     /// Check our own root-owned rule, never a permission supplied by another app.
     static func hasInstalledRule(at url: URL, owner: uid_t = 0) -> Bool {
+        guard !authorizationRule.isEmpty else { return false }
         let fd = open(url.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
         guard fd >= 0 else { return false }
         let file = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
@@ -98,12 +103,10 @@ final class SleepProtection {
                 success = outcome.trimmingCharacters(in: .whitespacesAndNewlines) == "success"
                 cancelled = outcome.trimmingCharacters(in: .whitespacesAndNewlines) == "cancel"
                 if success { try? Data().write(to: fixture.appendingPathComponent("authorized")) }
-            } else {
-                // No user-controlled paths or shell fragments enter this privileged command.
-                // Install atomically after visudo validates the exact fixed command allowlist.
-                let rule = Self.authorizationRule
+            } else if let source = Self.ruleResourceURL {
+                // Copy the bundled static rule, validate, then install atomically.
                 let target = Self.ruleURL.path
-                let command = "umask 077; /bin/mkdir -p /private/etc/sudoers.d; t=$(/usr/bin/mktemp /private/etc/sudoers.d/.vhostty.XXXXXX) || exit 1; trap '/bin/rm -f \"$t\"' EXIT; /usr/bin/printf %s " + Self.quote(rule) + " > \"$t\" && /usr/sbin/visudo -cf \"$t\" && /usr/sbin/chown root:wheel \"$t\" && /bin/chmod 0444 \"$t\" && /bin/mv -f \"$t\" " + Self.quote(target)
+                let command = "umask 077; /bin/mkdir -p /private/etc/sudoers.d; t=$(/usr/bin/mktemp /private/etc/sudoers.d/.vhostty.XXXXXX) || exit 1; trap '/bin/rm -f \"$t\"' EXIT; /bin/cp " + Self.quote(source.path) + " \"$t\" && /usr/sbin/visudo -cf \"$t\" && /usr/sbin/chown root:wheel \"$t\" && /bin/chmod 0444 \"$t\" && /bin/mv -f \"$t\" " + Self.quote(target)
                 let escaped = command.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"").replacingOccurrences(of: "\n", with: "\\n")
                 var error: NSDictionary?
                 let script = NSAppleScript(source: "do shell script \"\(escaped)\" with administrator privileges")
