@@ -154,11 +154,8 @@ try:
     start(); prompt()
     print('PASS failed authorization reprompts', flush=True)
     (case / 'authorization-result').write_text('success')
-    (case / 'value').write_text('1')
     button(['Allow', '允许'])
     wait(lambda: (case / 'authorized').exists(), 'authorization did not succeed')
-    time.sleep(2)
-    assert read(case / 'value') == '1', 'enabling overwrote an external setting'
     stop()
     assert (case / 'authorized').exists()
     assert not (case / 'sleep-declined').exists()

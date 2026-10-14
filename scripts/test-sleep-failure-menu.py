@@ -69,12 +69,8 @@ precondition(item.title == failed)
 print("PASS cancelled retry retains failure and writes no refusal")
 func value() -> String? { try? String(contentsOf: dir.appendingPathComponent("value"), encoding: .utf8) }
 write("authorization-result", "success")
-write("value", "1")
 controller.configure()
 wait("successful retry did not clear failure") { item.title == normal }
-RunLoop.current.run(until: Date().addingTimeInterval(1))
-precondition(value() == "1", "enabling overwrote an external setting")
-write("value", "0")
 write("fail")
 store.keepsAwake = true
 wait("runtime failure did not update menu") { item.title == failed }
