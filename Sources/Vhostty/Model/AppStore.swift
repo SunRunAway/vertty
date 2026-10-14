@@ -1021,16 +1021,6 @@ final class AppStore: ObservableObject {
     var workingAgentCount: Int {
         tabs.filter { $0.status == .working && ($0.surface.map { !$0.processExited } ?? false) }.count
     }
-
-    /// Whether closed-lid sleep protection should hold. A card stuck in Starting
-    /// (an agent that never came up) stops counting after two minutes.
-    var keepsAwake: Bool {
-        !schedulePreparing.isEmpty || tabs.contains { tab in
-            guard let surface = tab.surface, !surface.processExited else { return false }
-            return tab.status == .working
-                || tab.status == .starting && -(tab.launchedAt ?? .distantPast).timeIntervalSinceNow < 120
-        }
-    }
 }
 
 /// Prompt search results of one query: matching session ids and their snippets.

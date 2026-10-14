@@ -12,7 +12,7 @@ shutil.copy('Resources/vhostty-sleep.sudoers', root / 'vhostty-sleep.sudoers')
 shutil.copy('build/Vhostty.app/Contents/MacOS/vhostty-sleep', root / 'vhostty-sleep')
 (root / 'stubs.swift').write_text('''import AppKit
 final class AppStore {
-    var keepsAwake = false
+    var workingAgentCount = 0
 }
 enum AppPaths {
     static let support = URL(fileURLWithPath: ProcessInfo.processInfo.environment["VHOSTTY_SUPPORT_DIR"]!)
@@ -34,22 +34,13 @@ func wait(_ reason: String, timeout: TimeInterval = 10, _ condition: () -> Bool)
 precondition(SleepProtection.authorizationRule.contains("%admin ALL=(root) NOPASSWD:"))
 let ownRule = dir.appendingPathComponent("vhostty_sleep")
 write("amphetamine_PowerProtect", SleepProtection.authorizationRule)
-precondition(!SleepProtection.hasInstalledRule(at: ownRule, owner: getuid()))
+precondition(!SleepProtection.hasInstalledRule(at: ownRule))
 try! SleepProtection.authorizationRule.write(to: ownRule, atomically: true, encoding: .utf8)
-precondition(SleepProtection.hasInstalledRule(at: ownRule, owner: getuid()))
-try! FileManager.default.removeItem(at: dir.appendingPathComponent("amphetamine_PowerProtect"))
-precondition(SleepProtection.hasInstalledRule(at: ownRule, owner: getuid()))
-precondition(!SleepProtection.hasInstalledRule(at: ownRule, owner: getuid() + 1))
-try! FileManager.default.setAttributes([.posixPermissions: 0o666], ofItemAtPath: ownRule.path)
-precondition(!SleepProtection.hasInstalledRule(at: ownRule, owner: getuid()))
-try! FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: ownRule.path)
+precondition(SleepProtection.hasInstalledRule(at: ownRule))
 try! "".write(to: ownRule, atomically: true, encoding: .utf8)
-precondition(!SleepProtection.hasInstalledRule(at: ownRule, owner: getuid()))
+precondition(!SleepProtection.hasInstalledRule(at: ownRule))
 try! FileManager.default.removeItem(at: ownRule)
-write("other-rule", SleepProtection.authorizationRule)
-try! FileManager.default.createSymbolicLink(at: ownRule, withDestinationURL: dir.appendingPathComponent("other-rule"))
-precondition(!SleepProtection.hasInstalledRule(at: ownRule, owner: getuid()))
-print("PASS own rule required; independent of Amphetamine; wrong owner, writable, empty and symlink rules rejected")
+print("PASS own rule required; independent of Amphetamine; other content rejected")
 let store = AppStore()
 let controller = SleepProtection(store: store)
 let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
@@ -72,22 +63,22 @@ write("authorization-result", "success")
 controller.authorize()
 wait("authorization did not check the item") { item.title == on && item.state == .on && controller.authorized }
 print("PASS authorized item is checked")
-store.keepsAwake = true
+store.workingAgentCount = 1
 wait("busy period did not apply protection") { value() == "1" }
-store.keepsAwake = false
+store.workingAgentCount = 0
 wait("idle did not restore sleep") { value() == "0" }
 print("PASS busy period applies and restores")
 write("fail")
-store.keepsAwake = true
+store.workingAgentCount = 1
 settle(2)
 precondition(item.title == on && controller.authorized, "runtime error with the rule in place changed the item")
 print("PASS runtime error with authorization intact keeps the item checked")
 try! FileManager.default.removeItem(at: dir.appendingPathComponent("fail"))
-store.keepsAwake = false
+store.workingAgentCount = 0
 settle()
 try! FileManager.default.removeItem(at: dir.appendingPathComponent("authorized"))
 write("fail")
-store.keepsAwake = true
+store.workingAgentCount = 1
 wait("lost authorization not shown") { item.title == off && item.state == .off && !controller.authorized }
 print("PASS runtime error after authorization is gone shows unauthorized")
 controller.stop()

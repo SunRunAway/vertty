@@ -27,7 +27,7 @@ case = root / 'watchdog'
 case.mkdir()
 (case / 'value').write_text('0')
 def helper(*extra):
-    return subprocess.Popen([str(binary / 'vhostty-sleep'), str(case), *extra, '--test-dir', str(case)],
+    return subprocess.Popen([str(binary / 'vhostty-sleep'), *extra, '--test-dir', str(case)],
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 def end(p):
     p.stdin.close(); return p.wait(timeout=10)
@@ -66,14 +66,6 @@ try:
     assert read(case / 'value') == '1', 'did not respect Amphetamine started after launch'
     (case / 'amphetamine').unlink(); (case / 'value').write_text('0')
     print('PASS Amphetamine started during a lease', flush=True)
-    # A second lease waits until the first has finished restoring.
-    first = helper(); first.stdout.readline()
-    second = helper(); time.sleep(1)
-    assert second.poll() is None and read(case / 'value') == '1'
-    end(first)
-    assert second.stdout.readline() == b'active\n' and read(case / 'value') == '1', 'second lease not applied after first'
-    assert end(second) == 0 and read(case / 'value') == '0'
-    print('PASS second lease waits for the first to restore', flush=True)
     # Whoever sets the value back to 0 during a lease, it is re-applied.
     p = helper(); p.stdout.readline()
     (case / 'value').write_text('0')
@@ -215,17 +207,3 @@ try:
 finally:
     stop(); log.close()
 
-if '--skip-starting' in sys.argv:
-    sys.exit(0)
-# A card stuck in Starting stops counting after two minutes.
-(case / 'value').write_text('0')
-(case / 'state.json').write_text(json.dumps({'projects': [{'id': str(uuid.uuid4()), 'name': 'Sleep fixture', 'path': str(project), 'expanded': True}], 'tabs': []}))
-log = (case / 'app.log').open('a')
-try:
-    start()
-    drive('new codex')
-    wait(lambda: read(case / 'value') == '1', 'starting card did not acquire')
-    wait(lambda: read(case / 'value') == '0', 'stuck starting card kept the Mac awake', timeout=135)
-    print('PASS stuck Starting card released', flush=True)
-finally:
-    stop(); log.close()

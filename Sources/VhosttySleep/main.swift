@@ -7,8 +7,6 @@ import Carbon
 // Vhostty starts it when tasks begin and closes stdin when they end; an app
 // crash or force-quit closes the pipe too, so sleep is restored either way.
 let args = CommandLine.arguments
-guard args.count >= 2 else { exit(2) }
-let directory = URL(fileURLWithPath: args[1], isDirectory: true)
 let test = args.firstIndex(of: "--test-dir").flatMap { $0 + 1 < args.count ? URL(fileURLWithPath: args[$0 + 1]) : nil }
 // Writes to a closed stdout must not kill us before sleep is restored.
 signal(SIGPIPE, SIG_IGN)
@@ -19,9 +17,6 @@ let signals = [SIGTERM, SIGINT].map { sig -> DispatchSourceSignal in
     // Treat a signal like the lease ending: closing stdin ends the wait below.
     s.setEventHandler { close(STDIN_FILENO) }; s.resume(); return s
 }
-// Wait for a previous helper to finish restoring so it can't undo our setting.
-let lock = open(directory.appendingPathComponent("sleep.lock").path, O_CREAT | O_RDWR | O_CLOEXEC, 0o600)
-guard lock >= 0, flock(lock, LOCK_EX) == 0 else { exit(3) }
 func run(_ path: String, _ arguments: [String]) -> (Int32, String) {
     let p = Process(), pipe = Pipe()
     p.executableURL = URL(fileURLWithPath: path); p.arguments = arguments

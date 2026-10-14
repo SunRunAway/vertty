@@ -76,33 +76,13 @@ final class SleepProtection {
         guard let url = ruleResourceURL else { return "" }
         return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
     }
-    /// Check our own root-owned rule, never a permission supplied by another app.
-    static func hasInstalledRule(at url: URL, owner: uid_t = 0) -> Bool {
-        guard !authorizationRule.isEmpty else { return false }
-        let fd = open(url.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
-        guard fd >= 0 else { return false }
-        let file = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
-        var info = stat()
-        guard fstat(fd, &info) == 0, info.st_uid == owner,
-              info.st_mode & S_IFMT == S_IFREG, info.st_mode & 0o022 == 0,
-              info.st_size == authorizationRule.utf8.count,
-              let data = try? file.readToEnd() else { return false }
-        return String(data: data, encoding: .utf8) == authorizationRule
+    /// Our own rule file, never a permission supplied by another app.
+    static func hasInstalledRule(at url: URL) -> Bool {
+        !authorizationRule.isEmpty && (try? String(contentsOf: url, encoding: .utf8)) == authorizationRule
     }
     private func hasPermission() -> Bool {
         if let fixture { return FileManager.default.fileExists(atPath: fixture.appendingPathComponent("authorized").path) }
-        guard Self.hasInstalledRule(at: Self.ruleURL) else { return false }
-        // Also verify that sudo loads the rule; a timestamp is not lasting authorization.
-        let p = Process(), pipe = Pipe()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
-        p.arguments = ["-n", "-l"]; p.standardOutput = pipe; p.standardError = FileHandle.nullDevice
-        do { try p.run() } catch { return false }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile(); p.waitUntilExit()
-        guard p.terminationStatus == 0 else { return false }
-        let text = String(decoding: data, as: UTF8.self)
-        // sudo wraps long rules; join continuation lines. Only accept the narrow rule we install.
-        let compact = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        return compact.contains("NOPASSWD: /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a disablesleep 0")
+        return Self.hasInstalledRule(at: Self.ruleURL)
     }
     /// What Allow does: install the rule (or confirm it), then enable.
     func authorize() {
@@ -169,7 +149,7 @@ final class SleepProtection {
         }
     }
     private func tick() {
-        if store.keepsAwake {
+        if store.workingAgentCount > 0 {
             // Each busy period starts one lease.
             if !active { active = true; spawn() }
         } else if active {
@@ -180,8 +160,7 @@ final class SleepProtection {
     private func spawn() {
         let p = Process(), stdin = Pipe(), stdout = Pipe()
         p.executableURL = Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent("vhostty-sleep")
-        p.arguments = [AppPaths.support.path]
-        if let fixture { p.arguments! += ["--test-dir", fixture.path] }
+        if let fixture { p.arguments = ["--test-dir", fixture.path] }
         p.standardError = FileHandle.nullDevice
         // Only the helper may hold the lease pipe, or a crash would not end the lease.
         _ = fcntl(stdin.fileHandleForWriting.fileDescriptor, F_SETFD, FD_CLOEXEC)
