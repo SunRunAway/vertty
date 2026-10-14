@@ -62,6 +62,16 @@ hooks 事件的传递路径：`vhostty-hook`（App 里自带的一个小程序�
 - **对话里管理**：内置 skill 在 `Resources/plugin/vhostty/skills/schedule/SKILL.md`，Claude 由 `vhostty-claude` 加 `--plugin-dir` 加载，技能名 `vhostty:schedule`，它调用 `$VHOSTTY_SCHEDULE_CLI`（即 `vhostty-schedule`）。Codex 没有只对单个会话加 skill 的办法，所以改用 MCP：`vhostty-codex` 用 `-c mcp_servers.vhostty…` 给这张卡片挂上 `vhostty-schedule mcp`，同样的操作做成工具，使用说明写在工具描述和 server 的 instructions 里，不写 Codex 的配置文件。`vhostty-schedule` 它通过 hook socket 发 `schedule\n<JSON>` 请求并读回 JSON。接口能查询，能直接暂停、恢复、立即运行（跟界面上一样一键完成）；新建、编辑和删除只是打开平时用的任务侧栏或删除确认框，参数已填好，用户确认才保存，取消就什么都不留。接口没有批准操作，请求里多出的字段会被拒绝；侧栏有未保存的改动或确认框开着时，新的请求直接报错。`claude-settings.json` 里的 `sandbox.network.allowUnixSockets` 只放行这个 socket，让 skill 在 Claude Code 的沙箱里也能连上。
 - **显示器休眠**：显示器全部休眠时没有可用的显示器，libghostty 原本会因为建不了 CVDisplayLink 而创建终端失败；补丁里改成这时不用 display link，靠内容变化驱动绘制，这样定时任务在显示器关着时也能启动。
 
+### 远程控制
+
+产品规则见 [docs/spec/remote-client-product.md](docs/spec/remote-client-product.md)。
+
+- **协议**：一条 WebSocket，消息是 `RemoteKit/Proto/vhostty_remote.proto` 定义的 Protobuf（每帧一条，客户端发 `ClientMessage`，服务端发 `ServerMessage`）。改了 proto 后运行 `scripts/gen-proto.sh` 重新生成 Swift 代码（protoc 和 protoc-gen-swift 编译到 `build/tools`）。`RemoteKit` 是 Mac 和 iPhone 共用的 Swift 包：协议代码和客户端 `RemoteClient`（连接、重连、请求、终端流）。
+- **服务端**：`Sources/Vhostty/Remote/RemoteServer.swift` 用 Network.framework 监听，同时只留一个客户端，新连接接管旧连接；`RemoteBridge.swift` 把 `AppStore` 的项目、卡片和历史做成 State（有变化才发），执行新建、恢复、关闭等请求，并把卡片终端转给客户端。
+- **终端镜像**：补丁给 Ghostty 加了 tap（`src/termio/remote.zig`）：打开时先发一份快照（把屏幕、滚动历史和终端模式重新写成 VT 序列），之后转发程序的原始输出，网格尺寸变了就重发快照。客户端的终端用补丁里的 host-managed 后端（`src/termio/HostManaged.zig`，改自 libghostty-spm）：没有 pty，输出由 `ghostty_surface_write_buffer` 喂进去，键盘、粘贴产生的字节通过回调交给客户端发回去，终端对查询的应答一律丢掉，由电脑上的真终端回答。
+- **尺寸**：会话的网格跟随最后一个进入、调整视口或输入的一端。服务端用 `ghostty_surface_set_grid_override` 只改行列、不改窗口；客户端每次键盘输入或粘贴之前先发 `AlignForInput`，本机输入也会先恢复本机尺寸。Ghostty 的 IO 线程会把连续的 resize 合并 25ms，补丁在每次写入前先应用还没处理的 resize（`Thread.zig` 的 `flushResize`），保证输入按新尺寸到达程序。
+- **iPhone**：`iOS/Vhostty.xcodeproj`，要用 Xcode 编译。终端用 libghostty-spm 预编译的 GhosttyKit 和它的 UIKit 终端视图，源码放在 `iOS/GhosttyTerminal`，Vhostty 的改动记在其中的 `VHOSTTY.md`。它没有 grid override，所以会话尺寸比屏幕大时，把终端视图按会话的网格布局再整体缩小显示。
+
 ## 为了不装 Xcode 做的处理
 
 Ghostty 官方的 macOS 构建依赖 Xcode。为了只用 Command Line Tools 就能编译，`patches/ghostty-vhostty.patch` 对 Ghostty 做了这些改动：
@@ -70,7 +80,7 @@ Ghostty 官方的 macOS 构建依赖 Xcode。为了只用 Command Line Tools 就
 2. **在 macOS 上额外输出静态库 `libghostty.a` 和资源文件**。官方构建只产出 xcframework。
 3. **修复打包问题**：新版 `libtool` 会静默丢弃 zig 打包时没有 8 字节对齐的目标文件，改成先解包再重新打包。
 
-补丁里还有一处与 Xcode 无关：显示器全部休眠时，终端不用 CVDisplayLink 也能创建（见上文“定时任务”）。
+补丁里还有与 Xcode 无关的改动：显示器全部休眠时，终端不用 CVDisplayLink 也能创建（见上文“定时任务”）；远程控制用到的终端镜像、host-managed 后端和网格覆盖（见上文“远程控制”）。
 
 `scripts/build-ghostty.sh` 编译前把补丁打到 `vendor/ghostty` 的工作区里，之后一直留着。`.gitmodules` 设了 `ignore = dirty`，所以主仓库的 `git status` 不显示这些改动；要看补丁是否打上，用 `git -C vendor/ghostty status`。
 
@@ -110,10 +120,15 @@ build/Vhostty.app/Contents/MacOS/Vhostty
 | `newschedule` / `closepanel` | 打开新建任务侧栏 / 关闭侧栏 |
 | `panelsave` / `panelcancel` | 保存 / 撤销侧栏里的改动（等于点“保存”/“取消”） |
 | `cmdj-through-terminal` | 检查 ⌘J 是被终端吃掉还是交给了菜单，结果写到 `keyequiv.txt` |
+| `remote <地址>` | 打开远程窗口连接这个地址 |
+| `remoteopen <n>` / `remotenew` | 远程窗口打开第 n 张卡片 / 新建会话 |
+| `remotetext …` / `remoteenter` | 往远程窗口的终端输入文字 / 回车 |
 
 按键和文字只会发给用 `to` / `toshell` 明确指定的会话。截图时如果有确认框（sheet）打开，另存为 `sheet.png`；`state.txt` 末尾列出定时任务及其运行记录。
 
 `make app` 后运行 `python3 scripts/test-codex-history.py`，可在临时状态目录和数据库里验证 Codex 历史在最后一个数据库写连接关闭、数据库暂时被锁、恢复和真正清空时的行为；测试不会启动终端会话，并按 PID 停止自己的 App 实例。
+
+远程控制有三个测试，都在临时状态目录里启动自己的实例和模拟 agent（记录收到输入时的终端尺寸），按 PID 停止：`scripts/test-remote.py` 用 `remote-probe`（`cd RemoteKit && swift build --product remote-probe`，按行读命令的测试客户端）验证协议和服务端；`scripts/test-remote-mac.py` 用两个实例验证 Mac 上的远程窗口；`scripts/test-remote-ios.py` 在 iOS 模拟器里验证 iPhone app，编译命令写在脚本开头，app 以 `VHOSTTY_DEBUG=1` 启动时从容器的 `Documents/debug/input.txt` 读命令、把状态写到 `state.txt`。
 
 `python3 scripts/test-session-branches.py` 用临时 HOME、仓库、会话记录及模拟的 agent/gh，验证共享工作区切分支不会覆盖其他会话的分支和 PR，同时检查会话自身换分支、回到 master 时的 PR 更新。测试按 PID 停止自己的 App 实例。
 

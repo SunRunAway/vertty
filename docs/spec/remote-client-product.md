@@ -1,6 +1,6 @@
 # Vhostty 远程客户端 MVP
 
-状态：产品范围已确认，尚未实现。更新日期：2026 年 10 月 14 日。
+状态：已实现（服务端、Mac 远程窗口、iPhone app）。更新日期：2026 年 10 月 14 日。
 
 用户通过 iPhone 或另一台 Mac 上的 Vhostty，连接自己的电脑，查看项目、会话和历史，继续操作电脑上的 Claude Code / Codex。会话和任务实际运行在被连接的电脑上。
 
@@ -179,7 +179,7 @@ Live status 和 Session history 以被连接电脑的实际信息为准。远程
 
 - Claude Code / Codex 继续运行在被连接的电脑上。手机内嵌终端显示和输入组件，不在手机上运行这些 agent 或本地项目。
 - PTY 是电脑本地的终端接口，不是网络协议。远程连接传输终端输入输出字节和控制消息，客户端解析终端输出；用户输入写入对应会话的终端，不依赖模拟系统键盘或聚焦桌面窗口。
-- iOS 优先评估原生 libghostty 集成。已有 [gterm](https://github.com/madeye/gterm) 和 [libghostty-spm](https://github.com/Lakr233/libghostty-spm) 等参考项目，但包含 iOS 适配和补丁，不能假定桌面端现有集成可以直接复用。具体依赖与适配方式需通过构建和运行验证后确定。
+- iOS 优先评估原生 libghostty 集成。已有 [gterm](https://github.com/madeye/gterm) 和 [libghostty-spm](https://github.com/Lakr233/libghostty-spm) 等参考项目，但包含 iOS 适配和补丁，不能假定桌面端现有集成可以直接复用。具体依赖与适配方式需通过构建和运行验证后确定。结论：采用 libghostty-spm 预编译的 GhosttyKit 和它的 UIKit 终端视图（源码放在 `iOS/GhosttyTerminal`，改动见其中的 `VHOSTTY.md`），已在 iOS 模拟器里验证。
 - 同一个 PTY 只有一套行列尺寸，采用最近一次由本地或远程端触发的尺寸变化。远程端进入 session 或 iPhone 回到前台时重新提交远程尺寸，离开后恢复本地尺寸；不实现本地与远程之间的输入锁定，也不因另一端的尺寸同步反复覆盖。
 - 本地端与远程端每次发送输入时，一并携带当前端实际可用的终端行列数。服务端先比较会话尺寸，仅在不同时调整，再处理该次输入。当前端尺寸取自自身显示区域，不使用另一端同步过来的会话尺寸；该规则写入 `.proto` 定义和注释。
 - 各端的输入尺寸对齐仅由键盘输入（包括 iPhone 软键盘和按键栏 8 个键）和粘贴触发；滚动历史、点击和文本选择即使作为鼠标事件写入会话，也不走输入尺寸对齐流程。调整 PTY 行列数不调整客户端窗口或显示区域大小。
