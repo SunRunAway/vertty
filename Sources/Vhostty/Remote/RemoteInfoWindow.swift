@@ -74,7 +74,7 @@ struct RemoteInfoView: View {
         switch server.status {
         case .off: Text("Off. Turn on “Allow Remote Connections” in the Vhostty menu.")
         case .starting: Text("Starting…")
-        case .listening: Text("Port open")
+        case .listening: Text("Listening")
         case .failed(let reason): Text("Failed to start: \(reason)").foregroundStyle(.red)
         }
     }

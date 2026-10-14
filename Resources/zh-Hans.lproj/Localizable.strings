@@ -273,7 +273,7 @@
 "Anyone who can reach this address can use your sessions. Keep it to networks you trust, such as a VPN." = "任何能访问这个地址的人都能使用你的会话。请只在可信的网络中使用，例如 VPN。";
 "Off. Turn on “Allow Remote Connections” in the Vhostty menu." = "已关闭。可在 Vhostty 菜单中打开“允许远程连接”。";
 "Starting…" = "正在启动…";
-"Port open" = "端口已开启";
+"Listening" = "端口已开启";
 "Failed to start: %@" = "启动失败：%@";
 "VHOSTTY_REMOTE_PORT is “%@”, not a port number (1–65535)." = "VHOSTTY_REMOTE_PORT 的值“%@”不是有效端口号（1–65535）。";
 "The port is already in use by another program." = "端口已被其他程序占用。";
