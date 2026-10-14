@@ -1,6 +1,8 @@
 // Renders the iconset for Resources/AppIcon.icns. A knock-off of Ghostty's icon
 // (metal bezel, blue CRT screen, glowing ghost) with the ghosts stacked as a
 // vertical tab strip and the ">_" prompt turned on its side into "v|".
+// Also renders the iOS app's icon (iOS/Vhostty/Assets.xcassets): the same
+// picture with the bezel filling the square, since iOS rounds the corners.
 // Run: swiftc scripts/make-icon.swift -o /tmp/make-icon && /tmp/make-icon . &&
 //      iconutil -c icns build/AppIcon.iconset -o Resources/AppIcon.icns
 import AppKit
@@ -144,6 +146,28 @@ func render(_ size: CGFloat) -> NSBitmapImageRep {
     return rep
 }
 
+/// The iOS icon: opaque, the bezel (the middle 80% of the Mac icon) filling
+/// the square.
+func renderIOS(_ size: CGFloat) -> NSBitmapImageRep {
+    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size), pixelsHigh: Int(size),
+                               bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                               colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+    let bounds = NSRect(x: 0, y: 0, width: size, height: size)
+    NSGradient(colors: [rgb(0.93, 0.93, 0.95), rgb(0.62, 0.62, 0.65), rgb(0.80, 0.80, 0.83)])!
+        .draw(in: bounds, angle: -90)
+    let mac = NSImage(size: NSSize(width: size * 1.25, height: size * 1.25))
+    mac.addRepresentation(render(size * 1.25))
+    mac.draw(in: NSRect(x: -size * 0.125, y: -size * 0.125, width: size * 1.25, height: size * 1.25))
+    NSGraphicsContext.restoreGraphicsState()
+    // Without an alpha channel, as App Store icons must be.
+    let opaque = CGContext(data: nil, width: Int(size), height: Int(size), bitsPerComponent: 8, bytesPerRow: 0,
+                           space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    opaque.draw(rep.cgImage!, in: CGRect(x: 0, y: 0, width: size, height: size))
+    return NSBitmapImageRep(cgImage: opaque.makeImage()!)
+}
+
 let root = URL(fileURLWithPath: CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : ".")
 let iconset = root.appendingPathComponent("build/AppIcon.iconset")
 try? FileManager.default.removeItem(at: iconset)
@@ -156,3 +180,9 @@ for base in [16, 32, 128, 256, 512] {
     }
 }
 print(iconset.path)
+
+let iosIcon = root.appendingPathComponent("iOS/Vhostty/Assets.xcassets/AppIcon.appiconset")
+try! FileManager.default.createDirectory(at: iosIcon, withIntermediateDirectories: true)
+try! renderIOS(1024).representation(using: .png, properties: [:])!
+    .write(to: iosIcon.appendingPathComponent("icon-1024.png"))
+print(iosIcon.path)

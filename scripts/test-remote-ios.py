@@ -265,6 +265,15 @@ try:
     wait(lambda: terminal("session") == own and terminal("scale") == "1.00", "the iPhone didn't take its size back")
     print(f"PASS each input lands at its sender's size (computer {local}, device {own})", flush=True)
 
+    # Turning the device resizes the session to the new screen, and back.
+    drive("rotate landscape")
+    wide = settled_size("the session didn't follow the device into landscape")
+    assert int(wide.split("x")[0]) > int(own.split("x")[0]), f"landscape {wide} isn't wider than portrait {own}"
+    simctl("io", udid, "screenshot", str(root / "landscape.png"))
+    drive("rotate portrait")
+    wait(lambda: settled_size("the session didn't follow the device back") == own, "portrait didn't restore the size")
+    print(f"PASS turning the device resizes the session (landscape {wide}, portrait {own})", flush=True)
+
     drive("back")
     wait(lambda: last_size() == local and f"--- tab {card_id}" in read(server_snap / "state.txt")
          and "remoteGrid=-" in read(server_snap / "state.txt"), "leaving didn't restore the computer's size")
