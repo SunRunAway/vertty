@@ -141,13 +141,11 @@ final class SleepProtection {
         hasFailed = false
         if timer == nil {
             requestAmphetamineConsent()
-            // Restore sleep a crashed helper may have left disabled.
-            spawn(release: true)
             timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.tick() }
             if let timer { RunLoop.main.add(timer, forMode: .common); RunLoop.main.add(timer, forMode: .modalPanel) }
             tick()
         } else if active && lease == nil {
-            spawn(release: false) // Retry from the menu during a busy period.
+            spawn() // Retry from the menu during a busy period.
         }
     }
     /// The only place that may show the automation consent prompt, so it comes at launch
@@ -164,34 +162,28 @@ final class SleepProtection {
         if store.keepsAwake {
             lastBusy = Date()
             // Each busy period starts one lease; a failed one waits for the next period.
-            if !active { active = true; spawn(release: false) }
+            if !active { active = true; spawn() }
         } else if active, -lastBusy.timeIntervalSinceNow >= 15 {
             active = false
             endLease()
         }
     }
-    private func spawn(release: Bool) {
-        let p = Process()
+    private func spawn() {
+        let p = Process(), stdin = Pipe(), stdout = Pipe()
         p.executableURL = Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent("vhostty-sleep")
-        p.arguments = [AppPaths.support.path] + (release ? ["--release"] : [])
+        p.arguments = [AppPaths.support.path]
         if let fixture { p.arguments! += ["--test-dir", fixture.path] }
         p.standardError = FileHandle.nullDevice
-        var stdin: Pipe?, stdout: Pipe?
-        if release {
-            p.standardInput = FileHandle.nullDevice; p.standardOutput = FileHandle.nullDevice
-        } else {
-            stdin = Pipe(); stdout = Pipe()
-            // Only the helper may hold the lease pipe, or a crash would not end the lease.
-            _ = fcntl(stdin!.fileHandleForWriting.fileDescriptor, F_SETFD, FD_CLOEXEC)
-            _ = fcntl(stdin!.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
-            p.standardInput = stdin; p.standardOutput = stdout
-            // The helper reports "active" once applied, then "active"/"error" on re-applying.
-            stdout!.fileHandleForReading.readabilityHandler = { [weak self] handle in
-                let data = handle.availableData
-                guard !data.isEmpty else { handle.readabilityHandler = nil; return }
-                let last = String(decoding: data, as: UTF8.self).split(separator: "\n").last
-                DispatchQueue.main.async { if self?.lease === p { self?.hasFailed = last == "error" } }
-            }
+        // Only the helper may hold the lease pipe, or a crash would not end the lease.
+        _ = fcntl(stdin.fileHandleForWriting.fileDescriptor, F_SETFD, FD_CLOEXEC)
+        _ = fcntl(stdin.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
+        p.standardInput = stdin; p.standardOutput = stdout
+        // The helper reports "active" once applied, then "active"/"error" on re-applying.
+        stdout.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            guard !data.isEmpty else { handle.readabilityHandler = nil; return }
+            let last = String(decoding: data, as: UTF8.self).split(separator: "\n").last
+            DispatchQueue.main.async { if self?.lease === p { self?.hasFailed = last == "error" } }
         }
         p.terminationHandler = { [weak self] p in
             DispatchQueue.main.async {
@@ -201,7 +193,7 @@ final class SleepProtection {
             }
         }
         do { try p.run() } catch { hasFailed = true; return }
-        if !release { lease = p; input = stdin?.fileHandleForWriting }
+        lease = p; input = stdin.fileHandleForWriting
     }
     private func endLease() {
         try? input?.close(); input = nil

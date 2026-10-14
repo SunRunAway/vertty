@@ -29,9 +29,6 @@ case.mkdir()
 def helper(*extra):
     return subprocess.Popen([str(binary / 'vhostty-sleep'), str(case), *extra, '--test-dir', str(case)],
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-def release():
-    return subprocess.run([str(binary / 'vhostty-sleep'), str(case), '--release', '--test-dir', str(case)],
-                          stdin=subprocess.DEVNULL, timeout=10).returncode
 def end(p):
     p.stdin.close(); return p.wait(timeout=10)
 p = helper()
@@ -43,18 +40,15 @@ try:
     p = helper(); p.stdout.readline()
     p.send_signal(15); p.wait(timeout=10)
     assert read(case / 'value') == '0', 'SIGTERM did not restore'
-    p = helper(); p.stdout.readline()
-    p.kill(); p.wait()
-    assert read(case / 'value') == '1'
-    assert release() == 0 and read(case / 'value') == '0', 'killed helper not recovered by --release'
-    print('PASS SIGTERM restoration / killed helper recovery', flush=True)
+    print('PASS SIGTERM restoration', flush=True)
     # Restore even a pre-existing 1; only Amphetamine's two true states exempt it.
     for state in [None, 'true,true', 'true,false', 'false,true', 'false,false', 'error']:
         amphetamine = case / 'amphetamine'
         if state is None: amphetamine.unlink(missing_ok=True)
         else: amphetamine.write_text(state)
         (case / 'value').write_text('1')
-        assert release() == 0, state
+        p = helper(); p.stdout.readline()
+        assert end(p) == 0, state
         kept = '1' if state == 'true,true' else '0'
         assert read(case / 'value') == kept, f'restore state {state}'
         # Enabling protection is independent of Amphetamine, including query failure.
@@ -70,7 +64,7 @@ try:
     (case / 'amphetamine').write_text('true,true')
     end(p)
     assert read(case / 'value') == '1', 'did not respect Amphetamine started after launch'
-    (case / 'amphetamine').unlink(); assert release() == 0
+    (case / 'amphetamine').unlink(); (case / 'value').write_text('0')
     print('PASS Amphetamine started during a lease', flush=True)
     # A second lease waits until the first has finished restoring.
     first = helper(); first.stdout.readline()
@@ -162,7 +156,9 @@ try:
     (case / 'authorization-result').write_text('success')
     (case / 'value').write_text('1')
     button(['Allow', '允许'])
-    wait(lambda: read(case / 'value') == '0', 'authorization did not run startup recovery')
+    wait(lambda: (case / 'authorized').exists(), 'authorization did not succeed')
+    time.sleep(2)
+    assert read(case / 'value') == '1', 'enabling overwrote an external setting'
     stop()
     assert (case / 'authorized').exists()
     assert not (case / 'sleep-declined').exists()

@@ -72,7 +72,9 @@ write("authorization-result", "success")
 write("value", "1")
 controller.configure()
 wait("successful retry did not clear failure") { item.title == normal }
-wait("startup recovery did not restore sleep") { value() == "0" }
+RunLoop.current.run(until: Date().addingTimeInterval(1))
+precondition(value() == "1", "enabling overwrote an external setting")
+write("value", "0")
 write("fail")
 store.keepsAwake = true
 wait("runtime failure did not update menu") { item.title == failed }

@@ -6,11 +6,9 @@ import Carbon
 // Unprivileged lease: only the two fixed pmset commands run through sudo.
 // Vhostty starts it when tasks begin and closes stdin when they end; an app
 // crash or force-quit closes the pipe too, so sleep is restored either way.
-// `--release` only restores sleep (startup recovery after a crash of this helper).
 let args = CommandLine.arguments
 guard args.count >= 2 else { exit(2) }
 let directory = URL(fileURLWithPath: args[1], isDirectory: true)
-let releaseOnly = args.contains("--release")
 let test = args.firstIndex(of: "--test-dir").flatMap { $0 + 1 < args.count ? URL(fileURLWithPath: args[$0 + 1]) : nil }
 // Writes to a closed stdout must not kill us before sleep is restored.
 signal(SIGPIPE, SIG_IGN)
@@ -85,7 +83,6 @@ func release() -> Bool {
     if amphetamineProtectsSleep() == true { return true }
     return setDisabled(false)
 }
-if releaseOnly { exit(release() ? 0 : 1) }
 func amphetamineRunning() -> Bool {
     if let test { return FileManager.default.fileExists(atPath: test.appendingPathComponent("amphetamine").path) }
     return !NSRunningApplication.runningApplications(withBundleIdentifier: "com.if.Amphetamine").isEmpty
