@@ -4,6 +4,7 @@ import CoreServices
 /// Only an explicit refusal is persisted. Authorization is checked on every launch.
 final class SleepProtection {
     weak var menuItem: NSMenuItem? { didSet { updateMenuTitle() } }
+    weak var window: NSWindow?
     private(set) var hasFailed = false { didSet { updateMenuTitle() } }
     private let store: AppStore
     private var timer: Timer?
@@ -38,14 +39,23 @@ final class SleepProtection {
         alert.informativeText = String(localized: "Your Mac stays awake with the lid closed while tasks run, then returns to normal sleep when they finish. Administrator authorization allows this Mac’s administrator accounts to run only these two commands without a password:\n\n/usr/bin/pmset -a disablesleep 1 — prevent sleep\n/usr/bin/pmset -a disablesleep 0 — restore sleep")
         alert.addButton(withTitle: String(localized: "Allow"))
         alert.addButton(withTitle: String(localized: "Don’t Allow"))
-        let answer = alert.runModal()
-        if answer == .alertSecondButtonReturn {
-            do { try Data().write(to: declined, options: .atomic); stop(); hasFailed = false }
-            catch { stop(); hasFailed = true }
-        } else if answer == .alertFirstButtonReturn {
-            // A previous refusal no longer applies, including when authorization is cancelled.
-            try? FileManager.default.removeItem(at: declined)
-            authorize()
+        let handle = { [self] (answer: NSApplication.ModalResponse) in
+            checking = false
+            if answer == .alertSecondButtonReturn {
+                do { try Data().write(to: declined, options: .atomic); stop(); hasFailed = false }
+                catch { stop(); hasFailed = true }
+            } else if answer == .alertFirstButtonReturn {
+                // A previous refusal no longer applies, including when authorization is cancelled.
+                try? FileManager.default.removeItem(at: declined)
+                authorize()
+            }
+        }
+        // A sheet on the window doesn't bring Vhostty to the front and take focus.
+        if let window, window.isVisible {
+            checking = true
+            alert.beginSheetModal(for: window, completionHandler: handle)
+        } else {
+            handle(alert.runModal())
         }
     }
     private func checkPermission() {

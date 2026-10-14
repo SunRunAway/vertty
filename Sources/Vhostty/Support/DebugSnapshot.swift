@@ -39,7 +39,7 @@ final class DebugSnapshot {
         var targetShell = false
         for line in content.split(separator: "\n").map(String.init) {
             if line.hasPrefix("alertbutton "), let index = Int(line.dropFirst(12)),
-               let modal = NSApp.modalWindow {
+               let modal = window?.attachedSheet ?? NSApp.modalWindow {
                 let buttons = modal.contentView.map { Self.buttons(in: $0) } ?? []
                 if buttons.indices.contains(index) { buttons[index].performClick(nil) }
                 continue
@@ -217,7 +217,7 @@ final class DebugSnapshot {
            let item = menu.items.first(where: { $0.action == NSSelectorFromString("configureSleepProtection") }) {
             try? item.title.write(to: directory.appendingPathComponent("sleep-menu.txt"), atomically: true, encoding: .utf8)
         }
-        let modal = NSApp.modalWindow
+        let modal = window?.attachedSheet ?? NSApp.modalWindow
         let titles = modal?.contentView.map { Self.buttons(in: $0).map(\.title).joined(separator: "\n") } ?? ""
         try? titles.write(to: directory.appendingPathComponent("alert.txt"), atomically: true, encoding: .utf8)
         if let modal, let cg = vhostty_window_image(CGWindowID(modal.windowNumber)) {

@@ -46,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         store.load()
         buildMenu()
         createWindow()
+        sleepProtection.window = window
         store.activateSelection()
 
         if let dir = ProcessInfo.processInfo.environment["VHOSTTY_DEBUG_SNAPSHOT"] {
