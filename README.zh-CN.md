@@ -12,7 +12,7 @@ Vhostty 是一个 macOS 原生终端，专门用来同时跑好几个 Claude Cod
 
 > Vhostty = **V**ertical + G**hostty**：把 Ghostty 的标签页竖过来，放进左侧栏。
 
-<p align="center"><img src="docs/screenshot.png" alt="Vhostty 截图：两个项目，Claude Code 和 Codex 的会话卡片上显示状态、分支、worktree 和 PR，右边是一个正在工作的 Codex 会话"></p>
+<p align="center"><img src="docs/screenshot.png" alt="Vhostty 截图：两个项目，Claude Code 和 Codex 的会话卡片上显示状态、分支、worktree 和 PR，右边是一个正在工作的新 Claude Code 会话"></p>
 
 ## 功能
 

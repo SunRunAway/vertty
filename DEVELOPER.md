@@ -130,6 +130,8 @@ git tag v0.2.0 && git push origin v0.2.0
 
 README 有英文（`README.md`）和中文（`README.zh-CN.md`）两份，改功能、快捷键或构建步骤时两份要一起改。
 
+README 的截图（`docs/screenshot.png`）用 `python3 scripts/readme-screenshot.py` 重新生成（先 `make app`，在沙箱外运行）。脚本在 `/private/tmp/vhostty-readme-demo` 新建两个演示项目（starboard、小账本，带 worktree），用临时状态目录和 debug driver 启动 `build/Vhostty.app`，起两个真实的 Claude 会话：一个回答简短问题后在后台完成（蓝点），另一个是新会话，在它工作时截图；其余卡片是 state.json 里未启动的卡片（分支、worktree、PR 都写好了）。工作期间的每一帧都留在 `frames/`，可以另挑一张。窗口大小靠命令行参数传入，结束后把已安装版本保存的窗口位置还原；运行前后都会删掉演示项目在 `~/.claude/projects` 下的会话记录，免得出现在历史里。演示目录首次运行时脚本会替 Claude 确认信任该文件夹。
+
 ## 多语言
 
 界面文字在代码里写英文（`String(localized:)`，以及 SwiftUI 的 `Text` / `Button` 等字面量），简体中文翻译在 `Resources/zh-Hans.lproj/Localizable.strings`，英文的单复数在 `Resources/en.lproj/Localizable.stringsdict`。App 跟随系统语言；想单独切换，可以在「系统设置 → 通用 → 语言与地区 → 应用程序」里给 Vhostty 指定语言，或者：
