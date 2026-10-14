@@ -197,7 +197,7 @@ private struct ScheduleActions: View {
 }
 
 /// Like a session card's status: a spinner while running, a pause sign when
-/// paused, red after a failed run, else an empty ring.
+/// paused, red after a failed run, else nothing (the space stays, so names line up).
 private struct TaskStateGlyph: View {
     let task: ScheduleTask
     let run: ScheduleRun?
@@ -211,7 +211,7 @@ private struct TaskStateGlyph: View {
             } else if run?.state == .failed {
                 Circle().fill(ScheduleText.red).frame(width: 9, height: 9)
             } else {
-                Circle().strokeBorder(Color.gray.opacity(0.8), lineWidth: 1.3).frame(width: 14, height: 14)
+                Color.clear
             }
         }
         .frame(width: 16, height: 16)
