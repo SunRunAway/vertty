@@ -38,6 +38,31 @@ final class DebugSnapshot {
         var target: TabSession?
         var targetShell = false
         for line in content.split(separator: "\n").map(String.init) {
+            // Window-local points from the top left; never clicks another app.
+            if line.hasPrefix("click "), let window {
+                let parts = line.split(separator: " ")
+                if parts.count == 3, let x = Double(parts[1]), let y = Double(parts[2]),
+                   let view = window.contentView {
+                    let local = NSPoint(x: x, y: view.isFlipped ? y : view.bounds.height - y)
+                    guard view.bounds.contains(local) else { continue }
+                    let point = view.convert(local, to: nil)
+                    window.makeKey()
+                    for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                        if let event = NSEvent.mouseEvent(
+                            with: type, location: point, modifierFlags: [],
+                            timestamp: ProcessInfo.processInfo.systemUptime,
+                            windowNumber: window.windowNumber, context: nil,
+                            eventNumber: 0, clickCount: 1, pressure: 1) {
+                            if type == .leftMouseDown {
+                                view.hitTest(local)?.mouseDown(with: event)
+                            } else {
+                                view.hitTest(local)?.mouseUp(with: event)
+                            }
+                        }
+                    }
+                }
+                continue
+            }
             if line.hasPrefix("alertbutton "), let index = Int(line.dropFirst(12)),
                let modal = window?.attachedSheet ?? NSApp.modalWindow {
                 let buttons = modal.contentView.map { Self.buttons(in: $0) } ?? []
@@ -213,6 +238,16 @@ final class DebugSnapshot {
 
     private func capture() {
         drive()
+        if let menu = NSApp.mainMenu?.items.compactMap(\.submenu).first(where: {
+            $0.items.contains { $0.action == NSSelectorFromString("toggleSidebar") }
+        }) {
+            menu.update()
+            let items = menu.items.filter {
+                $0.action == NSSelectorFromString("toggleSidebar") || $0.action == NSSelectorFromString("toggleShell")
+            }
+            let text = items.map { "\($0.title) enabled=\($0.isEnabled)" }.joined(separator: "\n")
+            try? text.write(to: directory.appendingPathComponent("view-menu.txt"), atomically: true, encoding: .utf8)
+        }
         if let menu = NSApp.mainMenu?.items.first?.submenu,
            let item = menu.items.first(where: { $0.action == NSSelectorFromString("configureSleepProtection") }) {
             try? item.title.write(to: directory.appendingPathComponent("sleep-menu.txt"), atomically: true, encoding: .utf8)
@@ -239,6 +274,7 @@ final class DebugSnapshot {
         }
 
         var lines: [String] = []
+        lines.append("sidebarVisible=\(store.sidebarVisible) sidebarWidth=\(store.sidebarWidth)")
         lines.append("projects: " + store.projects.map { "\($0.name)=\($0.path)" }.joined(separator: ", "))
         lines.append("selected: \(store.selectedTabID?.uuidString ?? "-")")
         lines.append("firstResponder: \(String(describing: window.firstResponder.map { type(of: $0) }))")

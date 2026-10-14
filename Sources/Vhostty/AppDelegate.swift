@@ -62,8 +62,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     @objc private func configureSleepProtection() { sleepProtection.configure() }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(toggleSidebar) {
+            menuItem.title = store.sidebarVisible ? String(localized: "Hide Sidebar") : String(localized: "Show Sidebar")
+        } else if menuItem.action == #selector(toggleShell) {
+            menuItem.title = store.selectedTab?.shellVisible == true ? String(localized: "Hide Terminal") : String(localized: "Show Terminal")
+            return store.selectedTab != nil
+        }
         // Once authorized, the sleep protection item is only a checked status line.
-        menuItem.action == #selector(configureSleepProtection) ? !sleepProtection.authorized : true
+        return menuItem.action == #selector(configureSleepProtection) ? !sleepProtection.authorized : true
     }
 
     private func createWindow() {
@@ -171,10 +177,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         addSubmenu(main, "Edit", edit)
 
         let view = NSMenu()
-        view.addItem(item("Show/Hide Sidebar", #selector(toggleSidebar), "s", [.command, .control]))
-        view.addItem(item("Show/Hide Terminal", #selector(toggleShell), "j"))
+        view.addItem(item("Hide Sidebar", #selector(toggleSidebar), "s", [.command, .control]))
+        view.addItem(item("Show Terminal", #selector(toggleShell), "j"))
         // Second shortcut (VS Code's ⌃`): a hidden item that still answers its key.
-        let altToggle = item("Show/Hide Terminal", #selector(toggleShell), "`", [.control])
+        let altToggle = item("Show Terminal", #selector(toggleShell), "`", [.control])
         altToggle.isHidden = true
         altToggle.allowsKeyEquivalentWhenHidden = true
         view.addItem(altToggle)
@@ -249,8 +255,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         if let app = GhosttyRuntime.shared.app { ghostty_app_open_config(app) }
     }
     @objc private func toggleSidebar() {
-        withAnimation(.easeOut(duration: 0.15)) { store.sidebarVisible.toggle() }
-        store.scheduleSave()
+        store.toggleSidebar()
     }
     @objc private func toggleShell() { store.toggleShell() }
     @objc private func focusAgentPane() { store.focusPane(shell: false) }

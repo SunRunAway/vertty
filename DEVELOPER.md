@@ -101,6 +101,7 @@ build/Vhostty.app/Contents/MacOS/Vhostty
 | `morehistory` / `toggleproject` | 当前项目追加 10 条历史 / 折叠或展开项目 |
 | `refreshhistory` | 立即刷新历史列表 |
 | `toggleshell` | 开关当前会话的底部终端 |
+| `click <x> <y>` | 点击测试窗口内的位置，坐标单位为点，原点在内容区域左上角 |
 | `focus claude` / `focus shell` | 聚焦上面 / 下面的终端 |
 | `menukey <ctrl\|cmd> <字符>` | 把快捷键直接交给主菜单处理 |
 | `post <ctrl\|cmd\|none> <字符>` | 模拟一次真实按键，走 AppKit 正常的分发流程 |

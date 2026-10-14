@@ -85,7 +85,13 @@ struct TitleStrip: View {
                 .padding(.trailing, 10)
             }
         }
-        .padding(.leading, store.sidebarVisible ? 0 : 76)
+        .padding(.leading, store.sidebarVisible ? 0 : 112)
+        .overlay(alignment: .leading) {
+            if !store.sidebarVisible {
+                SidebarToggleButton(store: store)
+                    .padding(.leading, 80)
+            }
+        }
         .frame(height: Self.height)
         .background(store.terminalBackground)
     }
@@ -105,6 +111,17 @@ private struct TitleStripLabel: View {
         }
         .font(.system(size: 12, weight: .medium))
         .padding(.horizontal, 16)
+    }
+}
+
+struct SidebarToggleButton: View {
+    @ObservedObject var store: AppStore
+
+    var body: some View {
+        IconButton(systemName: "sidebar.left",
+                   help: store.sidebarVisible ? "Hide Sidebar (⌃⌘S)" : "Show Sidebar (⌃⌘S)") {
+            store.toggleSidebar()
+        }
     }
 }
 

@@ -502,6 +502,11 @@ final class AppStore: ObservableObject {
         FileManager.default.fileExists(atPath: project.path) ? project.path : NSHomeDirectory()
     }
 
+    func toggleSidebar() {
+        withAnimation(.easeOut(duration: 0.15)) { sidebarVisible.toggle() }
+        scheduleSave()
+    }
+
     // MARK: - Bottom shell panel
 
     /// ⌘J: show the selected session's shell panel (starting it in Claude's

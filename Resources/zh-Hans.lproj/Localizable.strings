@@ -23,6 +23,12 @@
 "Clear Screen" = "清屏";
 "View" = "显示";
 "Show/Hide Sidebar" = "显示/隐藏侧栏";
+"Hide Sidebar" = "隐藏侧栏";
+"Show Sidebar" = "显示侧栏";
+"Hide Terminal" = "隐藏终端";
+"Show Terminal" = "显示终端";
+"Hide Sidebar (⌃⌘S)" = "隐藏侧栏 (⌃⌘S)";
+"Show Sidebar (⌃⌘S)" = "显示侧栏 (⌃⌘S)";
 "Show/Hide Terminal" = "显示/隐藏终端";
 "Focus Agent" = "聚焦 Agent";
 "Focus Terminal" = "聚焦终端";

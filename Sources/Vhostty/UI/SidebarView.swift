@@ -9,6 +9,10 @@ struct SidebarView: View {
         VStack(alignment: .leading, spacing: 0) {
             Color.clear.frame(height: 40) // traffic lights
                 .background(WindowDragArea())
+                .overlay(alignment: .trailing) {
+                    SidebarToggleButton(store: store)
+                        .padding(.trailing, 10)
+                }
 
             ScheduleEntry(store: store, schedules: store.schedules)
                 .padding(.horizontal, 8)
