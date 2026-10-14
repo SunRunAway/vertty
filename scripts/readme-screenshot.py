@@ -202,8 +202,7 @@ def make_repo(path, files):
     git(path, "init", "-q", "-b", "main")
     git(path, "add", "-A")
     git(path, "commit", "-q", "-m", "Initial commit")
-    # Worktrees live where Claude Code puts them; keep them and the demo
-    # settings out of git status.
+    # Worktrees live where Claude Code puts them; keep them out of git status.
     (path / ".git/info/exclude").write_text(".claude/\n")
     for name, branch in WORKTREES[path]:
         git(path, "worktree", "add", "-q", "-b", branch, f".claude/worktrees/{name}")
