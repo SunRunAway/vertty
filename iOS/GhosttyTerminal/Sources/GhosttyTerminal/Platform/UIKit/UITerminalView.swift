@@ -68,6 +68,13 @@
                 }
             }
 
+            /// Vhostty: a key pinned to the bar's trailing edge, outside the
+            /// scrolling keys, that hides the software keyboard (the iPhone's
+            /// keyboard has no key of its own for it).
+            open var inputAccessoryShowsDismissKey = false {
+                didSet { terminalInputAccessory.rebuildContent() }
+            }
+
             /// Toggles the software keyboard the way a clean tap does: the
             /// touch path calls this after the tap's click has been sent.
             /// Declared in the class body so a host's `makePlatformView`

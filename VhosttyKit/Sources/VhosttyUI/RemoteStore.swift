@@ -190,11 +190,24 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
                 let cardID = try await retrying {
                     try await self.client.newSession(projectID: project.id.uuidString, kind: kind.map(Remote.AgentKind.init), operationID: operation)
                 }
+                if let id = UUID(uuidString: cardID) { self.createdHere.insert(id) }
                 self.selectWhenKnown(cardID)
             } catch {
                 self.failure = error.localizedDescription
             }
         }
+    }
+
+    /// Cards this client just started, until they're first opened.
+    private var createdHere: Set<UUID> = []
+
+    /// Whether opening this card brings up the software keyboard: only when
+    /// typing comes next — a session just started here, or an agent waiting
+    /// for an answer. Anything else opens for reading; a tap on the terminal
+    /// brings the keyboard up.
+    public func opensWithKeyboard(_ id: UUID) -> Bool {
+        if createdHere.remove(id) != nil { return true }
+        return card(id)?.status == .needsInput
     }
 
     public func resumeSession(_ summary: SessionSummary, in project: Project) {

@@ -23,6 +23,12 @@
             )
             private let scrollView = UIScrollView()
             private let stackView = UIStackView()
+            /// Vhostty: see `UITerminalView.inputAccessoryShowsDismissKey`.
+            private lazy var dismissButton = AccessoryButton(size: buttonSize) { [weak terminalView] in
+                terminalView?.resignFirstResponder()
+            }
+            private var scrollToEdge: NSLayoutConstraint?
+            private var scrollToDismiss: NSLayoutConstraint?
             private var blurLeadingConstraint: NSLayoutConstraint?
             private var blurTrailingConstraint: NSLayoutConstraint?
             private var blurTopConstraint: NSLayoutConstraint?
@@ -65,6 +71,7 @@
                 let commandActivation = terminalView?.stickyModifiers.command ?? .inactive
 
                 keyButtons.forEach { $0.applyRegularStyle(style) }
+                dismissButton.applyRegularStyle(style)
 
                 for (modifier, button) in modifierButtons {
                     let activation = switch modifier {
@@ -86,6 +93,10 @@
 
                 let items = terminalView?.inputAccessoryItems ?? TerminalInputAccessoryItem.defaultItems
                 addArrangedViews(items.map(makeView(for:)))
+                let dismisses = terminalView?.inputAccessoryShowsDismissKey ?? false
+                dismissButton.isHidden = !dismisses
+                scrollToEdge?.isActive = !dismisses
+                scrollToDismiss?.isActive = dismisses
                 refreshContent()
             }
 
@@ -120,11 +131,19 @@
                 scrollView.clipsToBounds = true
                 blurView.contentView.addSubview(scrollView)
 
+                dismissButton.translatesAutoresizingMaskIntoConstraints = false
+                dismissButton.accessibilityLabel = "Hide Keyboard"
+                dismissButton.setImage(UIImage(systemName: "keyboard.chevron.compact.down"), for: .normal)
+                blurView.contentView.addSubview(dismissButton)
+                scrollToEdge = scrollView.trailingAnchor.constraint(equalTo: blurView.contentView.trailingAnchor)
+                scrollToDismiss = scrollView.trailingAnchor.constraint(equalTo: dismissButton.leadingAnchor, constant: -2)
+
                 NSLayoutConstraint.activate([
                     scrollView.leadingAnchor.constraint(equalTo: blurView.contentView.leadingAnchor),
-                    scrollView.trailingAnchor.constraint(equalTo: blurView.contentView.trailingAnchor),
                     scrollView.topAnchor.constraint(equalTo: blurView.contentView.topAnchor),
                     scrollView.bottomAnchor.constraint(equalTo: blurView.contentView.bottomAnchor),
+                    dismissButton.trailingAnchor.constraint(equalTo: blurView.contentView.trailingAnchor, constant: -10),
+                    dismissButton.centerYAnchor.constraint(equalTo: blurView.contentView.centerYAnchor),
                 ])
 
                 stackView.translatesAutoresizingMaskIntoConstraints = false

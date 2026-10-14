@@ -140,6 +140,24 @@ def terminal(key):
     return None
 
 
+def settled_size(what):
+    """The device's grid once the session has stayed at it for a second
+    (the keyboard and its bar come up in steps)."""
+    def at_own():
+        own = terminal("own")
+        return own not in (None, "-") and last_size() == own and terminal("session") == own
+
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        if at_own():
+            own = terminal("own")
+            time.sleep(1)
+            if at_own() and terminal("own") == own:
+                return own
+        time.sleep(0.2)
+    raise AssertionError(what + "\n" + phone())
+
+
 def status():
     first = phone().split("\n", 1)[0]
     return first.split()[0][7:] if first.startswith("status=") else None
@@ -206,16 +224,20 @@ try:
 
     drive("open 0")
     wait(lambda: "green prompt" in phone(), "the card's terminal didn't open")
-    # The keyboard's bar takes room once the terminal has focus: the size
+    # An existing card opens for reading, without the keyboard. The size
     # settles a moment after opening.
     wait(lambda: (lambda own: own not in (None, "-") and last_size() == own and terminal("reported") == own
                   and terminal("session") == own)(terminal("own")),
          "session not at the device's size")
     own = terminal("own")
     assert terminal("scale") == "1.00", phone()
+    assert terminal("keyboard") == "false", phone()
     simctl("io", udid, "screenshot", str(root / "terminal.png"))
-    print(f"PASS opening shows the terminal at the device's size ({own})", flush=True)
+    print(f"PASS opening shows the terminal at the device's size ({own}), without the keyboard", flush=True)
 
+    drive("focus")
+    wait(lambda: terminal("keyboard") == "true", "tapping the terminal didn't bring up the keyboard")
+    own = settled_size("session not at the size with the keyboard up")
     drive("type hi")
     wait(lambda: input_size("69") is not None, "typing didn't reach the agent")
     assert input_size("68") == own and input_size("69") == own, read(agent_log)
@@ -255,7 +277,12 @@ try:
          "the new session didn't open")
     wait(lambda: phone().count("green prompt") == 1 and "SIZE 137x54" not in phone(),
          "the new session's terminal didn't show")
-    print("PASS new session from the device", flush=True)
+    # Typing comes next in a new session: the keyboard is up.
+    wait(lambda: terminal("keyboard") == "true", "the new session didn't bring up the keyboard")
+    simctl("io", udid, "screenshot", str(root / "new-session.png"))
+    drive("hidekeyboard")
+    wait(lambda: terminal("keyboard") == "false", "the hide-keyboard key didn't hide the keyboard")
+    print("PASS new session from the device, with the keyboard up; it hides", flush=True)
 
     # Another client takes over: the iPhone says so and doesn't reconnect,
     # even after coming back to the foreground.

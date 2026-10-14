@@ -1,3 +1,4 @@
+import GameController
 import GhosttyTerminal
 import SwiftUI
 import UIKit
@@ -70,6 +71,7 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
         terminal.controller = Self.controller
         terminal.delegate = self
         terminal.inputAccessoryItems = [.esc, .tab, .shiftTab, .ctrlC, .divider, .arrowLeft, .arrowDown, .arrowUp, .arrowRight]
+        terminal.inputAccessoryShowsDismissKey = true
         terminal.onWillInput = { [weak self] in self?.store.willInput() }
         container.addSubview(terminal)
     }
@@ -77,7 +79,11 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         Self.current = self
-        terminal.acquireProgrammaticFocus()
+        // With a hardware keyboard nothing covers the screen, so the terminal
+        // always takes the typing.
+        if GCKeyboard.coalesced != nil || store.opensWithKeyboard(cardID) {
+            terminal.acquireProgrammaticFocus()
+        }
         attachIfReady()
     }
 
@@ -168,7 +174,7 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
         let r = reported.map { "\($0.columns)x\($0.rows)" } ?? "-"
         let g = sessionGrid.map { "\($0.columns)x\($0.rows)" } ?? "-"
         let o = ownSize.map { "\($0.columns)x\($0.rows)" } ?? "-"
-        return "terminal reported=\(r) session=\(g) own=\(o) scale=\(String(format: "%.2f", terminal.transform.a))"
+        return "terminal reported=\(r) session=\(g) own=\(o) scale=\(String(format: "%.2f", terminal.transform.a)) keyboard=\(terminal.isFirstResponder)"
     }
 
     var visibleText: String { mirror.readViewportText() ?? "" }
@@ -184,6 +190,10 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
     }
 
     func debugInsert(_ text: String) { terminal.insertText(text) }
+    /// What a tap on the terminal does to the keyboard.
+    func debugFocus() { terminal.acquireProgrammaticFocus() }
+    /// What the bar's hide-keyboard key does.
+    func debugHideKeyboard() { terminal.resignFirstResponder() }
     func debugKey(_ key: TerminalKey, modifiers: TerminalInputModifiers = []) { terminal.sendKey(key, modifiers: modifiers) }
 }
 

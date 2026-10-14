@@ -11,4 +11,6 @@ GhosttyKit.xcframework from that release. Vhostty's changes:
 - `UITerminalView.onWillInput` (through `TerminalSurfaceCoordinator` and
   `TerminalSurface`) runs before every key press and paste, so the client can
   align the session's size before the input.
-- The input accessory bar has `shiftTab` and `ctrlC` keys.
+- The input accessory bar has `shiftTab` and `ctrlC` keys, and
+  `UITerminalView.inputAccessoryShowsDismissKey` pins a key that hides the
+  software keyboard to the bar's trailing edge, outside the scrolling keys.

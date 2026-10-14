@@ -55,6 +55,10 @@
             case "new":
                 guard let store, let project = store.currentProject else { return }
                 store.newSession(in: project, kind: nil)
+            case "focus":
+                terminal?.debugFocus()
+            case "hidekeyboard":
+                terminal?.debugHideKeyboard()
             case "type":
                 terminal?.debugType(argument)
             case "insert":
