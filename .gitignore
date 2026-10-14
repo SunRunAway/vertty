@@ -5,3 +5,6 @@
 /.claude/worktrees/
 /RemoteKit/.build/
 /RemoteKit/.swiftpm/
+/iOS/GhosttyTerminal/.build/
+/iOS/GhosttyTerminal/.swiftpm/
+xcuserdata/
