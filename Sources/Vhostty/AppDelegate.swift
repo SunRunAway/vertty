@@ -76,7 +76,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
             menuItem.state = remoteServer.enabled ? .on : .off
         } else if menuItem.action == #selector(toggleShell) {
             menuItem.title = store.selectedTab?.shellVisible == true ? String(localized: "Hide Terminal") : String(localized: "Show Terminal")
-            return store.selectedTab != nil
+            // Remote windows have no bottom shell.
+            return store.selectedTab != nil && RemoteWindowController.key == nil
         }
         // Once authorized, the sleep protection item is only a checked status line.
         return menuItem.action == #selector(configureSleepProtection) ? !sleepProtection.authorized : true
@@ -172,6 +173,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         ]
         newSessionItems.forEach(file.addItem)
         file.addItem(item("Add Project…", #selector(addProject), "o", [.command, .shift]))
+        file.addItem(item("Connect to Remote Computer…", #selector(connectRemote), "k", [.command, .shift]))
         file.addItem(.separator())
         file.addItem(item("Close Session", #selector(closeTab), "w"))
         addSubmenu(main, "File", file)
@@ -241,11 +243,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         main.addItem(holder)
     }
 
-    @objc private func newSession() { store.newSession() }
+    @objc private func newSession() {
+        if let remote = RemoteWindowController.key {
+            if let p = remote.model.currentProject { remote.model.newSession(in: p, kind: nil) }
+            return
+        }
+        store.newSession()
+    }
     @objc private func newOtherSession() {
+        if let remote = RemoteWindowController.key {
+            if let p = remote.model.currentProject { remote.model.newSession(in: p, kind: remote.model.kindsDefaultFirst(p)[1]) }
+            return
+        }
         guard let p = store.currentProject else { return store.newSession() }
         store.newSession(in: p, kind: store.kindsDefaultFirst(p)[1])
     }
+    @objc private func connectRemote() { RemoteWindowController.connectViaPrompt() }
 
     /// The File menu's first "New … Session" (⌘T) is the current project's default kind.
     func menuNeedsUpdate(_ menu: NSMenu) {
@@ -257,10 +270,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     }
 
     @objc private func addProject() { store.addProjectViaPanel() }
-    @objc private func closeTab() { store.closeSelected() }
-    @objc private func nextTab() { store.gotoTab(.next) }
-    @objc private func previousTab() { store.gotoTab(.previous) }
-    @objc private func selectTabByTag(_ sender: NSMenuItem) { store.selectTab(at: sender.tag - 1) }
+    /// In a remote window, ⌘W closes the window (never a session here).
+    @objc private func closeTab() {
+        if let remote = RemoteWindowController.key { return remote.window.performClose(nil) }
+        store.closeSelected()
+    }
+    @objc private func nextTab() { gotoTab(.next) }
+    @objc private func previousTab() { gotoTab(.previous) }
+    @objc private func selectTabByTag(_ sender: NSMenuItem) {
+        if let remote = RemoteWindowController.key { return remote.model.selectCard(at: sender.tag - 1) }
+        store.selectTab(at: sender.tag - 1)
+    }
+
+    private func gotoTab(_ target: GhosttyGotoTab) {
+        if let remote = RemoteWindowController.key { remote.model.gotoCard(target) } else { store.gotoTab(target) }
+    }
+
+    /// The terminal font size actions apply to: the remote window's, else the selected session's.
+    private var fontTarget: TerminalSurfaceView? {
+        RemoteWindowController.key.map { $0.model.terminalIfCreated } ?? store.selectedTab?.surface
+    }
     @objc private func showMainWindow() { window.makeKeyAndOrderFront(nil) }
     @objc private func reloadConfig() { GhosttyRuntime.shared.reloadConfig() }
     @objc private func openGhosttyConfig() {
@@ -269,16 +298,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     @objc private func toggleSidebar() {
         store.toggleSidebar()
     }
-    @objc private func toggleShell() { store.toggleShell() }
+    @objc private func toggleShell() {
+        guard RemoteWindowController.key == nil else { return }
+        store.toggleShell()
+    }
     @objc private func focusAgentPane() { store.focusPane(shell: false) }
     @objc private func focusShellPane() { store.focusPane(shell: true) }
-    @objc private func fontBigger() { store.selectedTab?.surface?.perform(action: "increase_font_size:1") }
-    @objc private func fontSmaller() { store.selectedTab?.surface?.perform(action: "decrease_font_size:1") }
-    @objc private func fontReset() { store.selectedTab?.surface?.perform(action: "reset_font_size") }
+    @objc private func fontBigger() { fontTarget?.perform(action: "increase_font_size:1") }
+    @objc private func fontSmaller() { fontTarget?.perform(action: "decrease_font_size:1") }
+    @objc private func fontReset() { fontTarget?.perform(action: "reset_font_size") }
 
     // MARK: - GhosttyRuntimeDelegate
 
     func ghosttyNewTab(from surface: TerminalSurfaceView?) {
+        if let remote = RemoteWindowController.owner(of: surface) ?? (surface == nil ? RemoteWindowController.key : nil) {
+            if let p = remote.model.currentProject { remote.model.newSession(in: p, kind: nil) }
+            return
+        }
         if let surface, let tab = store.tab(for: surface), let p = store.project(tab.projectID) {
             store.newSession(in: p)
         } else {
@@ -287,10 +323,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     }
 
     func ghosttyCloseTab(_ surface: TerminalSurfaceView) {
+        if let remote = RemoteWindowController.owner(of: surface) { return remote.window.performClose(nil) }
         if let tab = store.tab(for: surface) { store.requestClose(tab) }
     }
 
-    func ghosttyGotoTab(_ target: GhosttyGotoTab) { store.gotoTab(target) }
+    func ghosttyGotoTab(_ target: GhosttyGotoTab) { gotoTab(target) }
 
     func ghosttyGotoSplit(_ direction: ghostty_action_goto_split_e) {
         switch direction {
@@ -338,7 +375,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
-        let idString = response.notification.request.content.userInfo["tab"] as? String
+        let info = response.notification.request.content.userInfo
+        let idString = info["tab"] as? String
+        if let windowID = info["remoteWindow"] as? String, let cardID = info["remoteCard"] as? String {
+            DispatchQueue.main.async {
+                guard let remote = RemoteWindowController.withID(windowID) else { return }
+                if let card = remote.model.card(cardID) { remote.model.open(card) }
+                remote.window.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+            }
+            return completionHandler()
+        }
         DispatchQueue.main.async {
             if let idString, let id = UUID(uuidString: idString), let tab = self.store.tab(withID: id) {
                 self.store.select(tab)

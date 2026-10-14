@@ -17,7 +17,7 @@ index f9d861b..54311c9 100644
      // other targets.
      if (config.target.result.os.tag.isDarwin()) {
 diff --git a/include/ghostty.h b/include/ghostty.h
-index 40ff55c..f33179a 100644
+index 40ff55c..72d0fcd 100644
 --- a/include/ghostty.h
 +++ b/include/ghostty.h
 @@ -437,6 +437,11 @@ typedef enum {
@@ -42,11 +42,12 @@ index 40ff55c..f33179a 100644
  } ghostty_surface_config_s;
  
  typedef struct {
-@@ -1080,6 +1088,10 @@ ghostty_surface_config_s ghostty_surface_inherited_config(ghostty_surface_t, gho
+@@ -1080,6 +1088,11 @@ ghostty_surface_config_s ghostty_surface_inherited_config(ghostty_surface_t, gho
  void ghostty_surface_update_config(ghostty_surface_t, ghostty_config_t);
  bool ghostty_surface_needs_confirm_quit(ghostty_surface_t);
  bool ghostty_surface_process_exited(ghostty_surface_t);
 +void ghostty_surface_set_grid_override(ghostty_surface_t, uint16_t, uint16_t);
++void ghostty_surface_natural_grid(ghostty_surface_t, uint16_t*, uint16_t*);
 +void ghostty_surface_write_buffer(ghostty_surface_t, const uint8_t*, uintptr_t);
 +void ghostty_surface_write_pty(ghostty_surface_t, const uint8_t*, uintptr_t);
 +void ghostty_surface_set_tap(ghostty_surface_t, ghostty_surface_tap_cb, void*, uint32_t);
@@ -54,7 +55,7 @@ index 40ff55c..f33179a 100644
  void ghostty_surface_draw(ghostty_surface_t);
  void ghostty_surface_set_content_scale(ghostty_surface_t, double, double);
 diff --git a/src/Surface.zig b/src/Surface.zig
-index 4d66622..145c838 100644
+index 4d66622..c90edc9 100644
 --- a/src/Surface.zig
 +++ b/src/Surface.zig
 @@ -620,32 +620,40 @@ pub fn init(
@@ -146,7 +147,7 @@ index 4d66622..145c838 100644
      const runtime_str = try std.fmt.allocPrint(alloc, "{d} ms", .{info.runtime_ms});
  
      self.renderer_state.mutex.lock();
-@@ -2460,6 +2469,15 @@ fn resize(self: *Surface, size: rendererpkg.ScreenSize) !void {
+@@ -2460,6 +2469,26 @@ fn resize(self: *Surface, size: rendererpkg.ScreenSize) !void {
      self.queueIo(.{ .resize = self.size }, .unlocked);
  }
  
@@ -159,11 +160,22 @@ index 4d66622..145c838 100644
 +    self.queueIo(.{ .resize = self.size }, .unlocked);
 +}
 +
++/// Vhostty: the grid that fits the surface, whatever the override.
++pub fn naturalGrid(self: *Surface) rendererpkg.GridSize {
++    var size = self.size;
++    size.grid_override = null;
++    const content_scale = self.rt_surface.getContentScale() catch return size.grid();
++    const x_dpi = content_scale.x * font.face.default_dpi;
++    const y_dpi = content_scale.y * font.face.default_dpi;
++    size.padding = self.config.scaledPadding(x_dpi, y_dpi);
++    return size.grid();
++}
++
  /// Recalculate the balanced padding if needed.
  fn balancePaddingIfNeeded(self: *Surface) void {
      if (!self.config.window_padding_balance) return;
 diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
-index 0d5a4f8..d5f4a51 100644
+index 0d5a4f8..e325f59 100644
 --- a/src/apprt/embedded.zig
 +++ b/src/apprt/embedded.zig
 @@ -18,6 +18,7 @@ const terminal = @import("../terminal/main.zig");
@@ -243,7 +255,7 @@ index 0d5a4f8..d5f4a51 100644
      pub fn rtApp(self: *const Surface) *App {
          return self.app;
      }
-@@ -1598,6 +1618,64 @@ pub const CAPI = struct {
+@@ -1598,6 +1618,77 @@ pub const CAPI = struct {
          return surface.core_surface.child_exited;
      }
  
@@ -261,8 +273,21 @@ index 0d5a4f8..d5f4a51 100644
 +            null);
 +    }
 +
++    /// Vhostty: the grid that fits the surface, ignoring any override.
++    export fn ghostty_surface_natural_grid(
++        surface: *Surface,
++        cols: *u16,
++        rows: *u16,
++    ) void {
++        const grid = surface.core_surface.naturalGrid();
++        cols.* = grid.columns;
++        rows.* = grid.rows;
++    }
++
 +    /// Vhostty: feeds a host-managed surface the program's output.
 +    /// Responses to it are never written (see Termio.suppress_responses).
++    /// Call it off the thread that runs ghostty_app_tick: parsing can wait
++    /// for room in the app mailbox, as a pty read thread does.
 +    export fn ghostty_surface_write_buffer(
 +        surface: *Surface,
 +        ptr: [*]const u8,
@@ -448,10 +473,10 @@ index b168851..b841bfa 100644
  pub const Thread = @import("termio/Thread.zig");
 diff --git a/src/termio/HostManaged.zig b/src/termio/HostManaged.zig
 new file mode 100644
-index 0000000..06bcae8
+index 0000000..b7d8c53
 --- /dev/null
 +++ b/src/termio/HostManaged.zig
-@@ -0,0 +1,126 @@
+@@ -0,0 +1,127 @@
 +//! Vhostty: a termio backend without a pty. The embedder feeds the program's
 +//! output in with ghostty_surface_write_buffer and receives the bytes the
 +//! terminal writes (keys, paste, mouse) and its grid size through callbacks.
@@ -528,9 +553,10 @@ index 0000000..06bcae8
 +    grid_size: renderer.GridSize,
 +    screen_size: renderer.ScreenSize,
 +) !void {
++    // Reported by Termio once the terminal itself has this size
++    // (see notifyResize), so output fed after it lands at that size.
 +    self.grid_size = grid_size;
 +    self.screen_size = screen_size;
-+    self.notifyResize();
 +}
 +
 +pub fn queueWrite(
@@ -561,7 +587,7 @@ index 0000000..06bcae8
 +    _ = runtime_ms;
 +}
 +
-+fn notifyResize(self: *HostManaged) void {
++pub fn notifyResize(self: *HostManaged) void {
 +    const resize_cb = self.resize_cb orelse return;
 +    resize_cb(
 +        self.userdata,
@@ -579,7 +605,7 @@ index 0000000..06bcae8
 +    }
 +};
 diff --git a/src/termio/Termio.zig b/src/termio/Termio.zig
-index dcd0d8c..504bdf1 100644
+index dcd0d8c..883f974 100644
 --- a/src/termio/Termio.zig
 +++ b/src/termio/Termio.zig
 @@ -70,6 +70,14 @@ last_cursor_reset: ?std.time.Instant = null,
@@ -617,17 +643,24 @@ index dcd0d8c..504bdf1 100644
          // Update the size of our terminal state
          try self.terminal.resize(
              self.alloc,
-@@ -510,6 +523,9 @@ pub fn resize(
+@@ -510,6 +523,16 @@ pub fn resize(
          if (self.terminal.modes.get(.in_band_size_reports)) {
              try self.sizeReportLocked(td, .mode_2048);
          }
 +
 +        // Vhostty: a remote mirror starts over at the new size.
 +        if (grid_changed) if (self.tap) |t| t.snapshot(self.alloc, &self.terminal);
++    }
++
++    // Vhostty: a host-managed terminal tells its host now that it has the
++    // new size.
++    switch (self.backend) {
++        .host_managed => |*hm| hm.notifyResize(),
++        else => {},
      }
  
      // Mail the renderer so that it can update the GPU and re-render
-@@ -525,6 +541,7 @@ pub fn sizeReport(self: *Termio, td: *ThreadData, style: termio.Message.SizeRepo
+@@ -525,6 +548,7 @@ pub fn sizeReport(self: *Termio, td: *ThreadData, style: termio.Message.SizeRepo
  }
  
  fn sizeReportLocked(self: *Termio, td: *ThreadData, style: termio.Message.SizeReport) !void {
@@ -635,7 +668,7 @@ index dcd0d8c..504bdf1 100644
      const grid_size = self.size.grid();
  
      // 1024 bytes should be enough for size report since report
-@@ -658,6 +675,7 @@ pub fn jumpToPrompt(self: *Termio, delta: isize) !void {
+@@ -658,6 +682,7 @@ pub fn jumpToPrompt(self: *Termio, delta: isize) !void {
  
  /// Called when focus is gained or lost (when focus events are enabled)
  pub fn focusGained(self: *Termio, td: *ThreadData, focused: bool) !void {
@@ -643,7 +676,7 @@ index dcd0d8c..504bdf1 100644
      self.renderer_state.mutex.lock();
      const focus_event = self.renderer_state.terminal.modes.get(.focus_event);
      self.renderer_state.mutex.unlock();
-@@ -688,6 +706,9 @@ fn processOutputLocked(self: *Termio, buf: []const u8) void {
+@@ -688,6 +713,9 @@ fn processOutputLocked(self: *Termio, buf: []const u8) void {
      // Schedule a render. We can call this first because we have the lock.
      self.terminal_stream.handler.queueRender() catch unreachable;
  
@@ -653,7 +686,7 @@ index dcd0d8c..504bdf1 100644
      // Whenever a character is typed, we ensure the cursor is in the
      // non-blink state so it is rendered if visible. If we're under
      // HEAVY read load, we don't want to send a ton of these so we
-@@ -737,6 +758,15 @@ fn processOutputLocked(self: *Termio, buf: []const u8) void {
+@@ -737,6 +765,15 @@ fn processOutputLocked(self: *Termio, buf: []const u8) void {
      }
  }
  
@@ -669,7 +702,7 @@ index dcd0d8c..504bdf1 100644
  /// Sends a DSR response for the current color scheme to the pty.
  pub fn colorSchemeReport(self: *Termio, td: *ThreadData, force: bool) !void {
      self.renderer_state.mutex.lock();
-@@ -746,6 +776,7 @@ pub fn colorSchemeReport(self: *Termio, td: *ThreadData, force: bool) !void {
+@@ -746,6 +783,7 @@ pub fn colorSchemeReport(self: *Termio, td: *ThreadData, force: bool) !void {
  }
  
  pub fn colorSchemeReportLocked(self: *Termio, td: *ThreadData, force: bool) !void {

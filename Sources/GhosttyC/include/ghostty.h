@@ -1089,6 +1089,7 @@ void ghostty_surface_update_config(ghostty_surface_t, ghostty_config_t);
 bool ghostty_surface_needs_confirm_quit(ghostty_surface_t);
 bool ghostty_surface_process_exited(ghostty_surface_t);
 void ghostty_surface_set_grid_override(ghostty_surface_t, uint16_t, uint16_t);
+void ghostty_surface_natural_grid(ghostty_surface_t, uint16_t*, uint16_t*);
 void ghostty_surface_write_buffer(ghostty_surface_t, const uint8_t*, uintptr_t);
 void ghostty_surface_write_pty(ghostty_surface_t, const uint8_t*, uintptr_t);
 void ghostty_surface_set_tap(ghostty_surface_t, ghostty_surface_tap_cb, void*, uint32_t);

@@ -13,6 +13,20 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
         var command: String?
         var environment: [String: String] = [:]
         var initialInput: String?
+        /// Set for the terminal of a session on another computer (the
+        /// desktop remote client): it runs nothing here.
+        var remote: RemoteHooks?
+    }
+
+    struct RemoteHooks {
+        /// Bytes the terminal wrote (keys, paste, mouse); on the IO thread.
+        var write: (Data) -> Void
+        /// The terminal has this grid now; on the IO thread.
+        var resized: (_ columns: Int, _ rows: Int) -> Void
+        /// The user is about to type or paste.
+        var willInput: () -> Void
+        /// The display area changed size.
+        var displayResized: () -> Void
     }
 
     private(set) var surface: ghostty_surface_t?
@@ -44,8 +58,11 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
     /// from being put in (see sizeDidChange).
     private var hostedSize: NSSize?
     private var tapBox: TapBox?
+    private let remoteHooks: RemoteHooks?
+    private lazy var feedQueue = DispatchQueue(label: "vhostty.remote-feed")
 
     init(options: Options) {
+        remoteHooks = options.remote
         super.init(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
         createSurface(options)
         updateTrackingAreas()
@@ -83,6 +100,18 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
         }
         defer { cStrings.forEach { free($0) } }
 
+        if options.remote != nil {
+            cfg.host_write = { userdata, ptr, len in
+                guard let userdata, let ptr else { return }
+                let view = Unmanaged<TerminalSurfaceView>.fromOpaque(userdata).takeUnretainedValue()
+                view.remoteHooks?.write(Data(bytes: ptr, count: len))
+            }
+            cfg.host_resize = { userdata, cols, rows, _, _ in
+                guard let userdata else { return }
+                let view = Unmanaged<TerminalSurfaceView>.fromOpaque(userdata).takeUnretainedValue()
+                view.remoteHooks?.resized(Int(cols), Int(rows))
+            }
+        }
         cfg.working_directory = dup(options.workingDirectory)
         cfg.command = dup(options.command)
         cfg.initial_input = dup(options.initialInput)
@@ -123,10 +152,10 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
         return ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
     }
 
-    /// Types text into the terminal as if pasted (local input: at the local size).
+    /// Types text into the terminal as if pasted.
     func sendText(_ text: String) {
         guard let surface else { return }
-        useLocalGrid()
+        willInput()
         let len = text.utf8CString.count
         guard len > 1 else { return }
         text.withCString { ghostty_surface_text(surface, $0, UInt(len - 1)) }
@@ -175,6 +204,37 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
         if let g = remoteGrid, g.columns == columns, g.rows == rows { return }
         remoteGrid = (columns, rows)
         ghostty_surface_set_grid_override(surface, UInt16(min(columns, 1000)), UInt16(min(rows, 1000)))
+    }
+
+    /// The grid that fits this view, whatever the session's size.
+    var naturalGrid: (columns: Int, rows: Int) {
+        guard let surface else { return (0, 0) }
+        var cols: UInt16 = 0, rows: UInt16 = 0
+        ghostty_surface_natural_grid(surface, &cols, &rows)
+        return (Int(cols), Int(rows))
+    }
+
+    /// The user types or pastes: a local session takes this view's size
+    /// again; a remote one tells its client (see RemoteHooks).
+    private func willInput() {
+        if let remoteHooks { remoteHooks.willInput() } else { useLocalGrid() }
+    }
+
+    /// Feeds a remote session's output to the terminal. Off the main thread,
+    /// like a pty read thread: parsing can wait on the app mailbox, which
+    /// the main thread drains.
+    func feed(_ data: Data) {
+        guard let surface, !data.isEmpty else { return }
+        // Keeps the view (and so the surface) alive until fed; released on
+        // the main thread.
+        let view = Unmanaged.passRetained(self)
+        feedQueue.async {
+            data.withUnsafeBytes { buf in
+                guard let base = buf.bindMemory(to: UInt8.self).baseAddress else { return }
+                ghostty_surface_write_buffer(surface, base, UInt(buf.count))
+            }
+            DispatchQueue.main.async { view.release() }
+        }
     }
 
     /// Back to the size that fits this view.
@@ -291,7 +351,9 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
         // session takes the local size again. Being put in the window isn't
         // a change.
         if window != nil {
-            if let hosted = hostedSize, hosted != size { useLocalGrid() }
+            if let hosted = hostedSize, hosted != size {
+                if let remoteHooks { remoteHooks.displayResized() } else { useLocalGrid() }
+            }
             hostedSize = size
         }
         guard let surface, size.width > 0, size.height > 0 else { return }
@@ -450,10 +512,10 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
             interpretKeyEvents([event])
             return
         }
-        // Typing (not ⌘ shortcuts, except paste) goes in at the local size.
+        // Typing (not ⌘ shortcuts, except paste) aligns the size (see willInput).
         let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
         if !mods.contains(.command) || (mods == [.command] && event.charactersIgnoringModifiers == "v") {
-            useLocalGrid()
+            willInput()
         }
 
         // Translate mods (e.g. for macos-option-as-alt).
@@ -630,7 +692,7 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
 
     @objc func copy(_ sender: Any?) { perform(action: "copy_to_clipboard") }
     @objc func paste(_ sender: Any?) {
-        useLocalGrid()
+        willInput()
         perform(action: "paste_from_clipboard")
     }
     @objc override func selectAll(_ sender: Any?) { perform(action: "select_all") }

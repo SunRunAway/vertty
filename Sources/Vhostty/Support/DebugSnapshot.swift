@@ -212,6 +212,31 @@ final class DebugSnapshot {
                 store.refreshHistory()
                 continue
             }
+            // Remote windows: connect, open a card, type into its terminal.
+            if line.hasPrefix("remote "), let url = URL(string: String(line.dropFirst(7))) {
+                RemoteWindowController.open(url)
+                RemoteWindowController.all.last?.window.orderBack(nil)
+                continue
+            }
+            if let remote = RemoteWindowController.all.last {
+                let model = remote.model
+                if line.hasPrefix("remoteopen "), let i = Int(line.dropFirst(11)) {
+                    model.selectCard(at: i)
+                    continue
+                }
+                if line.hasPrefix("remotetext ") {
+                    model.terminalIfCreated?.sendText(String(line.dropFirst(11)))
+                    continue
+                }
+                if line == "remoteenter" {
+                    model.terminalIfCreated?.debugPress(keyCode: 0x24, chars: "\r")
+                    continue
+                }
+                if line == "remotenew" {
+                    if let p = model.currentProject { model.newSession(in: p, kind: nil) }
+                    continue
+                }
+            }
             guard let tab = target, let surface = targetShell ? tab.shellSurface : tab.surface else { continue }
             switch line {
             case "enter": surface.debugPress(keyCode: 0x24, chars: "\r")
@@ -321,6 +346,22 @@ final class DebugSnapshot {
             let name = store.project(pid)?.name ?? "?"
             lines.append("prompts[\(name)] \(matches.query): " + matches.sessions.sorted { $0.key < $1.key }
                 .map { "\($0.key)=\($0.value.before)[\($0.value.match)]\($0.value.after.prefix(40))" }.joined(separator: " / "))
+        }
+        for remote in RemoteWindowController.all {
+            let model = remote.model
+            lines.append("=== remote \(model.client.url) status=\(model.client.status) server=\(model.client.serverName) open=\(model.openCardID ?? "-")")
+            for card in model.state.cards {
+                lines.append("    card \(card.id) \(card.title) status=\(card.status)")
+            }
+            if let t = model.terminalIfCreated {
+                let grid = t.gridSize, own = t.naturalGrid
+                lines.append("    terminal grid=\(grid.columns)x\(grid.rows) own=\(own.columns)x\(own.rows) inWindow=\(t.window != nil)")
+                lines.append(t.visibleText().split(separator: "\n", omittingEmptySubsequences: false)
+                    .map { "    r| " + $0 }.joined(separator: "\n"))
+            }
+            if let cg = vhostty_window_image(CGWindowID(remote.window.windowNumber)) {
+                write(NSBitmapImageRep(cgImage: cg), "remote.png")
+            }
         }
         try? lines.joined(separator: "\n").write(to: directory.appendingPathComponent("state.txt"), atomically: true, encoding: .utf8)
     }

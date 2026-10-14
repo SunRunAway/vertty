@@ -301,13 +301,14 @@ final class RemoteConnection {
                 self.finish()
                 return
             }
-            if let meta = context?.protocolMetadata(definition: NWProtocolWebSocket.definition) as? NWProtocolWebSocket.Metadata,
-               meta.opcode == .close {
+            let meta = context?.protocolMetadata(definition: NWProtocolWebSocket.definition) as? NWProtocolWebSocket.Metadata
+            if meta?.opcode == .close {
                 self.finish()
                 return
             }
             self.lastPong = Date()
-            if let content, !content.isEmpty {
+            // Pings (answered on their own) and pongs carry payloads too.
+            if meta?.opcode == .binary, let content, !content.isEmpty {
                 if let msg = try? Remote.ClientMessage(serializedBytes: content) {
                     self.onMessage?(msg)
                 } else {

@@ -1,8 +1,7 @@
 import Foundation
 import SwiftProtobuf
 
-/// Receives the stream of the terminal a client opened.
-@MainActor
+/// Receives the stream of the terminal a client opened, on the main thread.
 public protocol RemoteTerminalSink: AnyObject {
     /// Reset the terminal to `columns` x `rows`, then replay `data`.
     func remoteSnapshot(cardID: String, columns: Int, rows: Int, data: Data)
@@ -14,7 +13,7 @@ public protocol RemoteTerminalSink: AnyObject {
 /// One connection to a Vhostty server (see vhostty_remote.proto): the latest
 /// State, requests, and the terminal the user is looking at. Reconnects on
 /// its own after a dropped connection, unless another device took over.
-@MainActor
+/// Use it on the main thread only; the async requests run there too.
 public final class RemoteClient: ObservableObject {
     public enum Status: Equatable {
         /// Connecting because the user asked to.
@@ -114,12 +113,10 @@ public final class RemoteClient: ObservableObject {
         send(msg)
 
         pingTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self, self.generation == gen else { return }
-                self.task?.sendPing { error in
-                    guard error != nil else { return }
-                    DispatchQueue.main.async { self.dropped(gen) }
-                }
+            guard let self, self.generation == gen else { return }
+            self.task?.sendPing { error in
+                guard error != nil else { return }
+                DispatchQueue.main.async { self.dropped(gen) }
             }
         }
     }
@@ -232,6 +229,7 @@ public final class RemoteClient: ObservableObject {
         }
     }
 
+    @MainActor
     private func request(_ fill: (inout Remote.ClientMessage) -> Void) async throws -> Remote.Reply {
         guard status == .connected, welcomed else { throw RemoteError.disconnected }
         var msg = Remote.ClientMessage()
@@ -248,6 +246,7 @@ public final class RemoteClient: ObservableObject {
 
     /// Starts a session; returns its card. Retrying with the same
     /// operation id never creates a second one.
+    @MainActor
     public func newSession(projectID: String, kind: Remote.AgentKind?, operationID: String) async throws -> String {
         try await request {
             $0.newSession.projectID = projectID
@@ -257,6 +256,7 @@ public final class RemoteClient: ObservableObject {
     }
 
     /// Opens a session from the history (or finds the card it's open in).
+    @MainActor
     public func resumeSession(projectID: String, entry: Remote.HistoryEntry) async throws -> String {
         try await request {
             $0.resumeSession.projectID = projectID
@@ -265,6 +265,7 @@ public final class RemoteClient: ObservableObject {
         }.session.cardID
     }
 
+    @MainActor
     public func closeSession(cardID: String, confirmed: Bool) async throws {
         _ = try await request {
             $0.closeSession.cardID = cardID
@@ -272,6 +273,7 @@ public final class RemoteClient: ObservableObject {
         }
     }
 
+    @MainActor
     public func listHistory(projectID: String, limit: Int) async throws -> Remote.ProjectHistory {
         try await request {
             $0.listHistory.projectID = projectID
