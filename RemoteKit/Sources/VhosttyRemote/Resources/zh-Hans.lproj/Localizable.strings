@@ -1,0 +1,7 @@
+"This computer runs a Vhostty version that can't be used remotely from here. Update both to the same version." = "这台电脑上的 Vhostty 版本与本机不兼容，请把两边更新到同一版本。";
+"It no longer exists on the computer." = "电脑上已经没有它了。";
+"The session can't be resumed. Its history may have been removed." = "无法恢复这个会话，它的记录可能已被删除。";
+"Connected on another device." = "已在其他设备连接";
+"The connection was lost." = "连接已断开。";
+"Something went wrong." = "出了点问题。";
+"Can't reach the computer. Check the address and that remote connections are allowed in Vhostty there." = "无法连接到电脑。请检查地址，并确认那台电脑的 Vhostty 已允许远程连接。";

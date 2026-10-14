@@ -1,6 +1,7 @@
 import AppKit
 import Carbon
 import GhosttyC
+import VhosttyRemote
 
 /// An NSView hosting one libghostty terminal surface.
 ///
@@ -39,6 +40,10 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
     private var currentCursor: NSCursor = .iBeam
     private var observers: [NSObjectProtocol] = []
     private var screenContentsCache: (text: String, at: Date)?
+    /// The size this view was given in the window, to tell resizes apart
+    /// from being put in (see sizeDidChange).
+    private var hostedSize: NSSize?
+    private var tapBox: TapBox?
 
     init(options: Options) {
         super.init(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
@@ -51,7 +56,10 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
 
     deinit {
         observers.forEach { NotificationCenter.default.removeObserver($0) }
-        if let surface { ghostty_surface_free(surface) }
+        if let surface {
+            if tapBox != nil { ghostty_surface_set_tap(surface, nil, nil, 0) }
+            ghostty_surface_free(surface)
+        }
     }
 
     private func createSurface(_ options: Options) {
@@ -115,9 +123,10 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
         return ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
     }
 
-    /// Types text into the terminal as if pasted.
+    /// Types text into the terminal as if pasted (local input: at the local size).
     func sendText(_ text: String) {
         guard let surface else { return }
+        useLocalGrid()
         let len = text.utf8CString.count
         guard len > 1 else { return }
         text.withCString { ghostty_surface_text(surface, $0, UInt(len - 1)) }
@@ -144,6 +153,76 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
                 windowNumber: window?.windowNumber ?? 0, context: nil, characters: chars,
                 charactersIgnoringModifiers: chars, isARepeat: false, keyCode: keyCode) else { continue }
             if type == .keyDown { keyDown(with: ev) } else { keyUp(with: ev) }
+        }
+    }
+
+    // MARK: - Remote clients
+
+    /// The grid a remote client gave the session; nil while it has this
+    /// view's own size. Only the terminal's columns and rows change, never
+    /// the view: a smaller grid leaves blank space, a bigger one is cut off.
+    private(set) var remoteGrid: (columns: Int, rows: Int)?
+
+    /// The session's current columns and rows.
+    var gridSize: (columns: Int, rows: Int) {
+        guard let surface else { return (0, 0) }
+        let size = ghostty_surface_size(surface)
+        return (Int(size.columns), Int(size.rows))
+    }
+
+    func useRemoteGrid(columns: Int, rows: Int) {
+        guard let surface, columns > 0, rows > 0 else { return }
+        if let g = remoteGrid, g.columns == columns, g.rows == rows { return }
+        remoteGrid = (columns, rows)
+        ghostty_surface_set_grid_override(surface, UInt16(min(columns, 1000)), UInt16(min(rows, 1000)))
+    }
+
+    /// Back to the size that fits this view.
+    func useLocalGrid() {
+        guard let surface, remoteGrid != nil else { return }
+        remoteGrid = nil
+        ghostty_surface_set_grid_override(surface, 0, 0)
+    }
+
+    enum TapEvent {
+        /// Rebuilds the terminal at this size (after a reset).
+        case snapshot(columns: Int, rows: Int, data: Data)
+        case output(Data)
+    }
+
+    private final class TapBox {
+        let handler: (TapEvent) -> Void
+        init(_ handler: @escaping (TapEvent) -> Void) { self.handler = handler }
+    }
+
+    /// Mirrors the terminal: a snapshot now and after every size change, and
+    /// everything the program writes in between. `handler` runs on the
+    /// terminal's IO thread, in order, and must only hand the data on.
+    func startTap(_ handler: @escaping (TapEvent) -> Void) {
+        guard let surface else { return }
+        let box = TapBox(handler)
+        ghostty_surface_set_tap(surface, { userdata, kind, cols, rows, ptr, len in
+            guard let userdata, let ptr else { return }
+            let box = Unmanaged<TapBox>.fromOpaque(userdata).takeUnretainedValue()
+            let data = Data(bytes: ptr, count: len)
+            box.handler(kind == 1 ? .snapshot(columns: Int(cols), rows: Int(rows), data: data) : .output(data))
+        }, Unmanaged.passUnretained(box).toOpaque(), Remote.snapshotHistoryRows)
+        // Replaced after the new tap is in, so the old box outlives its last call.
+        tapBox = box
+    }
+
+    func stopTap() {
+        guard let surface, tapBox != nil else { return }
+        ghostty_surface_set_tap(surface, nil, nil, 0)
+        tapBox = nil
+    }
+
+    /// Writes bytes to the program as they are (a remote client's input).
+    func writePTY(_ data: Data) {
+        guard let surface, !data.isEmpty else { return }
+        data.withUnsafeBytes { buf in
+            guard let base = buf.bindMemory(to: UInt8.self).baseAddress else { return }
+            ghostty_surface_write_pty(surface, base, UInt(buf.count))
         }
     }
 
@@ -174,6 +253,7 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        hostedSize = nil
         observers.forEach { NotificationCenter.default.removeObserver($0) }
         observers = []
         guard let window else { return }
@@ -207,6 +287,13 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
 
     private func sizeDidChange(_ size: NSSize) {
         contentSize = size
+        // The display area changed size (window resized, panel toggled): the
+        // session takes the local size again. Being put in the window isn't
+        // a change.
+        if window != nil {
+            if let hosted = hostedSize, hosted != size { useLocalGrid() }
+            hostedSize = size
+        }
         guard let surface, size.width > 0, size.height > 0 else { return }
         let scaled = convertToBacking(size)
         ghostty_surface_set_size(surface, UInt32(scaled.width), UInt32(scaled.height))
@@ -362,6 +449,11 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
         guard let surface else {
             interpretKeyEvents([event])
             return
+        }
+        // Typing (not ⌘ shortcuts, except paste) goes in at the local size.
+        let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        if !mods.contains(.command) || (mods == [.command] && event.charactersIgnoringModifiers == "v") {
+            useLocalGrid()
         }
 
         // Translate mods (e.g. for macos-option-as-alt).
@@ -537,7 +629,10 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
     // MARK: - Edit actions
 
     @objc func copy(_ sender: Any?) { perform(action: "copy_to_clipboard") }
-    @objc func paste(_ sender: Any?) { perform(action: "paste_from_clipboard") }
+    @objc func paste(_ sender: Any?) {
+        useLocalGrid()
+        perform(action: "paste_from_clipboard")
+    }
     @objc override func selectAll(_ sender: Any?) { perform(action: "select_all") }
     @objc func clearScreen(_ sender: Any?) { perform(action: "clear_screen") }
 

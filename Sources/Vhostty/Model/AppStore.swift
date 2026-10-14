@@ -278,6 +278,32 @@ final class AppStore: ObservableObject {
         select(tab)
     }
 
+    /// A new session started for a remote client: shown at the top of its
+    /// project, but the local selection stays where it is.
+    func newSessionInBackground(in project: Project, kind: AgentKind?) -> TabSession {
+        let kind = kind ?? defaultKind(project)
+        let sessionID = kind == .claude ? UUID().uuidString.lowercased() : ""
+        let tab = TabSession(projectID: project.id, kind: kind, sessionID: sessionID, cwd: project.path)
+        insertAtTopOfProject(tab)
+        launch(tab)
+        return tab
+    }
+
+    /// A past session resumed for a remote client, without selecting it here.
+    func resumeInBackground(sessionID: String, kind: AgentKind, title: String?, in project: Project) -> TabSession {
+        let tab = TabSession(projectID: project.id, kind: kind, sessionID: sessionID, cwd: project.path,
+                             title: title ?? String(localized: "New Session"))
+        insertAtTopOfProject(tab)
+        launch(tab)
+        refreshHistory()
+        return tab
+    }
+
+    /// Starts a card's agent for a remote client if it isn't running.
+    func launchInBackground(_ tab: TabSession) {
+        launchIfNeeded(tab)
+    }
+
     /// Both kinds, the project's default first (the order of its "New … Session" menu items).
     func kindsDefaultFirst(_ project: Project) -> [AgentKind] {
         let first = defaultKind(project)
@@ -921,7 +947,7 @@ final class AppStore: ObservableObject {
     }
 
     /// Claude and Codex sessions of a project, newest first.
-    private static func history(projectPath: String, limit: Int = 40) -> [SessionSummary]? {
+    static func history(projectPath: String, limit: Int = 40) -> [SessionSummary]? {
         guard let codex = CodexThreads.history(projectPath: projectPath, limit: limit) else { return nil }
         let all = Transcript.history(projectPath: projectPath, limit: limit)
             + codex

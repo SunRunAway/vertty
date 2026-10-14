@@ -677,6 +677,64 @@ index dcd0d8c..504bdf1 100644
      if (!force and !self.renderer_state.terminal.modes.get(.report_color_scheme)) {
          return;
      }
+diff --git a/src/termio/Thread.zig b/src/termio/Thread.zig
+index ce4c1f4..cc9fccf 100644
+--- a/src/termio/Thread.zig
++++ b/src/termio/Thread.zig
+@@ -333,18 +333,25 @@ fn drainMailbox(
+             .start_synchronized_output => self.startSynchronizedOutput(cb),
+             .linefeed_mode => |v| self.flags.linefeed_mode = v,
+             .focused => |v| try io.focusGained(data, v),
+-            .write_small => |v| try io.queueWrite(
+-                data,
+-                v.data[0..v.len],
+-                self.flags.linefeed_mode,
+-            ),
+-            .write_stable => |v| try io.queueWrite(
+-                data,
+-                v,
+-                self.flags.linefeed_mode,
+-            ),
++            .write_small => |v| {
++                self.flushResize(cb);
++                try io.queueWrite(
++                    data,
++                    v.data[0..v.len],
++                    self.flags.linefeed_mode,
++                );
++            },
++            .write_stable => |v| {
++                self.flushResize(cb);
++                try io.queueWrite(
++                    data,
++                    v,
++                    self.flags.linefeed_mode,
++                );
++            },
+             .write_alloc => |v| {
+                 defer v.alloc.free(v.data);
++                self.flushResize(cb);
+                 try io.queueWrite(
+                     data,
+                     v.data,
+@@ -392,6 +399,17 @@ fn handleResize(self: *Thread, cb: *CallbackData, resize: renderer.Size) void {
+     );
+ }
+ 
++/// Vhostty: applies a resize still waiting to be coalesced, so input written
++/// after it reaches the program at the new size (remote clients resize
++/// right before their input).
++fn flushResize(self: *Thread, cb: *CallbackData) void {
++    const v = self.coalesce_data.resize orelse return;
++    self.coalesce_data.resize = null;
++    cb.io.resize(&cb.data, v) catch |err| {
++        log.warn("error during resize err={}", .{err});
++    };
++}
++
+ fn syncResetCallback(
+     cb_: ?*CallbackData,
+     _: *xev.Loop,
 diff --git a/src/termio/backend.zig b/src/termio/backend.zig
 index ae0e200..a146481 100644
 --- a/src/termio/backend.zig

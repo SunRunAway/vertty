@@ -3,3 +3,5 @@
 /.swiftpm/
 .DS_Store
 /.claude/worktrees/
+/RemoteKit/.build/
+/RemoteKit/.swiftpm/

@@ -1,0 +1,400 @@
+// The Vhostty remote protocol, shared by the iPhone app and the desktop
+// remote client.
+//
+// TRANSPORT
+//   One WebSocket connection to the URL the user entered (for example
+//   ws://192.168.1.5:58563). Binary frames only: each frame the client sends
+//   is one ClientMessage, each frame the server sends is one ServerMessage.
+//   There is no other API. Securing the connection is up to the user (VPN,
+//   SSH tunnel, ...); there are no accounts, pairing codes or credentials.
+//
+// VERSIONS
+//   The client's first message is Hello with PROTOCOL_VERSION_CURRENT. The
+//   server answers with Welcome, or with Error(INCOMPATIBLE_VERSION) and
+//   closes the connection when it doesn't speak that version. Within a
+//   version, fields and enum values are only ever added: both sides ignore
+//   fields they don't know (proto3 rules) and treat unknown enum values as
+//   the zero value. Anything that would change the meaning of an existing
+//   field gets a new protocol version.
+//
+// REQUESTS AND REPLIES
+//   Messages that change the server (NewSession, ResumeSession,
+//   CloseSession) and ListHistory are requests: the client gives each one a
+//   request_id, unique within the connection, and the server answers it
+//   with exactly one Reply carrying the same id. Replies may arrive in any
+//   order relative to other server messages. All other client messages are
+//   one-way and get no Reply; problems with them are ignored (an input for
+//   a session that just closed is simply dropped).
+//
+// ERRORS
+//   A failed request gets a Reply with `error` set and no result. Error
+//   codes are listed in ErrorCode. A connection-level problem is a
+//   ServerMessage.error, after which the server closes the connection.
+//
+// REPEATED REQUESTS
+//   A request can be lost with the connection, so the client may send it
+//   again (on the same or a new connection):
+//   - NewSession carries an operation_id chosen by the client for the
+//     user's action. The server remembers recent operation ids: a request
+//     with a known operation_id returns the session created the first time
+//     instead of creating another. A new tap on "New session" is a new
+//     operation_id and creates a new session.
+//   - ResumeSession of a session that is already open returns its card;
+//     it never starts the session twice.
+//   - CloseSession of a card that no longer exists succeeds.
+//
+// ONE CLIENT AT A TIME
+//   A server keeps one remote client. When a new client's Hello is
+//   accepted, the previous connection gets Replaced and is closed. A
+//   replaced client shows that another device connected and doesn't
+//   reconnect on its own; the user connects again by hand. The server's
+//   local window keeps working throughout and is never locked.
+//   Welcome hands each accepted client a connection_token. A client that
+//   reconnects on its own (after a dropped connection, or when the iPhone
+//   app returns to the foreground) sends it back as Hello.reconnect_token.
+//   The server accepts that only if no other client connected since; else
+//   it answers Error(REPLACED) and closes, even if the client never saw
+//   Replaced (say it was suspended in the background). Connecting by hand
+//   sends no token and always takes over.
+//
+// STATE AND RECONNECTING
+//   After Welcome the server sends State, the whole picture (projects,
+//   cards, live status, recent history), and sends it again whenever
+//   anything in it changes. A client renders the latest State it got.
+//   Disconnecting never closes a session. After reconnecting, the client
+//   gets a fresh State, opens the terminal it was showing again with
+//   OpenTerminal, and receives a TerminalSnapshot that restores the screen
+//   and recent scrollback, followed by live output.
+//
+// TERMINAL SIZE AND INPUT
+//   A session has one size (columns x rows), shared by everyone showing
+//   it; the most recent change wins:
+//   - The remote client asks for its own size, the cells its display area
+//     holds, when it opens a terminal (OpenTerminal), when that area changes
+//     or the iPhone app comes back to the foreground (TerminalViewport),
+//     and right before every keyboard input or paste (AlignForInput).
+//   - The server's local window takes the session back to its own size when
+//     the window is resized or the user types or pastes there.
+//   - When the client leaves the terminal (LeaveTerminal) or disconnects,
+//     the session goes back to the local size.
+//   AlignForInput is sent when the user types (system keyboard or the key
+//   bar) or pastes, before the bytes of that input (TerminalInput). The
+//   server changes the size only if it differs, then writes the bytes, so
+//   input always lands at the sender's size. Scrolling, clicking and
+//   selecting text never send AlignForInput, even when they reach the
+//   program as mouse events (TerminalInput without AlignForInput). Changing
+//   the size changes the session's columns and rows only; no window on
+//   either side is resized.
+//   Whatever the size, the client shows the session at the size it
+//   currently has: every TerminalSnapshot carries it, and a new snapshot
+//   follows each change.
+
+syntax = "proto3";
+
+package vhostty.remote;
+
+enum ProtocolVersion {
+  PROTOCOL_VERSION_UNSPECIFIED = 0;
+  PROTOCOL_VERSION_CURRENT = 1;
+}
+
+// Every frame from the client.
+message ClientMessage {
+  // Set (nonzero) on requests; see REQUESTS AND REPLIES.
+  uint64 request_id = 1;
+
+  oneof body {
+    Hello hello = 2;
+
+    // Requests.
+    NewSession new_session = 3;
+    ResumeSession resume_session = 4;
+    CloseSession close_session = 5;
+    ListHistory list_history = 6;
+
+    // One-way.
+    OpenTerminal open_terminal = 7;
+    LeaveTerminal leave_terminal = 8;
+    TerminalViewport viewport = 9;
+    AlignForInput align_for_input = 10;
+    TerminalInput input = 11;
+  }
+}
+
+// Every frame from the server.
+message ServerMessage {
+  oneof body {
+    Welcome welcome = 1;
+    Reply reply = 2;
+    State state = 3;
+    TerminalSnapshot snapshot = 4;
+    TerminalOutput output = 5;
+    TerminalClosed terminal_closed = 6;
+    Notification notification = 7;
+    Replaced replaced = 8;
+    Error error = 9;
+  }
+}
+
+enum ClientPlatform {
+  CLIENT_PLATFORM_UNSPECIFIED = 0;
+  CLIENT_PLATFORM_IPHONE = 1;
+  CLIENT_PLATFORM_MAC = 2;
+}
+
+// First message of a connection.
+message Hello {
+  ProtocolVersion protocol_version = 1;
+  ClientPlatform platform = 2;
+  // Shown on the server as the connected device ("Feng's iPhone").
+  string device_name = 3;
+  // Set when reconnecting on its own; see ONE CLIENT AT A TIME.
+  string reconnect_token = 4;
+}
+
+message Welcome {
+  ProtocolVersion protocol_version = 1;
+  // The computer's name, shown by the client ("Feng's MacBook Pro").
+  string server_name = 2;
+  // Identifies this client's connection; see ONE CLIENT AT A TIME.
+  string connection_token = 3;
+}
+
+// Sent to a connection that a newer client took over, right before the
+// server closes it.
+message Replaced {}
+
+enum ErrorCode {
+  ERROR_CODE_UNSPECIFIED = 0;
+  // Hello had a protocol version the server doesn't speak.
+  ERROR_CODE_INCOMPATIBLE_VERSION = 1;
+  // The first message wasn't Hello, or a message couldn't be decoded.
+  ERROR_CODE_BAD_REQUEST = 2;
+  // The project or card doesn't exist (any more).
+  ERROR_CODE_NOT_FOUND = 3;
+  // The session to resume can't be resumed (its history is gone). The
+  // server doesn't start a new session in its place.
+  ERROR_CODE_RESUME_FAILED = 4;
+  // Closing needs the user's confirmation (see CloseSession).
+  ERROR_CODE_CONFIRMATION_REQUIRED = 5;
+  ERROR_CODE_INTERNAL = 6;
+  // A client reconnecting on its own, but another client connected since.
+  ERROR_CODE_REPLACED = 7;
+}
+
+message Error {
+  ErrorCode code = 1;
+  // English, for logs and as a fallback; clients show their own text per
+  // code where they can.
+  string message = 2;
+}
+
+message Reply {
+  uint64 request_id = 1;
+  // Set when the request failed; then there is no result.
+  Error error = 2;
+
+  oneof result {
+    // NewSession and ResumeSession: the card to open.
+    SessionRef session = 3;
+    // CloseSession.
+    Closed closed = 4;
+    // ListHistory.
+    ProjectHistory history = 5;
+  }
+}
+
+message SessionRef {
+  string card_id = 1;
+}
+
+message Closed {}
+
+// ---------------------------------------------------------------------------
+// State
+
+enum AgentKind {
+  AGENT_KIND_UNSPECIFIED = 0;
+  AGENT_KIND_CLAUDE = 1;
+  AGENT_KIND_CODEX = 2;
+}
+
+enum SessionStatus {
+  SESSION_STATUS_UNSPECIFIED = 0;
+  // Restored card whose agent hasn't been started yet; opening it starts it.
+  SESSION_STATUS_DORMANT = 1;
+  SESSION_STATUS_STARTING = 2;
+  SESSION_STATUS_WORKING = 3;
+  SESSION_STATUS_IDLE = 4;
+  // The agent asked a question or for a permission.
+  SESSION_STATUS_NEEDS_INPUT = 5;
+  // The agent quit; the card's shell may still run.
+  SESSION_STATUS_EXITED = 6;
+}
+
+message State {
+  // In sidebar order.
+  repeated Project projects = 1;
+  // Open cards in sidebar order (grouped by project, newest first within
+  // a project).
+  repeated Card cards = 2;
+  // Recent closed sessions per project, newest first.
+  repeated ProjectHistory history = 3;
+  // Whether closing a card whose agent is still running asks first (the
+  // server's local setting). See CloseSession.
+  bool confirm_close = 4;
+}
+
+message Project {
+  string id = 1;
+  string name = 2;
+  string path = 3;
+  // What a new session starts when NewSession leaves `kind` unset.
+  AgentKind default_kind = 4;
+}
+
+message Card {
+  string id = 1;
+  string project_id = 2;
+  AgentKind kind = 3;
+  string title = 4;
+  string branch = 5;
+  string worktree = 6;
+  // 0 when there is none.
+  uint32 pr_number = 7;
+  // OPEN, MERGED, CLOSED or empty.
+  string pr_state = 8;
+  SessionStatus status = 9;
+  // The card's terminal is running a program (closing it ends that
+  // program).
+  bool running = 10;
+  // The agent's session id; empty for a Codex session not saved yet.
+  string session_id = 11;
+}
+
+message ProjectHistory {
+  string project_id = 1;
+  repeated HistoryEntry sessions = 2;
+  // There are older sessions than these (ask with ListHistory).
+  bool more_available = 3;
+}
+
+message HistoryEntry {
+  string session_id = 1;
+  AgentKind kind = 2;
+  string title = 3;
+  // Last activity, milliseconds since 1970.
+  int64 modified_ms = 4;
+}
+
+// ---------------------------------------------------------------------------
+// Requests
+
+// Starts a new session at the top of a project's cards. The server's local
+// window shows the new card but keeps its own selection.
+message NewSession {
+  string project_id = 1;
+  // Unset: the project's default kind.
+  AgentKind kind = 2;
+  // See REPEATED REQUESTS.
+  string operation_id = 3;
+}
+
+// Opens a session from a project's history in a new card, or returns the
+// card it is already open in.
+message ResumeSession {
+  string project_id = 1;
+  string session_id = 2;
+  AgentKind kind = 3;
+}
+
+// Closes a card on the server, exactly like closing it in the local window:
+// its program ends, and its history stays and can be resumed. If
+// State.confirm_close is set and the card is running, the client asks the
+// user first and sends confirmed = true; without it the request fails with
+// CONFIRMATION_REQUIRED.
+message CloseSession {
+  string card_id = 1;
+  bool confirmed = 2;
+}
+
+// Up to `limit` closed sessions of a project, newest first (State carries
+// only the recent ones).
+message ListHistory {
+  string project_id = 1;
+  uint32 limit = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Terminal
+
+message TerminalSize {
+  uint32 columns = 1;
+  uint32 rows = 2;
+}
+
+// Shows a card's terminal: starts its agent if the card is dormant, sizes
+// the session to `size` and starts the snapshot and output stream. A client
+// shows one terminal at a time; opening another leaves the previous one.
+message OpenTerminal {
+  string card_id = 1;
+  TerminalSize size = 2;
+}
+
+// The client stopped showing the terminal. The session returns to the
+// local size.
+message LeaveTerminal {
+  string card_id = 1;
+}
+
+// The client's display area changed size, or the iPhone app came back to
+// the foreground. The session takes `size`.
+message TerminalViewport {
+  string card_id = 1;
+  TerminalSize size = 2;
+}
+
+// Keyboard input or a paste is about to follow. The server sizes the
+// session to `size` if it differs. See TERMINAL SIZE AND INPUT.
+message AlignForInput {
+  string card_id = 1;
+  TerminalSize size = 2;
+}
+
+// Bytes for the session's terminal, written as they are: keys, pastes and
+// mouse events as the client's terminal encoded them.
+message TerminalInput {
+  string card_id = 1;
+  bytes data = 2;
+}
+
+// Rebuilds the terminal: the client resets its terminal to `size` and
+// replays `data` (which starts with a full reset), then applies the
+// TerminalOutput that follows. Sent after OpenTerminal and whenever the
+// session's size changes. The client's terminal never answers the program:
+// the server's own terminal already does.
+message TerminalSnapshot {
+  string card_id = 1;
+  TerminalSize size = 2;
+  bytes data = 3;
+}
+
+// What the program wrote, in order, after the last snapshot.
+message TerminalOutput {
+  string card_id = 1;
+  bytes data = 2;
+}
+
+// The open terminal's card was closed (here or on the server).
+message TerminalClosed {
+  string card_id = 1;
+}
+
+// A session's notification (the agent's own, e.g. "Claude needs your
+// permission"), sent while the client is connected. The client shows it
+// unless it is showing that card's terminal in the foreground.
+message Notification {
+  string card_id = 1;
+  string title = 2;
+  string body = 3;
+}

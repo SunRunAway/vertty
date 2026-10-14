@@ -8,6 +8,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     let store = AppStore.shared
     var window: NSWindow!
     private lazy var sleepProtection = SleepProtection(store: store)
+    private lazy var remoteServer = RemoteServer(store: store)
+    private lazy var remoteInfo = RemoteInfoWindow(server: remoteServer)
     private var hookServer: HookServer?
     private var debugSnapshot: DebugSnapshot?
     private var fileMenu: NSMenu?
@@ -17,7 +19,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         DispatchQueue.global(qos: .userInitiated).async {
             ShellEnvironment.load()
             ShellEnvironment.loadInteractive()
-            DispatchQueue.main.async { AppStore.shared.shellEnvironmentLoaded() }
+            DispatchQueue.main.async {
+                AppStore.shared.shellEnvironmentLoaded()
+                // VHOSTTY_REMOTE_PORT comes from the login shell.
+                self.remoteServer.startIfEnabled()
+            }
         }
 
         guard GhosttyRuntime.shared.start() else {
@@ -60,10 +66,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     }
 
     @objc private func configureSleepProtection() { sleepProtection.configure() }
+    @objc private func toggleRemoteConnections() { remoteServer.setEnabled(!remoteServer.enabled) }
+    @objc private func showRemoteInfo() { remoteInfo.show() }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         if menuItem.action == #selector(toggleSidebar) {
             menuItem.title = store.sidebarVisible ? String(localized: "Hide Sidebar") : String(localized: "Show Sidebar")
+        } else if menuItem.action == #selector(toggleRemoteConnections) {
+            menuItem.state = remoteServer.enabled ? .on : .off
         } else if menuItem.action == #selector(toggleShell) {
             menuItem.title = store.selectedTab?.shellVisible == true ? String(localized: "Hide Terminal") : String(localized: "Show Terminal")
             return store.selectedTab != nil
@@ -141,6 +151,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         let sleepItem = item("Closed-Lid Sleep Protection While Tasks Run: Not Authorized…", #selector(configureSleepProtection), "")
         sleepProtection.menuItem = sleepItem
         appMenu.addItem(sleepItem)
+        appMenu.addItem(item("Allow Remote Connections", #selector(toggleRemoteConnections), ""))
+        appMenu.addItem(item("Remote Connection Info…", #selector(showRemoteInfo), ""))
         appMenu.addItem(item("Open Ghostty Config", #selector(openGhosttyConfig), ""))
         appMenu.addItem(item("Reload Config", #selector(reloadConfig), "r", [.command, .shift]))
         appMenu.addItem(.separator())
@@ -300,6 +312,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         // Like Ghostty, only show it when that session isn't what you're looking at.
         guard let surface, let tab = store.tab(for: surface) else { return }
         NSLog("Vhostty: desktop notification from tab %@: %@ / %@", tab.id.uuidString, title, body)
+        // The remote client decides for itself whether it's looking at the card.
+        remoteServer.notify(tab, title: title, body: body)
         if tab.id == store.selectedTabID && NSApp.isActive && window.isKeyWindow { return }
         // The idle reminder fires 60s after the turn ended. If you saw the reply
         // (the card isn't unread), switching away since doesn't make it news.

@@ -35,6 +35,13 @@
     <true/>
     <key>NSAppleEventsUsageDescription</key>
     <string>Read Amphetamine’s status to avoid accidentally turning off its closed-lid sleep protection.</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Connect to Vhostty on your other computers, and let your iPhone connect to this one.</string>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+    </dict>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
     <key>NSSupportsAutomaticTermination</key>

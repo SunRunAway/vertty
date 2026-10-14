@@ -18,6 +18,7 @@ enum ShellEnvironment {
     private static var _codexHome: String?
     private static var _defaultAgent: AgentKind?
     private static var _installedAgents: [AgentKind]?
+    private static var _remotePort: String?
 
     static var path: String {
         lock.lock(); defer { lock.unlock() }
@@ -35,6 +36,13 @@ enum ShellEnvironment {
         lock.lock(); defer { lock.unlock() }
         return _defaultAgent ?? ProcessInfo.processInfo.environment["VHOSTTY_DEFAULT_AGENT"]
             .flatMap { AgentKind(rawValue: $0.lowercased()) }
+    }
+
+    /// VHOSTTY_REMOTE_PORT, unparsed: the app's own environment (test
+    /// instances), else as set by the user's shell.
+    static var remotePort: String? {
+        lock.lock(); defer { lock.unlock() }
+        return ProcessInfo.processInfo.environment["VHOSTTY_REMOTE_PORT"] ?? _remotePort
     }
 
     /// The agents found by the user's interactive shell; nil until loadInteractive ran.
@@ -55,18 +63,18 @@ enum ShellEnvironment {
     }
 
     /// Codex runs in each tab's interactive login shell (ClaudeLauncher.command), so
-    /// read CODEX_HOME and VHOSTTY_DEFAULT_AGENT the same way: they may be set in an
+    /// read CODEX_HOME, VHOSTTY_DEFAULT_AGENT and VHOSTTY_REMOTE_PORT the same way: they may be set in an
     /// rc file. Also note which agents that shell can find (its PATH, aliases and
     /// functions may differ from the non-interactive PATH above).
     static func loadInteractive() {
         let marker = "__VHOSTTY_ENV__"
-        let script = "printf '\(marker)%s\\n%s\\n%s\\n%s\\n' \"$CODEX_HOME\" \"$VHOSTTY_DEFAULT_AGENT\" "
-            + "\"$(command -v claude)\" \"$(command -v codex)\""
+        let script = "printf '\(marker)%s\\n%s\\n%s\\n%s\\n%s\\n' \"$CODEX_HOME\" \"$VHOSTTY_DEFAULT_AGENT\" "
+            + "\"$(command -v claude)\" \"$(command -v codex)\" \"$VHOSTTY_REMOTE_PORT\""
         let result = Proc.run(shell, ["-l", "-i", "-c", script], timeout: 8, usePathEnv: false)
         guard let out = result?.stdout, let range = out.range(of: marker) else { return }
         let lines = out[range.upperBound...].split(separator: "\n", omittingEmptySubsequences: false)
             .map { String($0).trimmingCharacters(in: .whitespaces) }
-        guard lines.count >= 4 else { return }
+        guard lines.count >= 5 else { return }
         var installed: [AgentKind] = []
         if !lines[2].isEmpty { installed.append(.claude) }
         if !lines[3].isEmpty { installed.append(.codex) }
@@ -74,6 +82,7 @@ enum ShellEnvironment {
         _codexHome = lines[0].nonEmpty
         _defaultAgent = AgentKind(rawValue: lines[1].lowercased())
         _installedAgents = installed
+        _remotePort = lines[4].nonEmpty
         lock.unlock()
     }
 

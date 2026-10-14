@@ -290,7 +290,8 @@ final class DebugSnapshot {
                     .map { "    s| " + $0 }.joined(separator: "\n"))
             }
             if let s = tab.surface {
-                lines.append("    frame=\(s.frame) inWindow=\(s.window != nil)")
+                let grid = s.gridSize
+                lines.append("    frame=\(s.frame) inWindow=\(s.window != nil) grid=\(grid.columns)x\(grid.rows) remoteGrid=\(s.remoteGrid.map { "\($0.columns)x\($0.rows)" } ?? "-")")
                 lines.append(s.visibleText().split(separator: "\n", omittingEmptySubsequences: false)
                     .map { "    | " + $0 }.joined(separator: "\n"))
             }
