@@ -16,11 +16,174 @@ index f9d861b..54311c9 100644
      // macOS only artifacts. These will error if they're initialized for
      // other targets.
      if (config.target.result.os.tag.isDarwin()) {
+diff --git a/include/ghostty.h b/include/ghostty.h
+index 40ff55c..f33179a 100644
+--- a/include/ghostty.h
++++ b/include/ghostty.h
+@@ -437,6 +437,11 @@ typedef enum {
+   GHOSTTY_SURFACE_CONTEXT_SPLIT = 2,
+ } ghostty_surface_context_e;
+ 
++// Vhostty: host-managed IO and remote mirroring.
++typedef void (*ghostty_surface_host_write_cb)(void*, const uint8_t*, size_t);
++typedef void (*ghostty_surface_host_resize_cb)(void*, uint16_t, uint16_t, uint32_t, uint32_t);
++typedef void (*ghostty_surface_tap_cb)(void*, uint32_t, uint16_t, uint16_t, const uint8_t*, size_t);
++
+ typedef struct {
+   ghostty_platform_e platform_tag;
+   ghostty_platform_u platform;
+@@ -450,6 +455,9 @@ typedef struct {
+   const char* initial_input;
+   bool wait_after_command;
+   ghostty_surface_context_e context;
++  // Vhostty: host-managed IO (no command; see ghostty_surface_write_buffer).
++  ghostty_surface_host_write_cb host_write;
++  ghostty_surface_host_resize_cb host_resize;
+ } ghostty_surface_config_s;
+ 
+ typedef struct {
+@@ -1080,6 +1088,10 @@ ghostty_surface_config_s ghostty_surface_inherited_config(ghostty_surface_t, gho
+ void ghostty_surface_update_config(ghostty_surface_t, ghostty_config_t);
+ bool ghostty_surface_needs_confirm_quit(ghostty_surface_t);
+ bool ghostty_surface_process_exited(ghostty_surface_t);
++void ghostty_surface_set_grid_override(ghostty_surface_t, uint16_t, uint16_t);
++void ghostty_surface_write_buffer(ghostty_surface_t, const uint8_t*, uintptr_t);
++void ghostty_surface_write_pty(ghostty_surface_t, const uint8_t*, uintptr_t);
++void ghostty_surface_set_tap(ghostty_surface_t, ghostty_surface_tap_cb, void*, uint32_t);
+ void ghostty_surface_refresh(ghostty_surface_t);
+ void ghostty_surface_draw(ghostty_surface_t);
+ void ghostty_surface_set_content_scale(ghostty_surface_t, double, double);
+diff --git a/src/Surface.zig b/src/Surface.zig
+index 4d66622..145c838 100644
+--- a/src/Surface.zig
++++ b/src/Surface.zig
+@@ -620,32 +620,40 @@ pub fn init(
+     // This separate block ({}) is important because our errdefers must
+     // be scoped here to be valid.
+     {
+-        var env = rt_surface.defaultTermioEnv() catch |err| env: {
+-            // If an error occurs, we don't want to block surface startup.
+-            log.warn("error getting env map for surface err={}", .{err});
+-            break :env internal_os.getEnvMap(alloc) catch
+-                std.process.EnvMap.init(alloc);
++        // Vhostty: a host-managed surface has no pty or subprocess.
++        const host_managed: ?termio.HostManaged.Config = if (comptime @hasDecl(apprt.runtime.Surface, "hostManagedConfig"))
++            rt_surface.hostManagedConfig()
++        else
++            null;
++        var backend: termio.Backend = if (host_managed) |cfg| .{ .host_managed = .init(cfg) } else backend: {
++            var env = rt_surface.defaultTermioEnv() catch |err| env: {
++                // If an error occurs, we don't want to block surface startup.
++                log.warn("error getting env map for surface err={}", .{err});
++                break :env internal_os.getEnvMap(alloc) catch
++                    std.process.EnvMap.init(alloc);
++            };
++            errdefer env.deinit();
++
++            // don't leak GHOSTTY_LOG to any subprocesses
++            env.remove("GHOSTTY_LOG");
++
++            // Initialize our IO backend
++            const io_exec = try termio.Exec.init(alloc, .{
++                .command = command,
++                .env = env,
++                .env_override = config.env,
++                .shell_integration = config.@"shell-integration",
++                .shell_integration_features = config.@"shell-integration-features",
++                .cursor_blink = config.@"cursor-style-blink",
++                .working_directory = if (config.@"working-directory") |wd| wd.value() else null,
++                .resources_dir = global_state.resources_dir.host(),
++                .term = config.term,
++                .rt_pre_exec_info = .init(config),
++                .rt_post_fork_info = .init(config),
++            });
++            break :backend .{ .exec = io_exec };
+         };
+-        errdefer env.deinit();
+-
+-        // don't leak GHOSTTY_LOG to any subprocesses
+-        env.remove("GHOSTTY_LOG");
+-
+-        // Initialize our IO backend
+-        var io_exec = try termio.Exec.init(alloc, .{
+-            .command = command,
+-            .env = env,
+-            .env_override = config.env,
+-            .shell_integration = config.@"shell-integration",
+-            .shell_integration_features = config.@"shell-integration-features",
+-            .cursor_blink = config.@"cursor-style-blink",
+-            .working_directory = if (config.@"working-directory") |wd| wd.value() else null,
+-            .resources_dir = global_state.resources_dir.host(),
+-            .term = config.term,
+-            .rt_pre_exec_info = .init(config),
+-            .rt_post_fork_info = .init(config),
+-        });
+-        errdefer io_exec.deinit();
++        errdefer backend.deinit();
+ 
+         // Initialize our IO mailbox
+         var io_mailbox = try termio.Mailbox.initSPSC(alloc);
+@@ -655,7 +663,7 @@ pub fn init(
+             .size = size,
+             .full_config = config,
+             .config = try termio.Termio.DerivedConfig.init(alloc, config),
+-            .backend = .{ .exec = io_exec },
++            .backend = backend,
+             .mailbox = io_mailbox,
+             .renderer_state = &self.renderer_state,
+             .renderer_wakeup = render_thread.wakeup,
+@@ -1289,9 +1297,10 @@ fn childExitedAbnormally(
+     const alloc = arena.allocator();
+ 
+     // Build up our command for the error message
+-    const command = try std.mem.join(alloc, " ", switch (self.io.backend) {
+-        .exec => |*exec| exec.subprocess.args,
+-    });
++    const command = switch (self.io.backend) {
++        .exec => |*exec| try std.mem.join(alloc, " ", exec.subprocess.args),
++        .host_managed => "remote session",
++    };
+     const runtime_str = try std.fmt.allocPrint(alloc, "{d} ms", .{info.runtime_ms});
+ 
+     self.renderer_state.mutex.lock();
+@@ -2460,6 +2469,15 @@ fn resize(self: *Surface, size: rendererpkg.ScreenSize) !void {
+     self.queueIo(.{ .resize = self.size }, .unlocked);
+ }
+ 
++/// Vhostty: use this grid size instead of the one that fits the surface
++/// (null to go back). Only the grid changes; the surface keeps its size.
++pub fn setGridOverride(self: *Surface, grid: ?rendererpkg.GridSize) void {
++    if (std.meta.eql(self.size.grid_override, grid)) return;
++    self.size.grid_override = grid;
++    self.balancePaddingIfNeeded();
++    self.queueIo(.{ .resize = self.size }, .unlocked);
++}
++
+ /// Recalculate the balanced padding if needed.
+ fn balancePaddingIfNeeded(self: *Surface) void {
+     if (!self.config.window_padding_balance) return;
 diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
-index 0d5a4f8..2f3a911 100644
+index 0d5a4f8..d5f4a51 100644
 --- a/src/apprt/embedded.zig
 +++ b/src/apprt/embedded.zig
-@@ -438,9 +438,8 @@ pub const Surface = struct {
+@@ -18,6 +18,7 @@ const terminal = @import("../terminal/main.zig");
+ const CoreApp = @import("../App.zig");
+ const CoreInspector = @import("../inspector/main.zig").Inspector;
+ const CoreSurface = @import("../Surface.zig");
++const termio = @import("../termio.zig");
+ const configpkg = @import("../config.zig");
+ const Config = configpkg.Config;
+ 
+@@ -409,6 +410,8 @@ pub const Surface = struct {
+     app: *App,
+     platform: Platform,
+     userdata: ?*anyopaque = null,
++    /// Vhostty: set for a host-managed surface (see Options.host_write).
++    host_io: ?termio.HostManaged.Config = null,
+     core_surface: CoreSurface,
+     content_scale: apprt.ContentScale,
+     size: apprt.SurfaceSize,
+@@ -438,9 +441,8 @@ pub const Surface = struct {
          /// The working directory to load into.
          working_directory: ?[*:0]const u8 = null,
  
@@ -32,7 +195,35 @@ index 0d5a4f8..2f3a911 100644
          ///
          /// This command always run in a shell (e.g. via `/bin/sh -c`),
          /// despite Ghostty allowing directly executed commands via config.
-@@ -530,7 +529,6 @@ pub const Surface = struct {
+@@ -460,6 +462,15 @@ pub const Surface = struct {
+ 
+         /// Context for the new surface
+         context: apprt.surface.NewSurfaceContext = .window,
++
++        /// Vhostty: if set, the surface runs no command. It receives the
++        /// program's output from ghostty_surface_write_buffer and hands
++        /// what the terminal writes to this callback (see
++        /// termio.HostManaged).
++        host_write: ?termio.HostManaged.Config.Write = null,
++
++        /// Vhostty: called with the grid size of a host-managed surface.
++        host_resize: ?termio.HostManaged.Config.Resize = null,
+     };
+ 
+     pub fn init(self: *Surface, app: *App, opts: Options) !void {
+@@ -467,6 +478,11 @@ pub const Surface = struct {
+             .app = app,
+             .platform = try .init(opts.platform_tag, opts.platform),
+             .userdata = opts.userdata,
++            .host_io = if (opts.host_write) |write| .{
++                .userdata = opts.userdata,
++                .write = write,
++                .resize = opts.host_resize,
++            } else null,
+             .core_surface = undefined,
+             .content_scale = .{
+                 .x = @floatCast(opts.scale_factor),
+@@ -530,7 +546,6 @@ pub const Surface = struct {
              const cmd = std.mem.sliceTo(c_command, 0);
              if (cmd.len > 0) {
                  config.command = .{ .shell = cmd };
@@ -40,6 +231,83 @@ index 0d5a4f8..2f3a911 100644
              }
          }
  
+@@ -632,6 +647,11 @@ pub const Surface = struct {
+         return &self.core_surface;
+     }
+ 
++    /// Vhostty: the IO callbacks of a host-managed surface, if it is one.
++    pub fn hostManagedConfig(self: *const Surface) ?termio.HostManaged.Config {
++        return self.host_io;
++    }
++
+     pub fn rtApp(self: *const Surface) *App {
+         return self.app;
+     }
+@@ -1598,6 +1618,64 @@ pub const CAPI = struct {
+         return surface.core_surface.child_exited;
+     }
+ 
++    /// Vhostty: gives the terminal `cols` x `rows` regardless of the
++    /// surface size (0 x 0 goes back to what fits). The grid is drawn from
++    /// the top-left; what doesn't fit is cut off.
++    export fn ghostty_surface_set_grid_override(
++        surface: *Surface,
++        cols: u16,
++        rows: u16,
++    ) void {
++        surface.core_surface.setGridOverride(if (cols > 0 and rows > 0)
++            .{ .columns = cols, .rows = rows }
++        else
++            null);
++    }
++
++    /// Vhostty: feeds a host-managed surface the program's output.
++    /// Responses to it are never written (see Termio.suppress_responses).
++    export fn ghostty_surface_write_buffer(
++        surface: *Surface,
++        ptr: [*]const u8,
++        len: usize,
++    ) void {
++        if (len == 0) return;
++        surface.core_surface.io.processOutput(ptr[0..len]);
++    }
++
++    /// Vhostty: writes bytes to the surface's pty as they are, after
++    /// anything queued before.
++    export fn ghostty_surface_write_pty(
++        surface: *Surface,
++        ptr: [*]const u8,
++        len: usize,
++    ) void {
++        if (len == 0) return;
++        const msg = termio.Message.writeReq(surface.core_surface.alloc, ptr[0..len]) catch |err| {
++            log.warn("error allocating pty write err={}", .{err});
++            return;
++        };
++        surface.core_surface.io.queueMessage(msg, .unlocked);
++    }
++
++    /// Vhostty: mirrors the terminal to `callback` (see termio.remote):
++    /// a snapshot with up to `history` rows of scrollback, then the
++    /// program's output, and a new snapshot whenever the grid size changes.
++    /// The callback runs on the IO thread with the terminal locked and
++    /// must not call back into the surface. A null callback stops.
++    export fn ghostty_surface_set_tap(
++        surface: *Surface,
++        callback: ?termio.remote.Callback,
++        userdata: ?*anyopaque,
++        history: u32,
++    ) void {
++        surface.core_surface.io.setTap(if (callback) |cb| .{
++            .userdata = userdata,
++            .callback = cb,
++            .history = history,
++        } else null);
++    }
++
+     /// Returns true if the surface has a selection.
+     export fn ghostty_surface_has_selection(surface: *Surface) bool {
+         return surface.core_surface.hasSelection();
 diff --git a/src/build/LibtoolStep.zig b/src/build/LibtoolStep.zig
 index d2b5149..9c57a79 100644
 --- a/src/build/LibtoolStep.zig
@@ -145,3 +413,673 @@ index 0be0235..408e021 100644
  
      const end = try std.time.Instant.now();
      log.debug("shader library loaded time={}us", .{end.since(start) / std.time.ns_per_us});
+diff --git a/src/renderer/size.zig b/src/renderer/size.zig
+index d8b529c..3f80546 100644
+--- a/src/renderer/size.zig
++++ b/src/renderer/size.zig
+@@ -18,10 +18,15 @@ pub const Size = struct {
+     cell: CellSize,
+     padding: Padding,
+ 
++    /// Vhostty: a grid size to use instead of what fits the screen. The
++    /// grid is drawn from the top-left padding; what doesn't fit is cut.
++    grid_override: ?GridSize = null,
++
+     /// Return the grid size for this size. The grid size is calculated by
+     /// taking the screen size, removing padding, and dividing by the cell
+     /// dimensions.
+     pub fn grid(self: Size) GridSize {
++        if (self.grid_override) |g| return g;
+         return .init(self.screen.subPadding(self.padding), self.cell);
+     }
+ 
+diff --git a/src/termio.zig b/src/termio.zig
+index b168851..b841bfa 100644
+--- a/src/termio.zig
++++ b/src/termio.zig
+@@ -23,6 +23,8 @@ const message = @import("termio/message.zig");
+ pub const backend = @import("termio/backend.zig");
+ pub const mailbox = @import("termio/mailbox.zig");
+ pub const Exec = @import("termio/Exec.zig");
++pub const HostManaged = @import("termio/HostManaged.zig");
++pub const remote = @import("termio/remote.zig");
+ pub const Options = @import("termio/Options.zig");
+ pub const Termio = @import("termio/Termio.zig");
+ pub const Thread = @import("termio/Thread.zig");
+diff --git a/src/termio/HostManaged.zig b/src/termio/HostManaged.zig
+new file mode 100644
+index 0000000..06bcae8
+--- /dev/null
++++ b/src/termio/HostManaged.zig
+@@ -0,0 +1,126 @@
++//! Vhostty: a termio backend without a pty. The embedder feeds the program's
++//! output in with ghostty_surface_write_buffer and receives the bytes the
++//! terminal writes (keys, paste, mouse) and its grid size through callbacks.
++//! Adapted from libghostty-spm (MIT licensed).
++const HostManaged = @This();
++
++const std = @import("std");
++const Allocator = std.mem.Allocator;
++const renderer = @import("../renderer.zig");
++const terminal = @import("../terminal/main.zig");
++const termio = @import("../termio.zig");
++
++userdata: ?*anyopaque = null,
++write: Config.Write,
++resize_cb: ?Config.Resize = null,
++grid_size: renderer.GridSize = .{ .columns = 0, .rows = 0 },
++screen_size: renderer.ScreenSize = .{ .width = 0, .height = 0 },
++
++pub const Config = struct {
++    pub const Write = *const fn (?*anyopaque, [*]const u8, usize) callconv(.c) void;
++    pub const Resize = *const fn (?*anyopaque, u16, u16, u32, u32) callconv(.c) void;
++
++    userdata: ?*anyopaque = null,
++    write: Write,
++    resize: ?Resize = null,
++};
++
++pub fn init(cfg: Config) HostManaged {
++    return .{
++        .userdata = cfg.userdata,
++        .write = cfg.write,
++        .resize_cb = cfg.resize,
++    };
++}
++
++pub fn deinit(self: *HostManaged) void {
++    _ = self;
++}
++
++pub fn initTerminal(self: *HostManaged, term: *terminal.Terminal) void {
++    self.grid_size = .{ .columns = term.cols, .rows = term.rows };
++    self.screen_size = .{ .width = term.width_px, .height = term.height_px };
++}
++
++pub fn threadEnter(
++    self: *HostManaged,
++    alloc: Allocator,
++    io: *termio.Termio,
++    td: *termio.Termio.ThreadData,
++) !void {
++    _ = alloc;
++    _ = io;
++    td.backend = .{ .host_managed = .{} };
++    self.notifyResize();
++}
++
++pub fn threadExit(self: *HostManaged, td: *termio.Termio.ThreadData) void {
++    _ = self;
++    _ = td;
++}
++
++pub fn focusGained(
++    self: *HostManaged,
++    td: *termio.Termio.ThreadData,
++    focused: bool,
++) !void {
++    _ = self;
++    _ = td;
++    _ = focused;
++}
++
++pub fn resize(
++    self: *HostManaged,
++    grid_size: renderer.GridSize,
++    screen_size: renderer.ScreenSize,
++) !void {
++    self.grid_size = grid_size;
++    self.screen_size = screen_size;
++    self.notifyResize();
++}
++
++pub fn queueWrite(
++    self: *HostManaged,
++    alloc: Allocator,
++    td: *termio.Termio.ThreadData,
++    data: []const u8,
++    linefeed: bool,
++) !void {
++    _ = alloc;
++    _ = td;
++    _ = linefeed;
++    if (data.len == 0) return;
++    self.write(self.userdata, data.ptr, data.len);
++}
++
++pub fn childExitedAbnormally(
++    self: *HostManaged,
++    gpa: Allocator,
++    t: *terminal.Terminal,
++    exit_code: u32,
++    runtime_ms: u64,
++) !void {
++    _ = self;
++    _ = gpa;
++    _ = t;
++    _ = exit_code;
++    _ = runtime_ms;
++}
++
++fn notifyResize(self: *HostManaged) void {
++    const resize_cb = self.resize_cb orelse return;
++    resize_cb(
++        self.userdata,
++        self.grid_size.columns,
++        self.grid_size.rows,
++        self.screen_size.width,
++        self.screen_size.height,
++    );
++}
++
++pub const ThreadData = struct {
++    pub fn deinit(self: *ThreadData, alloc: Allocator) void {
++        _ = self;
++        _ = alloc;
++    }
++};
+diff --git a/src/termio/Termio.zig b/src/termio/Termio.zig
+index dcd0d8c..504bdf1 100644
+--- a/src/termio/Termio.zig
++++ b/src/termio/Termio.zig
+@@ -70,6 +70,14 @@ last_cursor_reset: ?std.time.Instant = null,
+ /// to keep track of any state or if its already been freed.
+ thread_enter_state: ?*ThreadEnterState = null,
+ 
++/// Vhostty: mirrors the terminal to a remote client (see termio.remote).
++/// Only accessed with the renderer state mutex held.
++tap: ?termio.remote.Tap = null,
++
++/// Vhostty: this terminal mirrors a program another terminal already
++/// answers (host-managed backend), so it never writes responses.
++suppress_responses: bool = false,
++
+ /// The state we need to keep around only until we enter the IO
+ /// thread. Then we can throw it all away.
+ const ThreadEnterState = struct {
+@@ -316,7 +324,9 @@ pub fn init(self: *Termio, alloc: Allocator, opts: termio.Options) !void {
+         .mailbox = opts.mailbox,
+         .terminal_stream = .initAlloc(alloc, handler),
+         .thread_enter_state = thread_enter_state,
++        .suppress_responses = backend == .host_managed,
+     };
++    self.terminal_stream.handler.suppress_responses = self.suppress_responses;
+ }
+ 
+ pub fn deinit(self: *Termio) void {
+@@ -491,6 +501,9 @@ pub fn resize(
+         self.renderer_state.mutex.lock();
+         defer self.renderer_state.mutex.unlock();
+ 
++        const grid_changed = self.terminal.cols != grid_size.columns or
++            self.terminal.rows != grid_size.rows;
++
+         // Update the size of our terminal state
+         try self.terminal.resize(
+             self.alloc,
+@@ -510,6 +523,9 @@ pub fn resize(
+         if (self.terminal.modes.get(.in_band_size_reports)) {
+             try self.sizeReportLocked(td, .mode_2048);
+         }
++
++        // Vhostty: a remote mirror starts over at the new size.
++        if (grid_changed) if (self.tap) |t| t.snapshot(self.alloc, &self.terminal);
+     }
+ 
+     // Mail the renderer so that it can update the GPU and re-render
+@@ -525,6 +541,7 @@ pub fn sizeReport(self: *Termio, td: *ThreadData, style: termio.Message.SizeRepo
+ }
+ 
+ fn sizeReportLocked(self: *Termio, td: *ThreadData, style: termio.Message.SizeReport) !void {
++    if (self.suppress_responses) return;
+     const grid_size = self.size.grid();
+ 
+     // 1024 bytes should be enough for size report since report
+@@ -658,6 +675,7 @@ pub fn jumpToPrompt(self: *Termio, delta: isize) !void {
+ 
+ /// Called when focus is gained or lost (when focus events are enabled)
+ pub fn focusGained(self: *Termio, td: *ThreadData, focused: bool) !void {
++    if (self.suppress_responses) return;
+     self.renderer_state.mutex.lock();
+     const focus_event = self.renderer_state.terminal.modes.get(.focus_event);
+     self.renderer_state.mutex.unlock();
+@@ -688,6 +706,9 @@ fn processOutputLocked(self: *Termio, buf: []const u8) void {
+     // Schedule a render. We can call this first because we have the lock.
+     self.terminal_stream.handler.queueRender() catch unreachable;
+ 
++    // Vhostty: pass the bytes on to a remote mirror.
++    if (self.tap) |t| t.output(&self.terminal, buf);
++
+     // Whenever a character is typed, we ensure the cursor is in the
+     // non-blink state so it is rendered if visible. If we're under
+     // HEAVY read load, we don't want to send a ton of these so we
+@@ -737,6 +758,15 @@ fn processOutputLocked(self: *Termio, buf: []const u8) void {
+     }
+ }
+ 
++/// Vhostty: starts mirroring to `tap` (null stops), beginning with a
++/// snapshot. Callable from any thread.
++pub fn setTap(self: *Termio, tap: ?termio.remote.Tap) void {
++    self.renderer_state.mutex.lock();
++    defer self.renderer_state.mutex.unlock();
++    self.tap = tap;
++    if (tap) |t| t.snapshot(self.alloc, &self.terminal);
++}
++
+ /// Sends a DSR response for the current color scheme to the pty.
+ pub fn colorSchemeReport(self: *Termio, td: *ThreadData, force: bool) !void {
+     self.renderer_state.mutex.lock();
+@@ -746,6 +776,7 @@ pub fn colorSchemeReport(self: *Termio, td: *ThreadData, force: bool) !void {
+ }
+ 
+ pub fn colorSchemeReportLocked(self: *Termio, td: *ThreadData, force: bool) !void {
++    if (self.suppress_responses) return;
+     if (!force and !self.renderer_state.terminal.modes.get(.report_color_scheme)) {
+         return;
+     }
+diff --git a/src/termio/backend.zig b/src/termio/backend.zig
+index ae0e200..a146481 100644
+--- a/src/termio/backend.zig
++++ b/src/termio/backend.zig
+@@ -10,28 +10,34 @@ const termio = @import("../termio.zig");
+ const WRITE_REQ_PREALLOC = std.math.pow(usize, 2, 5);
+ 
+ /// The kinds of backends.
+-pub const Kind = enum { exec };
++pub const Kind = enum { exec, host_managed };
+ 
+ /// Configuration for the various backend types.
+ pub const Config = union(Kind) {
+     /// Exec uses posix exec to run a command with a pty.
+     exec: termio.Exec.Config,
++
++    /// Vhostty: host managed forwards terminal IO through embedder callbacks.
++    host_managed: termio.HostManaged.Config,
+ };
+ 
+ /// Backend implementations. A backend is responsible for owning the pty
+ /// behavior and providing read/write capabilities.
+ pub const Backend = union(Kind) {
+     exec: termio.Exec,
++    host_managed: termio.HostManaged,
+ 
+     pub fn deinit(self: *Backend) void {
+         switch (self.*) {
+             .exec => |*exec| exec.deinit(),
++            .host_managed => |*hm| hm.deinit(),
+         }
+     }
+ 
+     pub fn initTerminal(self: *Backend, t: *terminal.Terminal) void {
+         switch (self.*) {
+             .exec => |*exec| exec.initTerminal(t),
++            .host_managed => |*hm| hm.initTerminal(t),
+         }
+     }
+ 
+@@ -43,12 +49,14 @@ pub const Backend = union(Kind) {
+     ) !void {
+         switch (self.*) {
+             .exec => |*exec| try exec.threadEnter(alloc, io, td),
++            .host_managed => |*hm| try hm.threadEnter(alloc, io, td),
+         }
+     }
+ 
+     pub fn threadExit(self: *Backend, td: *termio.Termio.ThreadData) void {
+         switch (self.*) {
+             .exec => |*exec| exec.threadExit(td),
++            .host_managed => |*hm| hm.threadExit(td),
+         }
+     }
+ 
+@@ -59,6 +67,7 @@ pub const Backend = union(Kind) {
+     ) !void {
+         switch (self.*) {
+             .exec => |*exec| try exec.focusGained(td, focused),
++            .host_managed => |*hm| try hm.focusGained(td, focused),
+         }
+     }
+ 
+@@ -69,6 +78,7 @@ pub const Backend = union(Kind) {
+     ) !void {
+         switch (self.*) {
+             .exec => |*exec| try exec.resize(grid_size, screen_size),
++            .host_managed => |*hm| try hm.resize(grid_size, screen_size),
+         }
+     }
+ 
+@@ -81,6 +91,7 @@ pub const Backend = union(Kind) {
+     ) !void {
+         switch (self.*) {
+             .exec => |*exec| try exec.queueWrite(alloc, td, data, linefeed),
++            .host_managed => |*hm| try hm.queueWrite(alloc, td, data, linefeed),
+         }
+     }
+ 
+@@ -98,6 +109,7 @@ pub const Backend = union(Kind) {
+                 exit_code,
+                 runtime_ms,
+             ),
++            .host_managed => |*hm| try hm.childExitedAbnormally(gpa, t, exit_code, runtime_ms),
+         }
+     }
+ };
+@@ -105,10 +117,12 @@ pub const Backend = union(Kind) {
+ /// Termio thread data. See termio.ThreadData for docs.
+ pub const ThreadData = union(Kind) {
+     exec: termio.Exec.ThreadData,
++    host_managed: termio.HostManaged.ThreadData,
+ 
+     pub fn deinit(self: *ThreadData, alloc: Allocator) void {
+         switch (self.*) {
+             .exec => |*exec| exec.deinit(alloc),
++            .host_managed => |*hm| hm.deinit(alloc),
+         }
+     }
+ 
+diff --git a/src/termio/remote.zig b/src/termio/remote.zig
+new file mode 100644
+index 0000000..0e3d9ab
+--- /dev/null
++++ b/src/termio/remote.zig
+@@ -0,0 +1,260 @@
++//! Vhostty: mirroring a terminal to a remote client.
++//!
++//! A tap gets a snapshot that rebuilds the terminal's current state, then
++//! every byte the program writes, in order. Both are delivered on the IO
++//! thread with the terminal state mutex held, so the stream continues
++//! exactly where the snapshot left off. A new snapshot follows every change
++//! of the grid size: the client resets its terminal to that size and
++//! replays it, so it never has to reflow on its own.
++const std = @import("std");
++const Allocator = std.mem.Allocator;
++const terminalpkg = @import("../terminal/main.zig");
++const formatter = terminalpkg.formatter;
++const modespkg = terminalpkg.modes;
++const Terminal = terminalpkg.Terminal;
++const Screen = terminalpkg.Screen;
++
++const log = std.log.scoped(.remote_tap);
++
++pub const Kind = enum(u32) {
++    /// Bytes the program wrote, already applied to the terminal.
++    output = 0,
++
++    /// Bytes that rebuild the whole state on a reset terminal of the
++    /// given size (they start with RIS).
++    snapshot = 1,
++};
++
++/// (userdata, kind, columns, rows, data, len)
++pub const Callback = *const fn (?*anyopaque, u32, u16, u16, [*]const u8, usize) callconv(.c) void;
++
++pub const Tap = struct {
++    userdata: ?*anyopaque,
++    callback: Callback,
++
++    /// Rows of scrollback the snapshot includes.
++    history: usize,
++
++    pub fn output(self: Tap, t: *const Terminal, buf: []const u8) void {
++        if (buf.len == 0) return;
++        self.callback(self.userdata, @intFromEnum(Kind.output), t.cols, t.rows, buf.ptr, buf.len);
++    }
++
++    pub fn snapshot(self: Tap, alloc: Allocator, t: *const Terminal) void {
++        var aw: std.Io.Writer.Allocating = .init(alloc);
++        defer aw.deinit();
++        write(&aw.writer, t, self.history) catch |err| {
++            log.warn("failed to write terminal snapshot err={}", .{err});
++            return;
++        };
++        const data = aw.written();
++        self.callback(self.userdata, @intFromEnum(Kind.snapshot), t.cols, t.rows, data.ptr, data.len);
++    }
++};
++
++const row_opts: formatter.Options = .{ .emit = .vt, .unwrap = false, .trim = true };
++
++/// Writes bytes that rebuild `t` on a terminal of the same size: the primary
++/// screen with up to `history` rows of scrollback, the alternate screen if it
++/// is active, then modes, margins, tabstops and the cursor.
++pub fn write(w: *std.Io.Writer, t: *const Terminal, history: usize) std.Io.Writer.Error!void {
++    // Start from a clean terminal.
++    try w.writeAll("\x1bc");
++
++    var tf: formatter.TerminalFormatter = .init(t, .vt);
++    tf.content = .none;
++    tf.extra = .none;
++    tf.extra.palette = true;
++    try tf.format(w);
++
++    // Content is printed with the default modes (no insert mode, autowrap
++    // on, ...), so the modes come after it.
++    const primary = t.screens.get(.primary).?;
++    try writeScreen(w, primary, history);
++    try writeScreenState(w, primary);
++
++    if (t.screens.active_key == .alternate) {
++        const enter = if (t.modes.get(.alt_screen_save_cursor_clear_enter))
++            "\x1b[?1049h"
++        else if (t.modes.get(.alt_screen_legacy))
++            "\x1b[?47h"
++        else
++            "\x1b[?1047h";
++        try w.writeAll(enter);
++        const alt = t.screens.active;
++        try writeScreen(w, alt, 0);
++        try writeScreenState(w, alt);
++    }
++
++    inline for (@typeInfo(modespkg.Mode).@"enum".fields) |field| {
++        const mode: modespkg.Mode = comptime @enumFromInt(field.value);
++        if (comptime !skipMode(mode)) {
++            const current = t.modes.get(mode);
++            const default_val = @field(t.modes.default, field.name);
++            if (current != default_val) {
++                const tag: modespkg.ModeTag = @bitCast(@intFromEnum(mode));
++                const prefix = if (tag.ansi) "" else "?";
++                const suffix = if (current) "h" else "l";
++                try w.print("\x1b[{s}{d}{s}", .{ prefix, tag.value, suffix });
++            }
++        }
++    }
++
++    tf.extra = .none;
++    tf.extra.scrolling_region = true;
++    tf.extra.tabstops = true;
++    tf.extra.keyboard = true;
++    tf.extra.pwd = true;
++    try tf.format(w);
++
++    // Margins and tabstops moved the cursor; origin mode homes it too.
++    const cursor = &t.screens.active.cursor;
++    if (t.modes.get(.origin)) {
++        const region = &t.scrolling_region;
++        try w.writeAll("\x1b[?6h");
++        try w.print("\x1b[{d};{d}H", .{
++            cursor.y -| region.top + 1,
++            cursor.x -| region.left + 1,
++        });
++    } else {
++        try w.print("\x1b[{d};{d}H", .{ cursor.y + 1, cursor.x + 1 });
++    }
++}
++
++/// Modes written separately, or that mustn't be replayed.
++fn skipMode(mode: modespkg.Mode) bool {
++    return switch (mode) {
++        .alt_screen_legacy,
++        .alt_screen,
++        .alt_screen_save_cursor_clear_enter,
++        .synchronized_output,
++        .origin,
++        => true,
++        else => false,
++    };
++}
++
++/// Prints a screen's rows: the last `history` rows of scrollback scrolled
++/// off the top, then the active area from its top-left corner. Rows are
++/// written one by one so blank rows keep their place.
++fn writeScreen(w: *std.Io.Writer, screen: *const Screen, history: usize) std.Io.Writer.Error!void {
++    const pages = &screen.pages;
++    const rows: usize = pages.rows;
++    const history_total = pages.total_rows -| rows;
++    const n = @min(history_total, history);
++    if (n > 0) {
++        var y = history_total - n;
++        while (y < history_total) : (y += 1) {
++            try writeRow(w, screen, .{ .screen = .{ .y = @intCast(y) } });
++            try w.writeAll("\r\n");
++        }
++        // The cursor is n rows down: scroll the printed rows into the
++        // scrollback, leaving a blank active area.
++        try w.splatByteAll('\n', rows - 1);
++        try w.writeAll("\x1b[H");
++    }
++    for (0..rows) |y| {
++        try writeRow(w, screen, .{ .active = .{ .y = @intCast(y) } });
++        if (y + 1 < rows) try w.writeAll("\r\n");
++    }
++}
++
++fn writeRow(w: *std.Io.Writer, screen: *const Screen, pt: terminalpkg.point.Point) std.Io.Writer.Error!void {
++    const pages = &screen.pages;
++    const start = pages.pin(pt) orelse return;
++    var end = start;
++    end.x = pages.cols - 1;
++    var f: formatter.PageListFormatter = .init(pages, row_opts);
++    f.top_left = start;
++    f.bottom_right = end;
++    try f.format(w);
++}
++
++/// Style, hyperlink, protection, keyboard flags, charsets and cursor of
++/// the screen just printed.
++fn writeScreenState(w: *std.Io.Writer, screen: *const Screen) std.Io.Writer.Error!void {
++    var sf: formatter.ScreenFormatter = .init(screen, .vt);
++    sf.content = .none;
++    sf.extra = .all;
++    try sf.format(w);
++}
++
++const testing = std.testing;
++
++/// Rebuilds `src` from its snapshot in a new terminal of the same size and
++/// checks the result: the same text, cursor and screen, and a snapshot of
++/// the copy identical to the original's.
++fn expectRoundTrip(src: *Terminal, history: usize) !void {
++    const alloc = testing.allocator;
++    var first: std.Io.Writer.Allocating = .init(alloc);
++    defer first.deinit();
++    try write(&first.writer, src, history);
++
++    var dst = try Terminal.init(alloc, .{ .cols = src.cols, .rows = src.rows });
++    defer dst.deinit(alloc);
++    var s = dst.vtStream();
++    defer s.deinit();
++    try s.nextSlice(first.written());
++
++    var second: std.Io.Writer.Allocating = .init(alloc);
++    defer second.deinit();
++    try write(&second.writer, &dst, history);
++    try testing.expectEqualStrings(first.written(), second.written());
++
++    const want = try src.screens.active.dumpStringAlloc(alloc, .{ .active = .{} });
++    defer alloc.free(want);
++    const got = try dst.screens.active.dumpStringAlloc(alloc, .{ .active = .{} });
++    defer alloc.free(got);
++    try testing.expectEqualStrings(want, got);
++    try testing.expectEqual(src.screens.active_key, dst.screens.active_key);
++    try testing.expectEqual(src.screens.active.cursor.x, dst.screens.active.cursor.x);
++    try testing.expectEqual(src.screens.active.cursor.y, dst.screens.active.cursor.y);
++}
++
++test "remote snapshot: lines, styles and blank rows" {
++    var t = try Terminal.init(testing.allocator, .{ .cols = 10, .rows = 4 });
++    defer t.deinit(testing.allocator);
++    var s = t.vtStream();
++    defer s.deinit();
++    try s.nextSlice("one\r\n\x1b[1;31mtwo\x1b[0m\r\n\r\nfour\x1b[2;3H");
++    try expectRoundTrip(&t, 100);
++}
++
++test "remote snapshot: scrollback above a cleared screen" {
++    var t = try Terminal.init(testing.allocator, .{ .cols = 10, .rows = 4 });
++    defer t.deinit(testing.allocator);
++    var s = t.vtStream();
++    defer s.deinit();
++    for (0..20) |i| {
++        var buf: [16]u8 = undefined;
++        try s.nextSlice(try std.fmt.bufPrint(&buf, "line {d}\r\n", .{i}));
++    }
++    // Scroll everything off, then write at the top of a blank screen.
++    try s.nextSlice("\r\n\r\n\r\n\x1b[Htop");
++    try expectRoundTrip(&t, 100);
++
++    const alloc = testing.allocator;
++    var out: std.Io.Writer.Allocating = .init(alloc);
++    defer out.deinit();
++    try write(&out.writer, &t, 5);
++    var dst = try Terminal.init(alloc, .{ .cols = 10, .rows = 4 });
++    defer dst.deinit(alloc);
++    var ds = dst.vtStream();
++    defer ds.deinit();
++    try ds.nextSlice(out.written());
++    // Only the last five rows of scrollback came along.
++    try testing.expectEqual(@as(usize, 5 + 4), dst.screens.active.pages.total_rows);
++    try expectRoundTrip(&t, 5);
++}
++
++test "remote snapshot: alternate screen, modes and margins" {
++    var t = try Terminal.init(testing.allocator, .{ .cols = 20, .rows = 6 });
++    defer t.deinit(testing.allocator);
++    var s = t.vtStream();
++    defer s.deinit();
++    try s.nextSlice("shell prompt $ \r\nmore");
++    try s.nextSlice("\x1b[?1049h\x1b[?2004h\x1b[?1h\x1b[?1002h\x1b[?1006h\x1b[>1u");
++    try s.nextSlice("\x1b[2;5r\x1b[?6h\x1b[3;1Hin region\x1b[4m");
++    try expectRoundTrip(&t, 100);
++    try testing.expect(t.modes.get(.origin));
++}
+diff --git a/src/termio/stream_handler.zig b/src/termio/stream_handler.zig
+index 8c1b5b8..a0142dc 100644
+--- a/src/termio/stream_handler.zig
++++ b/src/termio/stream_handler.zig
+@@ -82,6 +82,10 @@ pub const StreamHandler = struct {
+     /// this to determine if we need to default the window title.
+     seen_title: bool = false,
+ 
++    /// Vhostty: drop every response to the program (see
++    /// Termio.suppress_responses).
++    suppress_responses: bool = false,
++
+     pub const Stream = terminal.Stream(StreamHandler);
+ 
+     /// True if we have tmux control mode built in.
+@@ -126,6 +130,10 @@ pub const StreamHandler = struct {
+         self: *StreamHandler,
+         msg: apprt.surface.Message,
+     ) void {
++        if (self.suppress_responses) switch (msg) {
++            .clipboard_read, .report_title => return,
++            else => {},
++        };
+         // See messageWriter which has similar logic and explains why
+         // we may have to do this.
+         if (self.surface_mailbox.push(msg, .{ .instant = {} }) == 0) {
+@@ -136,6 +144,13 @@ pub const StreamHandler = struct {
+     }
+ 
+     inline fn messageWriter(self: *StreamHandler, msg: termio.Message) void {
++        if (self.suppress_responses) switch (msg) {
++            .write_small, .write_stable, .write_alloc, .size_report, .color_scheme_report, .focused => {
++                if (msg == .write_alloc) msg.write_alloc.alloc.free(msg.write_alloc.data);
++                return;
++            },
++            else => {},
++        };
+         self.termio_mailbox.send(msg, self.renderer_state.mutex);
+         self.termio_messaged = true;
+     }
