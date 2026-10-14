@@ -1,7 +1,9 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SidebarView: View {
     @ObservedObject var store: AppStore
+    @State private var draggingProjectID: UUID?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -26,7 +28,7 @@ struct SidebarView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 1) {
                     ForEach(store.projects) { project in
-                        ProjectSection(store: store, project: project)
+                        ProjectSection(store: store, project: project, draggingProjectID: $draggingProjectID)
                     }
                     if store.projects.isEmpty {
                         Button { store.addProjectViaPanel() } label: {
@@ -85,6 +87,7 @@ private struct ScheduleEntry: View {
 private struct ProjectSection: View {
     @ObservedObject var store: AppStore
     let project: Project
+    @Binding var draggingProjectID: UUID?
     @State private var draggingID: UUID?
 
     /// The typed prompt a session matches the search by, when its title or id doesn't.
@@ -95,7 +98,7 @@ private struct ProjectSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            ProjectRow(store: store, project: project)
+            ProjectRow(store: store, project: project, draggingID: $draggingProjectID)
             if project.expanded {
                 let query = store.searchQuery[project.id]
                 let searching = !(query ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -179,6 +182,7 @@ private struct ProjectSection: View {
 private struct ProjectRow: View {
     @ObservedObject var store: AppStore
     let project: Project
+    @Binding var draggingID: UUID?
     @State private var hover = false
 
     var body: some View {
@@ -208,6 +212,11 @@ private struct ProjectRow: View {
         .contentShape(Rectangle())
         .onHover { hover = $0 }
         .onTapGesture { store.toggleExpanded(project) }
+        .onDrag {
+            draggingID = project.id
+            return NSItemProvider(object: project.id.uuidString as NSString)
+        }
+        .onDrop(of: [UTType.text], delegate: ProjectDropDelegate(target: project.id, store: store, draggingID: $draggingID))
         .help(project.path.abbreviatingHome)
         .contextMenu { projectMenu }
     }
@@ -239,6 +248,25 @@ private struct ProjectRow: View {
         Button("Change Directory…") { store.changeProjectDirectory(project) }
         Divider()
         Button("Remove Project…") { store.removeProject(project) }
+    }
+}
+
+/// Reorders projects live as a dragged project row passes over another one.
+private struct ProjectDropDelegate: DropDelegate {
+    let target: UUID
+    let store: AppStore
+    @Binding var draggingID: UUID?
+
+    func dropEntered(info: DropInfo) {
+        guard let id = draggingID, id != target else { return }
+        withAnimation(.easeOut(duration: 0.12)) { store.moveProject(id, before: target) }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggingID = nil
+        return true
     }
 }
 

@@ -249,8 +249,11 @@ final class AppStore: ObservableObject {
         refreshHistory()
     }
 
-    func moveProject(from source: IndexSet, to destination: Int) {
-        projects.move(fromOffsets: source, toOffset: destination)
+    func moveProject(_ id: UUID, before target: UUID) {
+        guard id != target, let from = projects.firstIndex(where: { $0.id == id }),
+              let to = projects.firstIndex(where: { $0.id == target }) else { return }
+        let project = projects.remove(at: from)
+        projects.insert(project, at: to)
         scheduleSave()
     }
 
