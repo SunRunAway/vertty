@@ -1024,13 +1024,6 @@ final class AppStore: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
-    /// Matches a session by title or session id, case-insensitively.
-    static func matches(_ query: String, title: String, sessionID: String) -> Bool {
-        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { return true }
-        return title.localizedCaseInsensitiveContains(q) || sessionID.localizedCaseInsensitiveContains(q)
-    }
-
     // MARK: - Attention
 
     func updateDockBadge() {

@@ -3,8 +3,8 @@
 
 Starts build/Vhostty.app on a scratch state dir, HOME and project, with fake
 agents (a program that reports its terminal size and echoes its input), and
-drives it with RemoteKit's remote-probe over 127.0.0.1. Build first:
-make app && (cd RemoteKit && swift build --product remote-probe)
+drives it with VhosttyKit's remote-probe over 127.0.0.1. Build first:
+make app && (cd VhosttyKit && swift build --product remote-probe)
 """
 import json
 import os
@@ -20,7 +20,7 @@ import time
 import uuid
 
 ROOT = Path(__file__).resolve().parent.parent
-PROBE = ROOT / "RemoteKit/.build/debug/remote-probe"
+PROBE = ROOT / "VhosttyKit/.build/debug/remote-probe"
 
 
 def free_port():
@@ -76,6 +76,9 @@ for sid, title in ((card_session, "Card session"), (past_session, "Past session"
     rows = [{"type": "ai-title", "aiTitle": title}, {"type": "assistant", "cwd": str(project)}]
     (transcripts / f"{sid}.jsonl").write_text(
         "".join(json.dumps(row, separators=(",", ":")) + "\n" for row in rows))
+# A typed prompt in the card's session, for search.
+(home / ".claude" / "history.jsonl").write_text(json.dumps(
+    {"display": "fix the flaky deploy step", "sessionId": card_session, "project": str(project)}) + "\n")
 # An empty Codex index (history reads fail without one).
 db = sqlite3.connect(home / ".codex" / "state_5.sqlite")
 db.execute("""CREATE TABLE threads (
@@ -333,6 +336,13 @@ with (root / "app.log").open("w") as log:
         a.cmd(f"history {project_id} 10")
         a.expect(lambda e: e["event"] == "reply" and "sessions" in e, "history request failed")
         print("PASS history request", flush=True)
+
+        a.cmd(f"search {project_id} flaky")
+        found = a.expect(lambda e: e["event"] == "reply" and "query" in e, "search failed")
+        assert found["query"] == "flaky" and past_session in found["sessions"], found
+        assert card_session not in found["sessions"], found
+        assert {"session": card_session, "match": "flaky"} in found["prompts"], found
+        print("PASS search returns closed sessions and typed prompts", flush=True)
 
         # The agent's notifications reach the client.
         a.cmd(f"open {card_id} 40 12")

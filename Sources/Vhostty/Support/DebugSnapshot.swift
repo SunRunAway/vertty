@@ -219,21 +219,26 @@ final class DebugSnapshot {
                 continue
             }
             if let remote = RemoteWindowController.all.last {
-                let model = remote.model
+                let store = remote.store
                 if line.hasPrefix("remoteopen "), let i = Int(line.dropFirst(11)) {
-                    model.selectCard(at: i)
+                    store.selectCard(at: i)
                     continue
                 }
                 if line.hasPrefix("remotetext ") {
-                    model.terminalIfCreated?.sendText(String(line.dropFirst(11)))
+                    remote.terminal.view.sendText(String(line.dropFirst(11)))
                     continue
                 }
                 if line == "remoteenter" {
-                    model.terminalIfCreated?.debugPress(keyCode: 0x24, chars: "\r")
+                    remote.terminal.view.debugPress(keyCode: 0x24, chars: "\r")
                     continue
                 }
                 if line == "remotenew" {
-                    if let p = model.currentProject { model.newSession(in: p, kind: nil) }
+                    if let p = store.currentProject { store.newSession(in: p, kind: nil) }
+                    continue
+                }
+                if line.hasPrefix("remotesearch "), let p = store.currentProject ?? store.projects.first {
+                    store.openSearch(p)
+                    store.setSearchQuery(String(line.dropFirst(13)), for: p)
                     continue
                 }
             }
@@ -348,12 +353,18 @@ final class DebugSnapshot {
                 .map { "\($0.key)=\($0.value.before)[\($0.value.match)]\($0.value.after.prefix(40))" }.joined(separator: " / "))
         }
         for remote in RemoteWindowController.all {
-            let model = remote.model
-            lines.append("=== remote \(model.client.url) status=\(model.client.status) server=\(model.client.serverName) open=\(model.openCardID ?? "-")")
-            for card in model.state.cards {
-                lines.append("    card \(card.id) \(card.title) status=\(card.status)")
+            let store = remote.store
+            lines.append("=== remote \(store.client.url) status=\(store.client.status) server=\(store.client.serverName) open=\(store.selectedCardID?.uuidString ?? "-")")
+            for card in store.allCards {
+                lines.append("    card \(card.id) \(card.title) status=\(card.status) attention=\(card.attention) pr=\(card.prURL ?? "-")")
             }
-            if let t = model.terminalIfCreated {
+            for p in store.projects {
+                let shown = store.shownHistory(of: p).map { s in
+                    s.title + (store.promptMatch(p, sessionID: s.id).map { "[\($0.match)]" } ?? "")
+                }
+                lines.append("    history \(p.name) query=\(store.query(for: p) ?? "-"): " + shown.joined(separator: " / "))
+            }
+            if store.selectedCardID != nil, let t = remote.terminal.view {
                 let grid = t.gridSize, own = t.naturalGrid
                 lines.append("    terminal grid=\(grid.columns)x\(grid.rows) own=\(own.columns)x\(own.rows) inWindow=\(t.window != nil)")
                 lines.append(t.visibleText().split(separator: "\n", omittingEmptySubsequences: false)

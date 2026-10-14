@@ -5,7 +5,8 @@ Starts two scratch instances of build/Vhostty.app: a server with a project, a
 card and a fake agent (logs its terminal size and input), and a client with
 no projects that opens a remote window to the server through the debug
 driver. Checks that the remote window lists the card, shows its terminal at
-the window's size and types into it. Build first with make app.
+the window's size, types into it, lists and searches past sessions, and
+starts a new one. Build first with make app.
 """
 import json
 import os
@@ -67,6 +68,17 @@ db.execute("""CREATE TABLE threads (
     thread_source TEXT, preview TEXT, git_origin_url TEXT)""")
 db.commit()
 db.close()
+
+# Two past Claude sessions; a typed prompt in one of them, for search.
+encoded = "".join(c if c.isascii() and c.isalnum() else "-" for c in str(project))
+transcripts = home / ".claude" / "projects" / encoded
+transcripts.mkdir(parents=True)
+past = {str(uuid.uuid4()): "Tidy the docs", str(uuid.uuid4()): "Speed up the build"}
+for sid, title in past.items():
+    rows = [{"type": "ai-title", "aiTitle": title}, {"type": "assistant", "cwd": str(project)}]
+    (transcripts / f"{sid}.jsonl").write_text("".join(json.dumps(r, separators=(",", ":")) + "\n" for r in rows))
+(home / ".claude" / "history.jsonl").write_text(json.dumps(
+    {"display": "cache the flaky step", "sessionId": list(past)[1], "project": str(project)}) + "\n")
 
 project_id = str(uuid.uuid4()).upper()
 card_id = str(uuid.uuid4()).upper()
@@ -169,6 +181,20 @@ try:
     assert input_size("6869") == own, read(agent_log)
     wait(lambda: "GOT 6869" in read(client_snap / "state.txt"), "echo didn't show in the remote terminal")
     print("PASS typing reaches the session and its output shows", flush=True)
+
+    def history_line():
+        for line in read(client_snap / "state.txt").splitlines():
+            if line.startswith("    history Fixture "):
+                return line
+        return ""
+    wait(lambda: "Tidy the docs" in history_line() and "Speed up the build" in history_line(),
+         "the remote sidebar doesn't list past sessions")
+    drive("remotesearch flaky")
+    wait(lambda: history_line().endswith("query=flaky: Speed up the build[flaky]"),
+         "searching by a typed prompt didn't find the session")
+    drive("remotesearch tidy")
+    wait(lambda: history_line().endswith("query=tidy: Tidy the docs"), "searching by title didn't find the session")
+    print("PASS the remote sidebar lists and searches past sessions", flush=True)
 
     drive("remotenew")
     wait(lambda: read(client_snap / "state.txt").count("    card ") == 2, "new session didn't appear")

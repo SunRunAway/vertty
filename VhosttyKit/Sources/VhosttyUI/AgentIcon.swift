@@ -1,11 +1,16 @@
 import SwiftUI
 
 /// The mark of the agent a session runs: Claude's spark or Codex's ">_".
-struct AgentIcon: View {
+public struct AgentIcon: View {
     let kind: AgentKind
     var size: CGFloat = 12
 
-    var body: some View {
+    public init(kind: AgentKind, size: CGFloat = 12) {
+        self.kind = kind
+        self.size = size
+    }
+
+    public var body: some View {
         Group {
             switch kind {
             case .claude:

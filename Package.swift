@@ -5,7 +5,7 @@ let package = Package(
     name: "Vhostty",
     platforms: [.macOS(.v14)],
     dependencies: [
-        .package(path: "RemoteKit"),
+        .package(path: "VhosttyKit"),
     ],
     targets: [
         .target(
@@ -14,7 +14,11 @@ let package = Package(
         ),
         .executableTarget(
             name: "Vhostty",
-            dependencies: ["GhosttyC", .product(name: "VhosttyRemote", package: "RemoteKit")],
+            dependencies: [
+                "GhosttyC",
+                .product(name: "VhosttyRemote", package: "VhosttyKit"),
+                .product(name: "VhosttyUI", package: "VhosttyKit"),
+            ],
             path: "Sources/Vhostty",
             linkerSettings: [
                 .unsafeFlags(["-L", "build/ghostty/lib"]),

@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		8976290E6BC2A5F76B09862E /* VhosttyRemote in Frameworks */ = {isa = PBXBuildFile; productRef = 1B4C1C18DCB0CF531B1C0E53 /* VhosttyRemote */; };
+		F3E9B88D2C51C218B55ED57B /* VhosttyUI in Frameworks */ = {isa = PBXBuildFile; productRef = BFE4BA8977B544267B18FF23 /* VhosttyUI */; };
 		1B3C13BA0A83B74F819FC0E4 /* GhosttyTerminal in Frameworks */ = {isa = PBXBuildFile; productRef = A668E0AC2C3069037800C1C0 /* GhosttyTerminal */; };
 /* End PBXBuildFile section */
 
@@ -29,6 +30,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				8976290E6BC2A5F76B09862E /* VhosttyRemote in Frameworks */,
+				F3E9B88D2C51C218B55ED57B /* VhosttyUI in Frameworks */,
 				1B3C13BA0A83B74F819FC0E4 /* GhosttyTerminal in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -73,6 +75,7 @@
 			name = Vhostty;
 			packageProductDependencies = (
 				1B4C1C18DCB0CF531B1C0E53 /* VhosttyRemote */,
+				BFE4BA8977B544267B18FF23 /* VhosttyUI */,
 				A668E0AC2C3069037800C1C0 /* GhosttyTerminal */,
 			);
 			productName = Vhostty;
@@ -100,7 +103,7 @@
 			mainGroup = 450B220DE8EEB27904FC3DC4;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				C03762468975B8516504D4E9 /* XCLocalSwiftPackageReference "../RemoteKit" */,
+				C03762468975B8516504D4E9 /* XCLocalSwiftPackageReference "../VhosttyKit" */,
 				3A831E66D26BE3CA930E2721 /* XCLocalSwiftPackageReference "GhosttyTerminal" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -185,7 +188,8 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Vhostty;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -194,7 +198,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = dev.vhostty.remote;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
@@ -208,7 +212,8 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Vhostty;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -217,7 +222,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = dev.vhostty.remote;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
@@ -245,9 +250,9 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		C03762468975B8516504D4E9 /* XCLocalSwiftPackageReference "../RemoteKit" */ = {
+		C03762468975B8516504D4E9 /* XCLocalSwiftPackageReference "../VhosttyKit" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = ../RemoteKit;
+			relativePath = ../VhosttyKit;
 		};
 		3A831E66D26BE3CA930E2721 /* XCLocalSwiftPackageReference "GhosttyTerminal" */ = {
 			isa = XCLocalSwiftPackageReference;
@@ -263,6 +268,10 @@
 		A668E0AC2C3069037800C1C0 /* GhosttyTerminal */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = GhosttyTerminal;
+		};
+		BFE4BA8977B544267B18FF23 /* VhosttyUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VhosttyUI;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

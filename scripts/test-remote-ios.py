@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
-"""Exercise the iPhone client in the iOS simulator against a scratch server.
+"""Exercise the iOS client in the iOS simulator against a scratch server.
 
 Starts a scratch instance of build/Vhostty.app with a project, a card and a
-fake agent (logs its terminal size and input), launches the iPhone app in a
+fake agent (logs its terminal size and input), launches the iOS app in a
 simulator with its debug driver (Documents/debug/input.txt and state.txt),
 and checks connecting, the terminal, sizes, input, new sessions and being
 replaced by another client. Build first:
 
-make app && (cd RemoteKit && swift build --product remote-probe)
+make app && (cd VhosttyKit && swift build --product remote-probe)
 xcodebuild -project iOS/Vhostty.xcodeproj -scheme Vhostty \\
     -destination 'platform=iOS Simulator,name=iPhone 17' \\
     -derivedDataPath build/ios-dd build
 
-SIM_DEVICE picks the simulator (default "iPhone 17"). A simulator this
-script boots is shut down again at the end.
+SIM_DEVICE picks the simulator (default "iPhone 17"; an iPad such as
+"iPad Air 11-inch (M4)" runs the same checks in the side-by-side layout).
+A simulator this script boots is shut down again at the end.
 """
 import json
 import os
@@ -28,7 +29,7 @@ import uuid
 
 ROOT = Path(__file__).resolve().parent.parent
 APP = ROOT / "build/ios-dd/Build/Products/Debug-iphonesimulator/Vhostty.app"
-PROBE = ROOT / "RemoteKit/.build/debug/remote-probe"
+PROBE = ROOT / "VhosttyKit/.build/debug/remote-probe"
 BUNDLE = "dev.vhostty.remote"
 DEVICE = os.environ.get("SIM_DEVICE", "iPhone 17")
 
@@ -205,12 +206,15 @@ try:
 
     drive("open 0")
     wait(lambda: "green prompt" in phone(), "the card's terminal didn't open")
+    # The keyboard's bar takes room once the terminal has focus: the size
+    # settles a moment after opening.
+    wait(lambda: (lambda own: own not in (None, "-") and last_size() == own and terminal("reported") == own
+                  and terminal("session") == own)(terminal("own")),
+         "session not at the device's size")
     own = terminal("own")
-    wait(lambda: last_size() == own and terminal("reported") == own and terminal("session") == own,
-         f"session not at the iPhone's size {own}")
     assert terminal("scale") == "1.00", phone()
     simctl("io", udid, "screenshot", str(root / "terminal.png"))
-    print(f"PASS opening shows the terminal at the iPhone's size ({own})", flush=True)
+    print(f"PASS opening shows the terminal at the device's size ({own})", flush=True)
 
     drive("type hi")
     wait(lambda: input_size("69") is not None, "typing didn't reach the agent")
@@ -221,7 +225,7 @@ try:
     assert input_size("e4bda0e5a5bd") == own, read(agent_log)
     drive("ctrlc")
     wait(lambda: input_size("03") is not None, "Ctrl+C didn't reach the agent")
-    print("PASS typing, IME text and Ctrl+C reach the session at the iPhone's size", flush=True)
+    print("PASS typing, IME text and Ctrl+C reach the session at the device's size", flush=True)
 
     # Typing on the computer takes the session to the computer's size; the
     # iPhone shows it at that grid (scaled down when bigger), and typing on
@@ -237,7 +241,7 @@ try:
     wait(lambda: input_size("79") is not None, "typing after the computer's input didn't reach the agent")
     assert input_size("79") == own, read(agent_log)
     wait(lambda: terminal("session") == own and terminal("scale") == "1.00", "the iPhone didn't take its size back")
-    print(f"PASS each input lands at its sender's size (computer {local}, iPhone {own})", flush=True)
+    print(f"PASS each input lands at its sender's size (computer {local}, device {own})", flush=True)
 
     drive("back")
     wait(lambda: last_size() == local and f"--- tab {card_id}" in read(server_snap / "state.txt")
@@ -251,7 +255,7 @@ try:
          "the new session didn't open")
     wait(lambda: phone().count("green prompt") == 1 and "SIZE 137x54" not in phone(),
          "the new session's terminal didn't show")
-    print("PASS new session from the iPhone", flush=True)
+    print("PASS new session from the device", flush=True)
 
     # Another client takes over: the iPhone says so and doesn't reconnect,
     # even after coming back to the foreground.
@@ -264,7 +268,7 @@ try:
     time.sleep(2)
     assert status() == "replaced", phone()
     simctl("io", udid, "screenshot", str(root / "replaced.png"))
-    print("PASS another client replaces the iPhone; it doesn't reconnect on its own", flush=True)
+    print("PASS another client replaces the device; it doesn't reconnect on its own", flush=True)
     print(f"Screenshots: {root}", flush=True)
 finally:
     if probe:

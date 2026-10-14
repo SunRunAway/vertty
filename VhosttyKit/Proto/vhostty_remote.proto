@@ -118,6 +118,7 @@ message ClientMessage {
     TerminalViewport viewport = 9;
     AlignForInput align_for_input = 10;
     TerminalInput input = 11;
+    SearchHistory search_history = 12;
   }
 }
 
@@ -140,6 +141,7 @@ enum ClientPlatform {
   CLIENT_PLATFORM_UNSPECIFIED = 0;
   CLIENT_PLATFORM_IPHONE = 1;
   CLIENT_PLATFORM_MAC = 2;
+  CLIENT_PLATFORM_IPAD = 3;
 }
 
 // First message of a connection.
@@ -201,6 +203,8 @@ message Reply {
     Closed closed = 4;
     // ListHistory.
     ProjectHistory history = 5;
+    // SearchHistory.
+    SearchResult search = 6;
   }
 }
 
@@ -270,6 +274,10 @@ message Card {
   bool running = 10;
   // The agent's session id; empty for a Codex session not saved yet.
   string session_id = 11;
+  // Finished in the background and not looked at on the computer yet.
+  bool attention = 12;
+  // The PR's web page; empty when there is no PR.
+  string pr_url = 13;
 }
 
 message ProjectHistory {
@@ -323,6 +331,34 @@ message CloseSession {
 message ListHistory {
   string project_id = 1;
   uint32 limit = 2;
+}
+
+// Searching a project's sessions as the computer's sidebar does: all of its
+// closed sessions (the client matches their titles and ids itself), and the
+// sessions, open or closed, whose typed prompts contain `query`, with the
+// matching line. An empty query matches no prompts. Answered after the
+// prompts are read, which can take a moment; send a new request when the
+// query changes and use the latest reply.
+message SearchHistory {
+  string project_id = 1;
+  string query = 2;
+}
+
+message SearchResult {
+  // The query this answers.
+  string query = 1;
+  // Every closed session of the project, newest first.
+  repeated HistoryEntry sessions = 2;
+  repeated PromptMatch prompts = 3;
+}
+
+// The prompt line a session matched with: `match` is the matching text,
+// `before` and `after` the text around it on that line.
+message PromptMatch {
+  string session_id = 1;
+  string before = 2;
+  string match = 3;
+  string after = 4;
 }
 
 // ---------------------------------------------------------------------------

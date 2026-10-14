@@ -1,55 +1,6 @@
 import AppKit
 import SwiftUI
 
-struct Project: Codable, Identifiable, Hashable {
-    var id = UUID()
-    var name: String
-    var path: String
-    var expanded = true
-    /// What ⌘T and the new-session button start here (AppStore.globalDefaultKind when unset).
-    var defaultKind: AgentKind?
-
-    var color: Color { ProjectPalette.color(for: id) }
-}
-
-enum ProjectPalette {
-    static let colors: [Color] = [
-        Color(red: 0.55, green: 0.48, blue: 0.98), Color(red: 0.31, green: 0.72, blue: 0.96),
-        Color(red: 0.98, green: 0.62, blue: 0.29), Color(red: 0.36, green: 0.82, blue: 0.55),
-        Color(red: 0.95, green: 0.42, blue: 0.56), Color(red: 0.95, green: 0.80, blue: 0.30),
-        Color(red: 0.42, green: 0.85, blue: 0.82), Color(red: 0.80, green: 0.55, blue: 0.95),
-    ]
-
-    static func color(for id: UUID) -> Color {
-        // FNV-1a over the UUID bytes: stable across launches (unlike hashValue).
-        var h: UInt64 = 0xcbf29ce484222325
-        withUnsafeBytes(of: id.uuid) { for b in $0 { h = (h ^ UInt64(b)) &* 0x100000001b3 } }
-        return colors[Int(h % UInt64(colors.count))]
-    }
-}
-
-/// Which coding agent a session runs.
-enum AgentKind: String, Codable, CaseIterable, Identifiable {
-    case claude
-    case codex
-
-    var id: String { rawValue }
-    var name: String { self == .claude ? "Claude" : "Codex" }
-
-    var newSessionTitle: LocalizedStringKey {
-        self == .claude ? "New Claude Session" : "New Codex Session"
-    }
-}
-
-enum SessionStatus: String, Codable {
-    case dormant     // restored from disk, Claude not started yet
-    case starting
-    case working
-    case idle
-    case needsInput
-    case exited
-}
-
 /// One session card = one terminal running Claude Code or Codex (+ an optional bottom shell).
 final class TabSession: ObservableObject, Identifiable {
     let id: UUID

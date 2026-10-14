@@ -117,6 +117,8 @@ final class RemoteBridge {
         c.status = Self.status(tab.status)
         c.running = tab.surface.map { !$0.processExited } ?? false
         c.sessionID = tab.sessionID
+        c.attention = tab.attention
+        c.prURL = tab.prURL ?? ""
         return c
     }
 
@@ -161,6 +163,7 @@ final class RemoteBridge {
         case .resumeSession(let r): resumeSession(r, id)
         case .closeSession(let r): closeSession(r, id)
         case .listHistory(let r): listHistory(r, id)
+        case .searchHistory(let r): searchHistory(r, id)
         case .openTerminal(let r): openTerminal(r.cardID, r.size)
         case .leaveTerminal(let r):
             if attached?.tab.id.uuidString == r.cardID { detach() }
@@ -270,6 +273,42 @@ final class RemoteBridge {
                     $0.history.projectID = r.projectID
                     $0.history.sessions = closed.prefix(limit).map(Self.entry)
                     $0.history.moreAvailable = closed.count > limit
+                }
+            }
+        }
+    }
+
+    /// What the computer's own search shows (see AppStore.openSearch).
+    private func searchHistory(_ r: Remote.SearchHistory, _ id: UInt64) {
+        guard let project = project(r.projectID) else { return fail(id, .notFound, "No such project.") }
+        let openIDs = Set(store.tabs.map(\.sessionID))
+        let open = store.tabs(of: project).map { (kind: $0.kind, id: $0.sessionID) }
+        let query = r.query
+        store.infoQueue.async { [weak self] in
+            let all = AppStore.history(projectPath: project.path, limit: .max)
+            var prompts: [String: PromptSnippet] = [:]
+            if let all, !query.isEmpty {
+                var claude = Set<String>(), codex = Set<String>()
+                for session in open + all.map({ (kind: $0.kind, id: $0.id) }) where !session.id.isEmpty {
+                    if session.kind == .claude { claude.insert(session.id) } else { codex.insert(session.id) }
+                }
+                prompts = Transcript.promptMatches(query, sessionIDs: claude)
+                    .merging(CodexThreads.promptMatches(query, threadIDs: codex)) { first, _ in first }
+            }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard let all else { return self.fail(id, .internal, "Couldn't read the history.") }
+                self.reply(id) {
+                    $0.search.query = query
+                    $0.search.sessions = all.filter { !openIDs.contains($0.id) }.map(Self.entry)
+                    $0.search.prompts = prompts.map { sessionID, snippet in
+                        var m = Remote.PromptMatch()
+                        m.sessionID = sessionID
+                        m.before = snippet.before
+                        m.match = snippet.match
+                        m.after = snippet.after
+                        return m
+                    }
                 }
             }
         }

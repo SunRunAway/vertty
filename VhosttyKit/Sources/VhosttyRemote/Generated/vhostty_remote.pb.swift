@@ -151,6 +151,7 @@ public enum Vhostty_Remote_ClientPlatform: SwiftProtobuf.Enum, Swift.CaseIterabl
   case unspecified // = 0
   case iphone // = 1
   case mac // = 2
+  case ipad // = 3
   case UNRECOGNIZED(Int)
 
   public init() {
@@ -162,6 +163,7 @@ public enum Vhostty_Remote_ClientPlatform: SwiftProtobuf.Enum, Swift.CaseIterabl
     case 0: self = .unspecified
     case 1: self = .iphone
     case 2: self = .mac
+    case 3: self = .ipad
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -171,6 +173,7 @@ public enum Vhostty_Remote_ClientPlatform: SwiftProtobuf.Enum, Swift.CaseIterabl
     case .unspecified: return 0
     case .iphone: return 1
     case .mac: return 2
+    case .ipad: return 3
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -180,6 +183,7 @@ public enum Vhostty_Remote_ClientPlatform: SwiftProtobuf.Enum, Swift.CaseIterabl
     .unspecified,
     .iphone,
     .mac,
+    .ipad,
   ]
 
 }
@@ -446,6 +450,14 @@ public struct Vhostty_Remote_ClientMessage: Sendable {
     set {body = .input(newValue)}
   }
 
+  public var searchHistory: Vhostty_Remote_SearchHistory {
+    get {
+      if case .searchHistory(let v)? = body {return v}
+      return Vhostty_Remote_SearchHistory()
+    }
+    set {body = .searchHistory(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public enum OneOf_Body: Equatable, Sendable {
@@ -461,6 +473,7 @@ public struct Vhostty_Remote_ClientMessage: Sendable {
     case viewport(Vhostty_Remote_TerminalViewport)
     case alignForInput(Vhostty_Remote_AlignForInput)
     case input(Vhostty_Remote_TerminalInput)
+    case searchHistory(Vhostty_Remote_SearchHistory)
 
   }
 
@@ -678,6 +691,15 @@ public struct Vhostty_Remote_Reply: Sendable {
     set {result = .history(newValue)}
   }
 
+  /// SearchHistory.
+  public var search: Vhostty_Remote_SearchResult {
+    get {
+      if case .search(let v)? = result {return v}
+      return Vhostty_Remote_SearchResult()
+    }
+    set {result = .search(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public enum OneOf_Result: Equatable, Sendable {
@@ -687,6 +709,8 @@ public struct Vhostty_Remote_Reply: Sendable {
     case closed(Vhostty_Remote_Closed)
     /// ListHistory.
     case history(Vhostty_Remote_ProjectHistory)
+    /// SearchHistory.
+    case search(Vhostty_Remote_SearchResult)
 
   }
 
@@ -791,6 +815,12 @@ public struct Vhostty_Remote_Card: Sendable {
 
   /// The agent's session id; empty for a Codex session not saved yet.
   public var sessionID: String = String()
+
+  /// Finished in the background and not looked at on the computer yet.
+  public var attention: Bool = false
+
+  /// The PR's web page; empty when there is no PR.
+  public var prURL: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -900,6 +930,64 @@ public struct Vhostty_Remote_ListHistory: Sendable {
   public var projectID: String = String()
 
   public var limit: UInt32 = 0
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+/// Searching a project's sessions as the computer's sidebar does: all of its
+/// closed sessions (the client matches their titles and ids itself), and the
+/// sessions, open or closed, whose typed prompts contain `query`, with the
+/// matching line. An empty query matches no prompts. Answered after the
+/// prompts are read, which can take a moment; send a new request when the
+/// query changes and use the latest reply.
+public struct Vhostty_Remote_SearchHistory: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var projectID: String = String()
+
+  public var query: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct Vhostty_Remote_SearchResult: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The query this answers.
+  public var query: String = String()
+
+  /// Every closed session of the project, newest first.
+  public var sessions: [Vhostty_Remote_HistoryEntry] = []
+
+  public var prompts: [Vhostty_Remote_PromptMatch] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+/// The prompt line a session matched with: `match` is the matching text,
+/// `before` and `after` the text around it on that line.
+public struct Vhostty_Remote_PromptMatch: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var sessionID: String = String()
+
+  public var before: String = String()
+
+  public var match: String = String()
+
+  public var after: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -1119,6 +1207,7 @@ extension Vhostty_Remote_ClientPlatform: SwiftProtobuf._ProtoNameProviding {
     0: .same(proto: "CLIENT_PLATFORM_UNSPECIFIED"),
     1: .same(proto: "CLIENT_PLATFORM_IPHONE"),
     2: .same(proto: "CLIENT_PLATFORM_MAC"),
+    3: .same(proto: "CLIENT_PLATFORM_IPAD"),
   ]
 }
 
@@ -1169,6 +1258,7 @@ extension Vhostty_Remote_ClientMessage: SwiftProtobuf.Message, SwiftProtobuf._Me
     9: .same(proto: "viewport"),
     10: .standard(proto: "align_for_input"),
     11: .same(proto: "input"),
+    12: .standard(proto: "search_history"),
   ]
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -1308,6 +1398,19 @@ extension Vhostty_Remote_ClientMessage: SwiftProtobuf.Message, SwiftProtobuf._Me
           self.body = .input(v)
         }
       }()
+      case 12: try {
+        var v: Vhostty_Remote_SearchHistory?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .searchHistory(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .searchHistory(v)
+        }
+      }()
       default: break
       }
     }
@@ -1361,6 +1464,10 @@ extension Vhostty_Remote_ClientMessage: SwiftProtobuf.Message, SwiftProtobuf._Me
     case .input?: try {
       guard case .input(let v)? = self.body else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 11)
+    }()
+    case .searchHistory?: try {
+      guard case .searchHistory(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 12)
     }()
     case nil: break
     }
@@ -1730,6 +1837,7 @@ extension Vhostty_Remote_Reply: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     3: .same(proto: "session"),
     4: .same(proto: "closed"),
     5: .same(proto: "history"),
+    6: .same(proto: "search"),
   ]
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -1779,6 +1887,19 @@ extension Vhostty_Remote_Reply: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
           self.result = .history(v)
         }
       }()
+      case 6: try {
+        var v: Vhostty_Remote_SearchResult?
+        var hadOneofValue = false
+        if let current = self.result {
+          hadOneofValue = true
+          if case .search(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.result = .search(v)
+        }
+      }()
       default: break
       }
     }
@@ -1807,6 +1928,10 @@ extension Vhostty_Remote_Reply: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     case .history?: try {
       guard case .history(let v)? = self.result else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 5)
+    }()
+    case .search?: try {
+      guard case .search(let v)? = self.result else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
     }()
     case nil: break
     }
@@ -1987,6 +2112,8 @@ extension Vhostty_Remote_Card: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
     9: .same(proto: "status"),
     10: .same(proto: "running"),
     11: .standard(proto: "session_id"),
+    12: .same(proto: "attention"),
+    13: .standard(proto: "pr_url"),
   ]
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -2006,6 +2133,8 @@ extension Vhostty_Remote_Card: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
       case 9: try { try decoder.decodeSingularEnumField(value: &self.status) }()
       case 10: try { try decoder.decodeSingularBoolField(value: &self.running) }()
       case 11: try { try decoder.decodeSingularStringField(value: &self.sessionID) }()
+      case 12: try { try decoder.decodeSingularBoolField(value: &self.attention) }()
+      case 13: try { try decoder.decodeSingularStringField(value: &self.prURL) }()
       default: break
       }
     }
@@ -2045,6 +2174,12 @@ extension Vhostty_Remote_Card: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
     if !self.sessionID.isEmpty {
       try visitor.visitSingularStringField(value: self.sessionID, fieldNumber: 11)
     }
+    if self.attention != false {
+      try visitor.visitSingularBoolField(value: self.attention, fieldNumber: 12)
+    }
+    if !self.prURL.isEmpty {
+      try visitor.visitSingularStringField(value: self.prURL, fieldNumber: 13)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2060,6 +2195,8 @@ extension Vhostty_Remote_Card: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
     if lhs.status != rhs.status {return false}
     if lhs.running != rhs.running {return false}
     if lhs.sessionID != rhs.sessionID {return false}
+    if lhs.attention != rhs.attention {return false}
+    if lhs.prURL != rhs.prURL {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -2318,6 +2455,138 @@ extension Vhostty_Remote_ListHistory: SwiftProtobuf.Message, SwiftProtobuf._Mess
   public static func ==(lhs: Vhostty_Remote_ListHistory, rhs: Vhostty_Remote_ListHistory) -> Bool {
     if lhs.projectID != rhs.projectID {return false}
     if lhs.limit != rhs.limit {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Vhostty_Remote_SearchHistory: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SearchHistory"
+  public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
+    1: .standard(proto: "project_id"),
+    2: .same(proto: "query"),
+  ]
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.projectID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.query) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.projectID.isEmpty {
+      try visitor.visitSingularStringField(value: self.projectID, fieldNumber: 1)
+    }
+    if !self.query.isEmpty {
+      try visitor.visitSingularStringField(value: self.query, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Vhostty_Remote_SearchHistory, rhs: Vhostty_Remote_SearchHistory) -> Bool {
+    if lhs.projectID != rhs.projectID {return false}
+    if lhs.query != rhs.query {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Vhostty_Remote_SearchResult: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SearchResult"
+  public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
+    1: .same(proto: "query"),
+    2: .same(proto: "sessions"),
+    3: .same(proto: "prompts"),
+  ]
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.query) }()
+      case 2: try { try decoder.decodeRepeatedMessageField(value: &self.sessions) }()
+      case 3: try { try decoder.decodeRepeatedMessageField(value: &self.prompts) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.query.isEmpty {
+      try visitor.visitSingularStringField(value: self.query, fieldNumber: 1)
+    }
+    if !self.sessions.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.sessions, fieldNumber: 2)
+    }
+    if !self.prompts.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.prompts, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Vhostty_Remote_SearchResult, rhs: Vhostty_Remote_SearchResult) -> Bool {
+    if lhs.query != rhs.query {return false}
+    if lhs.sessions != rhs.sessions {return false}
+    if lhs.prompts != rhs.prompts {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Vhostty_Remote_PromptMatch: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".PromptMatch"
+  public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
+    1: .standard(proto: "session_id"),
+    2: .same(proto: "before"),
+    3: .same(proto: "match"),
+    4: .same(proto: "after"),
+  ]
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.sessionID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.before) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.match) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.after) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.sessionID.isEmpty {
+      try visitor.visitSingularStringField(value: self.sessionID, fieldNumber: 1)
+    }
+    if !self.before.isEmpty {
+      try visitor.visitSingularStringField(value: self.before, fieldNumber: 2)
+    }
+    if !self.match.isEmpty {
+      try visitor.visitSingularStringField(value: self.match, fieldNumber: 3)
+    }
+    if !self.after.isEmpty {
+      try visitor.visitSingularStringField(value: self.after, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Vhostty_Remote_PromptMatch, rhs: Vhostty_Remote_PromptMatch) -> Bool {
+    if lhs.sessionID != rhs.sessionID {return false}
+    if lhs.before != rhs.before {return false}
+    if lhs.match != rhs.match {return false}
+    if lhs.after != rhs.after {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

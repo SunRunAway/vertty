@@ -2,27 +2,36 @@ import GhosttyTerminal
 import SwiftUI
 import UIKit
 import VhosttyRemote
+import VhosttyUI
 
-/// The terminal of an open card. The session runs on the computer at one
-/// grid size at a time: the iPhone's while it was the last to enter, resize
-/// or type, else the computer's. The terminal view is laid out at that grid
-/// and scaled down when it doesn't fit the screen.
-final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeDelegate {
+/// The iOS terminal of a card (RemoteStore does the rest, as on the Mac):
+/// libghostty-spm's terminal view, fed by the connection. The session runs
+/// on the computer at one grid size at a time; libghostty-spm can't set a
+/// grid, so the view is laid out at the session's grid and scaled down when
+/// it doesn't fit.
+final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeDelegate, RemoteTerminalDisplay {
     /// Ghostty's window padding, in points (see the controller's config).
     static let padding: CGFloat = 4
+    /// The one on screen, for the debug driver.
+    private(set) static weak var current: TerminalViewController?
 
-    let cardID: String
-    private let session: RemoteSession
+    let cardID: UUID
+    private let store: RemoteStore
     private let terminal = UITerminalView(frame: .zero)
     private let container = LayoutView()
-    private let controller = TerminalController { config in
+    /// Ghostty's own colors, as on the computer (no libghostty-spm theme).
+    private static let controller = TerminalController(theme: TerminalTheme()) { config in
         config.withWindowPaddingX(Int(TerminalViewController.padding))
         config.withWindowPaddingY(Int(TerminalViewController.padding))
         config.withCustom("window-padding-balance", "false")
     }
+    static var background: Color {
+        let c = controller.backgroundColor
+        return Color(red: Double(c.red) / 255, green: Double(c.green) / 255, blue: Double(c.blue) / 255)
+    }
     private lazy var mirror = InMemoryTerminalSession(
         write: { [weak self] data in
-            DispatchQueue.main.async { self?.session.client.input(data) }
+            DispatchQueue.main.async { self?.store.input(data) }
         },
         resize: { [weak self] viewport in
             DispatchQueue.main.async { self?.terminalResized(viewport) }
@@ -34,18 +43,10 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
     private var cell: (width: CGFloat, height: CGFloat)?
     /// The session's grid on the computer, from the last snapshot.
     private var sessionGrid: Remote.TerminalSize?
-    /// A snapshot waiting for the terminal to take its size, with the
-    /// output that came after it.
-    private var awaiting: Remote.TerminalSize?
-    private var queued: [Data] = []
-    private var awaitingTimeout: DispatchWorkItem?
-    private var opened = false
-    /// The size last sent as the viewport.
-    private var sentSize: Remote.TerminalSize?
 
-    init(cardID: String, session: RemoteSession) {
+    init(cardID: UUID, store: RemoteStore) {
         self.cardID = cardID
-        self.session = session
+        self.store = store
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -53,7 +54,7 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .black
+        view.backgroundColor = .clear
         container.clipsToBounds = true
         container.onLayout = { [weak self] in self?.containerResized() }
         container.translatesAutoresizingMaskIntoConstraints = false
@@ -66,30 +67,31 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
         ])
 
         terminal.configuration = TerminalSurfaceOptions(backend: .inMemory(mirror))
-        terminal.controller = controller
+        terminal.controller = Self.controller
         terminal.delegate = self
         terminal.inputAccessoryItems = [.esc, .tab, .shiftTab, .ctrlC, .divider, .arrowLeft, .arrowDown, .arrowUp, .arrowRight]
-        terminal.onWillInput = { [weak self] in
-            guard let self, let own = self.ownSize else { return }
-            self.sentSize = own
-            self.session.client.alignForInput(own)
-        }
+        terminal.onWillInput = { [weak self] in self?.store.willInput() }
         container.addSubview(terminal)
     }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        session.terminal = self
+        Self.current = self
         terminal.acquireProgrammaticFocus()
-        openIfReady()
+        attachIfReady()
     }
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
-        if session.terminal === self { session.terminal = nil }
+        store.detach(self)
     }
 
-    // MARK: - Size
+    private func attachIfReady() {
+        guard view.window != nil, ownSize != nil else { return }
+        store.attach(self)
+    }
+
+    // MARK: - RemoteTerminalDisplay
 
     /// The grid that fits the screen, once the cell size is known.
     var ownSize: Remote.TerminalSize? {
@@ -101,30 +103,23 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
         return Remote.TerminalSize(columns: cols, rows: rows)
     }
 
+    func showGrid(_ size: Remote.TerminalSize) {
+        sessionGrid = size
+        layoutTerminal()
+    }
+
+    func feed(_ data: Data) { mirror.receive(data) }
+
+    // MARK: - Size
+
     /// Ghostty's padding in pixels: points at 96 dpi off the Mac.
     private var paddingPixels: CGFloat {
         (Self.padding * traitCollection.displayScale * 96 / 72).rounded(.down)
     }
 
-    /// Sends the screen's size as the viewport (it changed, or the app came
-    /// back to the foreground).
-    func reportViewport() {
-        guard opened, let own = ownSize else { return }
-        sentSize = own
-        session.client.viewportChanged(own)
-    }
-
     private func containerResized() {
         layoutTerminal()
-        guard opened, let own = ownSize, own != sentSize else { return }
-        reportViewport()
-    }
-
-    private func openIfReady() {
-        guard !opened, session.terminal === self, let own = ownSize else { return }
-        opened = true
-        sentSize = own
-        session.client.openTerminal(cardID: cardID, size: own)
+        store.viewportChanged()
     }
 
     /// Lays the terminal out at the session's grid, scaled down to fit.
@@ -152,51 +147,19 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
         cell = (CGFloat(size.cellWidthPixels), CGFloat(size.cellHeightPixels))
         if first {
             layoutTerminal()
-            openIfReady()
+            attachIfReady()
         }
     }
 
     private func terminalResized(_ viewport: InMemoryTerminalViewport) {
         reported = viewport
-        guard let a = awaiting, a.columns == Int(viewport.columns), a.rows == Int(viewport.rows) else { return }
-        // Ghostty reports the size just before its IO thread resizes the
-        // terminal; output fed before then would land at the old size.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in self?.flush() }
-    }
-
-    // MARK: - Stream
-
-    func showSnapshot(columns: Int, rows: Int, data: Data) {
-        let grid = Remote.TerminalSize(columns: columns, rows: rows)
-        sessionGrid = grid
-        awaiting = grid
-        queued = [data]
-        layoutTerminal()
-        if let r = reported, Int(r.columns) == columns, Int(r.rows) == rows {
-            flush()
-            return
+        // libghostty-spm reports the size just before its IO thread resizes
+        // the terminal; output fed before then would land at the old size.
+        let size = Remote.TerminalSize(columns: Int(viewport.columns), rows: Int(viewport.rows))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self, self.reported.map({ Int($0.columns) == size.columns && Int($0.rows) == size.rows }) == true else { return }
+            self.store.terminalGridApplied(size)
         }
-        awaitingTimeout?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.flush() }
-        awaitingTimeout = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
-    }
-
-    func showOutput(_ data: Data) {
-        if awaiting != nil {
-            queued.append(data)
-        } else {
-            mirror.receive(data)
-        }
-    }
-
-    private func flush() {
-        guard awaiting != nil else { return }
-        awaitingTimeout?.cancel()
-        awaiting = nil
-        let data = queued
-        queued = []
-        for d in data { mirror.receive(d) }
     }
 
     // MARK: - Debug
@@ -205,9 +168,7 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
         let r = reported.map { "\($0.columns)x\($0.rows)" } ?? "-"
         let g = sessionGrid.map { "\($0.columns)x\($0.rows)" } ?? "-"
         let o = ownSize.map { "\($0.columns)x\($0.rows)" } ?? "-"
-        let px = reported.map { "\($0.widthPixels)x\($0.heightPixels)" } ?? "-"
-        let c = cell.map { "\(Int($0.width))x\(Int($0.height))" } ?? "-"
-        return "terminal reported=\(r) session=\(g) own=\(o) scale=\(String(format: "%.2f", terminal.transform.a)) px=\(px) cell=\(c) box=\(container.bounds.size) display=\(traitCollection.displayScale)"
+        return "terminal reported=\(r) session=\(g) own=\(o) scale=\(String(format: "%.2f", terminal.transform.a))"
     }
 
     var visibleText: String { mirror.readViewportText() ?? "" }
@@ -239,13 +200,13 @@ private final class LayoutView: UIView {
     }
 }
 
-/// The terminal screen of a card, for SwiftUI.
+/// The terminal of a card, for SwiftUI.
 struct TerminalScreen: UIViewControllerRepresentable {
-    let cardID: String
-    let session: RemoteSession
+    let cardID: UUID
+    let store: RemoteStore
 
     func makeUIViewController(context: Context) -> TerminalViewController {
-        TerminalViewController(cardID: cardID, session: session)
+        TerminalViewController(cardID: cardID, store: store)
     }
 
     func updateUIViewController(_ controller: TerminalViewController, context: Context) {}

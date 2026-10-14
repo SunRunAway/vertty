@@ -4,7 +4,7 @@ import SystemConfiguration
 import VhosttyRemote
 
 /// Serves remote clients (the iPhone app, Vhostty on another Mac) over one
-/// WebSocket per client; see RemoteKit/Proto/vhostty_remote.proto. Off unless
+/// WebSocket per client; see VhosttyKit/Proto/vhostty_remote.proto. Off unless
 /// "Allow Remote Connections" is checked. Keeps one client at a time: a new
 /// one replaces the previous connection.
 final class RemoteServer: ObservableObject {

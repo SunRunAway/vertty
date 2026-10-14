@@ -245,14 +245,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
 
     @objc private func newSession() {
         if let remote = RemoteWindowController.key {
-            if let p = remote.model.currentProject { remote.model.newSession(in: p, kind: nil) }
+            if let p = remote.store.currentProject { remote.store.newSession(in: p, kind: nil) }
             return
         }
         store.newSession()
     }
     @objc private func newOtherSession() {
         if let remote = RemoteWindowController.key {
-            if let p = remote.model.currentProject { remote.model.newSession(in: p, kind: remote.model.kindsDefaultFirst(p)[1]) }
+            if let p = remote.store.currentProject { remote.store.newSession(in: p, kind: remote.store.kindsDefaultFirst(p)[1]) }
             return
         }
         guard let p = store.currentProject else { return store.newSession() }
@@ -278,17 +278,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     @objc private func nextTab() { gotoTab(.next) }
     @objc private func previousTab() { gotoTab(.previous) }
     @objc private func selectTabByTag(_ sender: NSMenuItem) {
-        if let remote = RemoteWindowController.key { return remote.model.selectCard(at: sender.tag - 1) }
+        if let remote = RemoteWindowController.key { return remote.store.selectCard(at: sender.tag - 1) }
         store.selectTab(at: sender.tag - 1)
     }
 
     private func gotoTab(_ target: GhosttyGotoTab) {
-        if let remote = RemoteWindowController.key { remote.model.gotoCard(target) } else { store.gotoTab(target) }
+        if let remote = RemoteWindowController.key { remote.store.gotoCard(target) } else { store.gotoTab(target) }
     }
 
     /// The terminal font size actions apply to: the remote window's, else the selected session's.
     private var fontTarget: TerminalSurfaceView? {
-        RemoteWindowController.key.map { $0.model.terminalIfCreated } ?? store.selectedTab?.surface
+        RemoteWindowController.key.map { $0.terminal.view } ?? store.selectedTab?.surface
     }
     @objc private func showMainWindow() { window.makeKeyAndOrderFront(nil) }
     @objc private func reloadConfig() { GhosttyRuntime.shared.reloadConfig() }
@@ -312,7 +312,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
 
     func ghosttyNewTab(from surface: TerminalSurfaceView?) {
         if let remote = RemoteWindowController.owner(of: surface) ?? (surface == nil ? RemoteWindowController.key : nil) {
-            if let p = remote.model.currentProject { remote.model.newSession(in: p, kind: nil) }
+            if let p = remote.store.currentProject { remote.store.newSession(in: p, kind: nil) }
             return
         }
         if let surface, let tab = store.tab(for: surface), let p = store.project(tab.projectID) {
@@ -377,10 +377,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
         let info = response.notification.request.content.userInfo
         let idString = info["tab"] as? String
-        if let windowID = info["remoteWindow"] as? String, let cardID = info["remoteCard"] as? String {
+        if let storeID = info["remoteStore"] as? String, let cardID = info["remoteCard"] as? String {
             DispatchQueue.main.async {
-                guard let remote = RemoteWindowController.withID(windowID) else { return }
-                if let card = remote.model.card(cardID) { remote.model.open(card) }
+                guard let remote = RemoteWindowController.withStore(storeID) else { return }
+                if let card = remote.store.card(UUID(uuidString: cardID)) { remote.store.select(card) }
                 remote.window.makeKeyAndOrderFront(nil)
                 NSApp.activate(ignoringOtherApps: true)
             }

@@ -23,6 +23,9 @@ public enum Remote {
     public typealias ResumeSession = Vhostty_Remote_ResumeSession
     public typealias CloseSession = Vhostty_Remote_CloseSession
     public typealias ListHistory = Vhostty_Remote_ListHistory
+    public typealias SearchHistory = Vhostty_Remote_SearchHistory
+    public typealias SearchResult = Vhostty_Remote_SearchResult
+    public typealias PromptMatch = Vhostty_Remote_PromptMatch
 
     /// The port a server listens on unless VHOSTTY_REMOTE_PORT says otherwise.
     public static let defaultPort: UInt16 = 58563

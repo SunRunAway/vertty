@@ -184,23 +184,6 @@ struct TerminalHost: NSViewRepresentable {
     }
 }
 
-/// Empty bar space that drags the window (and zooms on double-click).
-struct WindowDragArea: NSViewRepresentable {
-    final class DragView: NSView {
-        override var mouseDownCanMoveWindow: Bool { true }
-        override func mouseDown(with event: NSEvent) {
-            if event.clickCount == 2 {
-                window?.performZoom(nil)
-            } else {
-                window?.performDrag(with: event)
-            }
-        }
-    }
-
-    func makeNSView(context: Context) -> NSView { DragView() }
-    func updateNSView(_ nsView: NSView, context: Context) {}
-}
-
 extension View {
     /// Pointing-hand / resize cursors for SwiftUI elements.
     func cursor(_ cursor: NSCursor) -> some View {

@@ -281,6 +281,16 @@ public final class RemoteClient: ObservableObject {
         }.history
     }
 
+    /// A project's closed sessions and the prompts matching `query` (see
+    /// SearchHistory).
+    @MainActor
+    public func searchHistory(projectID: String, query: String) async throws -> Remote.SearchResult {
+        try await request {
+            $0.searchHistory.projectID = projectID
+            $0.searchHistory.query = query
+        }.search
+    }
+
     // MARK: - Terminal
 
     /// Shows a card's terminal at `size`; the snapshot and output go to

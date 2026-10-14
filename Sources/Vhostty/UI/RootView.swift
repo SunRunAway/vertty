@@ -2,18 +2,14 @@ import SwiftUI
 
 struct RootView: View {
     @ObservedObject var store: AppStore
-    @State private var dragStartWidth: CGFloat?
 
     var body: some View {
         HStack(spacing: 0) {
-            if store.sidebarVisible {
-                SidebarView(store: store)
-                    .frame(width: store.sidebarWidth)
-                    .overlay(alignment: .trailing) { resizeHandle }
-                Rectangle().fill(Color.black.opacity(0.35)).frame(width: 1)
-            }
-            VStack(spacing: 0) {
-                TitleStrip(store: store)
+            Workspace(layout: store) {
+                LocalSidebar(store: store)
+            } strip: {
+                LocalTitleStrip(store: store)
+            } detail: {
                 ZStack {
                     store.terminalBackground
                     TerminalHost(store: store)
@@ -35,92 +31,29 @@ struct RootView: View {
         .ignoresSafeArea()
         .preferredColorScheme(.dark)
     }
-
-    private var resizeHandle: some View {
-        Color.clear
-            .frame(width: 6)
-            .contentShape(Rectangle())
-            .cursor(.resizeLeftRight)
-            .gesture(
-                DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                    .onChanged { value in
-                        let start = dragStartWidth ?? store.sidebarWidth
-                        dragStartWidth = start
-                        store.sidebarWidth = min(max(start + value.translation.width, 230), 520)
-                    }
-                    .onEnded { _ in
-                        dragStartWidth = nil
-                        store.scheduleSave()
-                    })
-    }
 }
 
-/// Slim draggable strip above the terminal showing what's selected.
-struct TitleStrip: View {
+/// The title strip of this Mac's window: what's selected, and the bottom
+/// shell's button.
+private struct LocalTitleStrip: View {
     @ObservedObject var store: AppStore
 
-    static let height: CGFloat = 34
-
     var body: some View {
-        ZStack {
-            WindowDragArea()
+        TitleStrip(layout: store, background: store.terminalBackground) {
             if store.showingSchedules {
                 Text("Scheduled Tasks")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .allowsHitTesting(false)
-                HStack {
-                    Spacer()
-                    IconButton(systemName: "plus", help: "New Scheduled Task…") { store.newScheduledTask() }
-                        .disabled(store.projects.isEmpty)
-                }
-                .padding(.trailing, 10)
             } else if let tab = store.selectedTab {
-                TitleStripLabel(tab: tab, project: store.project(tab.projectID))
-                    .allowsHitTesting(false)
-                HStack(spacing: 6) {
-                    Spacer()
-                    ShellToggleButton(store: store, tab: tab)
-                }
-                .padding(.trailing, 10)
+                TitleStripLabel(card: tab, project: store.project(tab.projectID))
             }
-        }
-        .padding(.leading, store.sidebarVisible ? 0 : 112)
-        .overlay(alignment: .leading) {
-            if !store.sidebarVisible {
-                SidebarToggleButton(store: store)
-                    .padding(.leading, 80)
+        } trailing: {
+            if store.showingSchedules {
+                IconButton(systemName: "plus", help: "New Scheduled Task…") { store.newScheduledTask() }
+                    .disabled(store.projects.isEmpty)
+            } else if let tab = store.selectedTab {
+                ShellToggleButton(store: store, tab: tab)
             }
-        }
-        .frame(height: Self.height)
-        .background(store.terminalBackground)
-    }
-}
-
-private struct TitleStripLabel: View {
-    @ObservedObject var tab: TabSession
-    let project: Project?
-
-    var body: some View {
-        HStack(spacing: 6) {
-            if let project {
-                Text(project.name).foregroundStyle(.tertiary)
-                Text("/").foregroundStyle(.quaternary)
-            }
-            Text(tab.title).foregroundStyle(.secondary).lineLimit(1)
-        }
-        .font(.system(size: 12, weight: .medium))
-        .padding(.horizontal, 16)
-    }
-}
-
-struct SidebarToggleButton: View {
-    @ObservedObject var store: AppStore
-
-    var body: some View {
-        IconButton(systemName: "sidebar.left",
-                   help: store.sidebarVisible ? "Hide Sidebar (⌃⌘S)" : "Show Sidebar (⌃⌘S)") {
-            store.toggleSidebar()
         }
     }
 }

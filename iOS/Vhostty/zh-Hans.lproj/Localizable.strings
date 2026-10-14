@@ -1,28 +1,8 @@
-/* Simplified Chinese. Keys are the English source strings. */
+/* Simplified Chinese. Keys are the English source strings. The shared
+   sidebar's strings are in VhosttyKit (VhosttyUI). */
 "Computer" = "电脑";
 "The address shown in Remote Connection Info in Vhostty on your computer. The connection's security is up to you (for example a VPN)." = "填写电脑上 Vhostty“远程连接信息”中显示的地址。连接的安全由你自己负责（例如使用 VPN）。";
 "Connect" = "连接";
 "That isn't an address Vhostty can connect to." = "Vhostty 无法连接这个地址。";
 "Enter a host and port, such as 192.168.1.5:58563 or ws://mac.local:58563." = "请输入主机和端口，例如 192.168.1.5:58563 或 ws://mac.local:58563。";
 "OK" = "好";
-"No projects on that computer yet. Add them there." = "那台电脑上还没有项目，请在那台电脑上添加。";
-"Disconnect" = "断开连接";
-"Couldn't do that on the computer" = "无法在电脑上完成此操作";
-"New Claude Session" = "新建 Claude 会话";
-"New Codex Session" = "新建 Codex 会话";
-"New Session" = "新建会话";
-"Show More" = "显示更多";
-"No branch info" = "无分支信息";
-"Main worktree" = "主工作区";
-"No PR" = "无 PR";
-"Close" = "关闭";
-"Close “%@”?" = "关闭“%@”？";
-"%@ is still running on the computer. Closing will end it. The history is kept and can be resumed later." = "%@ 仍在电脑上运行，关闭会结束它。历史记录会保留，之后可以恢复。";
-"Resume %@ session: %@" = "恢复 %1$@ 会话：%2$@";
-"Connecting…" = "正在连接…";
-"Connection lost. Reconnecting…" = "连接已断开，正在重连…";
-"Connected on another device" = "已在其他设备连接";
-"Connect Here" = "在此连接";
-"Change Address" = "更改地址";
-"Try Again" = "重试";
-"Disconnected" = "已断开";

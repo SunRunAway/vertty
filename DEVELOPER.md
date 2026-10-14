@@ -66,11 +66,12 @@ hooks 事件的传递路径：`vhostty-hook`（App 里自带的一个小程序�
 
 产品规则见 [docs/spec/remote-client-product.md](docs/spec/remote-client-product.md)。
 
-- **协议**：一条 WebSocket，消息是 `RemoteKit/Proto/vhostty_remote.proto` 定义的 Protobuf（每帧一条，客户端发 `ClientMessage`，服务端发 `ServerMessage`）。改了 proto 后运行 `scripts/gen-proto.sh` 重新生成 Swift 代码（protoc 和 protoc-gen-swift 编译到 `build/tools`）。`RemoteKit` 是 Mac 和 iPhone 共用的 Swift 包：协议代码和客户端 `RemoteClient`（连接、重连、请求、终端流）。
+- **协议**：一条 WebSocket，消息是 `VhosttyKit/Proto/vhostty_remote.proto` 定义的 Protobuf（每帧一条，客户端发 `ClientMessage`，服务端发 `ServerMessage`）。改了 proto 后运行 `scripts/gen-proto.sh` 重新生成 Swift 代码（protoc 和 protoc-gen-swift 编译到 `build/tools`）。协议代码和客户端 `RemoteClient`（连接、重连、请求、终端流）在 `VhosttyKit` 包的 `VhosttyRemote` 里。
 - **服务端**：`Sources/Vhostty/Remote/RemoteServer.swift` 用 Network.framework 监听，同时只留一个客户端，新连接接管旧连接；`RemoteBridge.swift` 把 `AppStore` 的项目、卡片和历史做成 State（有变化才发），执行新建、恢复、关闭等请求，并把卡片终端转给客户端。
 - **终端镜像**：补丁给 Ghostty 加了 tap（`src/termio/remote.zig`）：打开时先发一份快照（把屏幕、滚动历史和终端模式重新写成 VT 序列），之后转发程序的原始输出，网格尺寸变了就重发快照。客户端的终端用补丁里的 host-managed 后端（`src/termio/HostManaged.zig`，改自 libghostty-spm）：没有 pty，输出由 `ghostty_surface_write_buffer` 喂进去，键盘、粘贴产生的字节通过回调交给客户端发回去，终端对查询的应答一律丢掉，由电脑上的真终端回答。
 - **尺寸**：会话的网格跟随最后一个进入、调整视口或输入的一端。服务端用 `ghostty_surface_set_grid_override` 只改行列、不改窗口；客户端每次键盘输入或粘贴之前先发 `AlignForInput`，本机输入也会先恢复本机尺寸。Ghostty 的 IO 线程会把连续的 resize 合并 25ms，补丁在每次写入前先应用还没处理的 resize（`Thread.zig` 的 `flushResize`），保证输入按新尺寸到达程序。
-- **iPhone**：`iOS/Vhostty.xcodeproj`，要用 Xcode 编译。终端用 libghostty-spm 预编译的 GhosttyKit 和它的 UIKit 终端视图，源码放在 `iOS/GhosttyTerminal`，Vhostty 的改动记在其中的 `VHOSTTY.md`。它没有 grid override，所以会话尺寸比屏幕大时，把终端视图按会话的网格布局再整体缩小显示。
+- **界面共享**：Mac 本机、Mac 远程窗口、iPhone、iPad 用同一份界面代码，在 `VhosttyKit` 包的 `VhosttyUI` 里：侧栏 `SidebarView`、卡片 `SessionCard`、窗口布局 `Workspace`（侧栏、拖动改宽度、标题条）和模型类型。侧栏读写的是 `SidebarStore` 协议：本机是 `AppStore`，远程是 `RemoteStore`（选中卡片就打开它的终端，取消选中就离开）。远程端没有的功能（管理项目、拖动排序、定时任务、默认会话类型、本机文件操作、关闭其他）由 `SidebarFeatures` 关掉，界面上直接不显示。远程界面是 `RemoteWorkspace`：Mac 和 iPad 侧栏加终端并排，iPhone（compact 宽度）侧栏占满一屏、点卡片推入终端。各端单独写的只有终端（Mac 用补丁里的 Ghostty，iOS 用 libghostty-spm）、键盘和触屏适配：右键菜单在触屏上是长按，悬停才出现的按钮在触屏上放进长按菜单。界面文字的中文在 `VhosttyKit/Sources/VhosttyUI/Resources`，Mac app 只放自己独有的文字。改界面先改共享代码，不要给某一端另写一份。
+- **iPhone / iPad**：`iOS/Vhostty.xcodeproj`，要用 Xcode 编译。终端用 libghostty-spm 预编译的 GhosttyKit 和它的 UIKit 终端视图，源码放在 `iOS/GhosttyTerminal`，Vhostty 的改动记在其中的 `VHOSTTY.md`。它没有 grid override，所以会话尺寸比屏幕大时，把终端视图按会话的网格布局再整体缩小显示。
 
 ## 为了不装 Xcode 做的处理
 
@@ -128,7 +129,7 @@ build/Vhostty.app/Contents/MacOS/Vhostty
 
 `make app` 后运行 `python3 scripts/test-codex-history.py`，可在临时状态目录和数据库里验证 Codex 历史在最后一个数据库写连接关闭、数据库暂时被锁、恢复和真正清空时的行为；测试不会启动终端会话，并按 PID 停止自己的 App 实例。
 
-远程控制有三个测试，都在临时状态目录里启动自己的实例和模拟 agent（记录收到输入时的终端尺寸），按 PID 停止：`scripts/test-remote.py` 用 `remote-probe`（`cd RemoteKit && swift build --product remote-probe`，按行读命令的测试客户端）验证协议和服务端；`scripts/test-remote-mac.py` 用两个实例验证 Mac 上的远程窗口；`scripts/test-remote-ios.py` 在 iOS 模拟器里验证 iPhone app，编译命令写在脚本开头，app 以 `VHOSTTY_DEBUG=1` 启动时从容器的 `Documents/debug/input.txt` 读命令、把状态写到 `state.txt`。
+远程控制有三个测试，都在临时状态目录里启动自己的实例和模拟 agent（记录收到输入时的终端尺寸），按 PID 停止：`scripts/test-remote.py` 用 `remote-probe`（`cd VhosttyKit && swift build --product remote-probe`，按行读命令的测试客户端）验证协议和服务端；`scripts/test-remote-mac.py` 用两个实例验证 Mac 上的远程窗口；`scripts/test-remote-ios.py` 在 iOS 模拟器里验证 iOS app（`SIM_DEVICE` 选模拟器，默认 iPhone 17，填 iPad 就测并排布局），编译命令写在脚本开头，app 以 `VHOSTTY_DEBUG=1` 启动时从容器的 `Documents/debug/input.txt` 读命令、把状态写到 `state.txt`。
 
 `python3 scripts/test-session-branches.py` 用临时 HOME、仓库、会话记录及模拟的 agent/gh，验证共享工作区切分支不会覆盖其他会话的分支和 PR，同时检查会话自身换分支、回到 master 时的 PR 更新。测试按 PID 停止自己的 App 实例。
 

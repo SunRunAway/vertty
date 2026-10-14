@@ -2,6 +2,7 @@
     import Foundation
     import GhosttyTerminal
     import UIKit
+    import VhosttyUI
 
     /// Drives the app for scripts/test-remote-ios.py when launched with
     /// VHOSTTY_DEBUG=1: reads commands from Documents/debug/input.txt and
@@ -10,8 +11,11 @@
         static let shared = DebugDriver()
 
         private var directory: URL?
-        private weak var session: RemoteSession?
         private var timer: Timer?
+        private var store: RemoteStore? { AppModel.shared.store }
+        private var terminal: TerminalViewController? {
+            TerminalViewController.current.flatMap { $0.view.window != nil ? $0 : nil }
+        }
 
         func start() {
             guard ProcessInfo.processInfo.environment["VHOSTTY_DEBUG"] == "1",
@@ -21,10 +25,6 @@
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             directory = dir
             timer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in self?.tick() }
-        }
-
-        func attach(_ session: RemoteSession) {
-            self.session = session
         }
 
         private func tick() {
@@ -49,25 +49,25 @@
             case "disconnect":
                 app.disconnect()
             case "open":
-                guard let session, let i = Int(argument), session.state.cards.indices.contains(i) else { return }
-                session.open(session.state.cards[i].id)
+                if let i = Int(argument) { store?.selectCard(at: i) }
             case "back":
-                session?.path = []
+                store?.selectedCardID = nil
             case "new":
-                guard let session, let project = session.state.projects.first else { return }
-                session.newSession(in: project, kind: nil)
+                guard let store, let project = store.currentProject else { return }
+                store.newSession(in: project, kind: nil)
             case "type":
-                session?.terminal?.debugType(argument)
+                terminal?.debugType(argument)
             case "insert":
-                session?.terminal?.debugInsert(argument)
+                terminal?.debugInsert(argument)
             case "enter":
-                session?.terminal?.debugKey(.enter)
+                terminal?.debugKey(.enter)
             case "ctrlc":
-                session?.terminal?.debugKey(.c, modifiers: .ctrl)
+                terminal?.debugKey(.c, modifiers: .ctrl)
             case "background":
-                session?.wentToBackground()
+                store?.client.reconnectsAutomatically = false
             case "foreground":
-                session?.cameToForeground()
+                store?.client.reconnectsAutomatically = true
+                store?.viewportChanged(force: true)
             default:
                 break
             }
@@ -75,13 +75,13 @@
 
         private func write(to url: URL) {
             var lines: [String] = []
-            if let session {
-                let client = session.client
-                lines.append("status=\(client.status) server=\(client.serverName) open=\(session.openCardID ?? "-")")
-                for card in session.state.cards {
-                    lines.append("card \(card.id) \(card.title) status=\(card.status)")
+            if let store {
+                let client = store.client
+                lines.append("status=\(client.status) server=\(client.serverName) open=\(store.selectedCardID?.uuidString ?? "-")")
+                for card in store.allCards {
+                    lines.append("card \(card.id) \(card.title) status=\(card.status) attention=\(card.attention) pr=\(card.prURL ?? "-")")
                 }
-                if let t = session.terminal {
+                if store.selectedCardID != nil, let t = terminal {
                     lines.append(t.debugSummary)
                     lines.append(t.visibleText.split(separator: "\n", omittingEmptySubsequences: false)
                         .map { "r| " + $0 }.joined(separator: "\n"))

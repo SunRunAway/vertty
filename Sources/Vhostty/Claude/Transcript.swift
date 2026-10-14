@@ -18,31 +18,6 @@ struct TranscriptInfo {
     var bestTitle: String? { customTitle ?? aiTitle ?? summary ?? firstPrompt }
 }
 
-struct SessionSummary: Identifiable, Hashable {
-    let id: String          // session id
-    let title: String
-    let modified: Date
-    let path: URL
-    var kind: AgentKind = .claude
-}
-
-/// One line of a prompt around the first case-insensitive match of a search query.
-struct PromptSnippet: Hashable {
-    let before: String
-    let match: String
-    let after: String
-
-    init?(_ text: String, query: String) {
-        let line = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        guard let range = line.range(of: query, options: .caseInsensitive, locale: .current) else { return nil }
-        // Little context before the match, so the match stays visible in the narrow sidebar.
-        let start = line.index(range.lowerBound, offsetBy: -10, limitedBy: line.startIndex) ?? line.startIndex
-        before = (start > line.startIndex ? "…" : "") + line[start..<range.lowerBound]
-        match = String(line[range])
-        after = String(line[range.upperBound...].prefix(160))
-    }
-}
-
 enum Transcript {
     static let projectsDir = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/projects")
 

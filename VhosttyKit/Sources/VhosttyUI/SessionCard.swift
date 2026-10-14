@@ -1,45 +1,44 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 /// A session in the sidebar: a four-line card showing
 /// title / branch / worktree / PR.
-struct SessionCard: View {
-    @ObservedObject var tab: TabSession
-    @ObservedObject var store: AppStore
+struct SessionCard<Store: SidebarStore>: View {
+    @ObservedObject var card: Store.Card
+    @ObservedObject var store: Store
     @Binding var draggingID: UUID?
     @State private var hover = false
+    @Environment(\.openURL) private var openURL
 
-    private var selected: Bool { store.selectedTabID == tab.id }
-
-    /// The scheduled task this card's session belongs to (or that started it).
-    private var scheduleTask: ScheduleTask? {
-        store.schedules.task(forSession: tab.sessionID) ?? tab.scheduleTaskID.flatMap(store.schedules.task)
-    }
+    private var selected: Bool { store.selectedCardID == card.id }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 7) {
-                StatusIndicator(status: tab.status, attention: tab.attention, kind: tab.kind)
-                AgentIcon(kind: tab.kind, size: 11)
-                if let task = scheduleTask {
+                StatusIndicator(status: card.status, attention: card.attention, kind: card.kind)
+                AgentIcon(kind: card.kind, size: 11)
+                if let task = store.scheduleName(for: card) {
                     Image(systemName: "clock")
                         .font(.system(size: 9.5, weight: .medium))
                         .foregroundStyle(.secondary)
-                        .help(String(localized: "Scheduled task: \(task.name)"))
+                        .help(Text("Scheduled task: \(task)", bundle: .module))
                 }
-                Text(tab.title)
+                Text(card.title)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(selected ? .primary : .secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Spacer(minLength: 2)
+                #if os(macOS)
+                // Touch screens close from the card's menu (long press).
                 closeButton
+                #endif
             }
             .frame(height: 18)
 
-            infoLine("arrow.triangle.branch", tab.branch, placeholder: String(localized: "No branch info"))
-            infoLine("square.stack.3d.up", tab.worktree, placeholder: tab.branch == nil ? "—" : String(localized: "Main worktree"),
-                     tint: tab.worktree == nil ? .secondary : Color(red: 0.72, green: 0.55, blue: 1.0))
+            infoLine("arrow.triangle.branch", card.branch, placeholder: String(localized: "No branch info", bundle: .module))
+            infoLine("square.stack.3d.up", card.worktree,
+                     placeholder: card.branch == nil ? "—" : String(localized: "Main worktree", bundle: .module),
+                     tint: card.worktree == nil ? .secondary : Color(red: 0.72, green: 0.55, blue: 1.0))
             prLine
         }
         .padding(.leading, 9)
@@ -53,20 +52,18 @@ struct SessionCard: View {
             RoundedRectangle(cornerRadius: 9)
                 .strokeBorder(Color.white.opacity(selected ? 0.16 : 0.05), lineWidth: 1))
         .contentShape(RoundedRectangle(cornerRadius: 9))
-        .opacity(draggingID == tab.id ? 0.45 : 1)
+        .opacity(draggingID == card.id ? 0.45 : 1)
         .onHover { hover = $0 }
-        .onTapGesture { store.select(tab) }
-        .onDrag {
-            draggingID = tab.id
-            return NSItemProvider(object: tab.id.uuidString as NSString)
+        .onTapGesture { store.select(card) }
+        .reorderable(store.features.contains(.reorder), id: card.id, dragging: $draggingID) { id in
+            store.moveCard(id, before: card.id)
         }
-        .onDrop(of: [UTType.text], delegate: CardDropDelegate(target: tab.id, store: store, draggingID: $draggingID))
-        .help(tab.title)
+        .help(card.title)
         .contextMenu { contextMenu }
     }
 
     private var closeButton: some View {
-        Button { store.requestClose(tab) } label: {
+        Button { store.requestClose(card) } label: {
             Image(systemName: "xmark")
                 .font(.system(size: 8.5, weight: .bold))
                 .frame(width: 17, height: 17)
@@ -75,7 +72,7 @@ struct SessionCard: View {
         .buttonStyle(.plain)
         .foregroundStyle(.secondary)
         .opacity(hover ? 1 : 0)
-        .help("Close (⌘W)")
+        .help(Text("Close (⌘W)", bundle: .module))
     }
 
     private func infoLine(_ icon: String, _ text: String?, placeholder: String, tint: Color = .secondary) -> some View {
@@ -97,24 +94,24 @@ struct SessionCard: View {
         HStack(spacing: 6) {
             Image(systemName: "arrow.triangle.pull")
                 .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(tab.prNumber == nil ? Color.secondary.opacity(0.5) : prColor)
+                .foregroundStyle(card.prNumber == nil ? Color.secondary.opacity(0.5) : prColor)
                 .frame(width: 13)
-            if let n = tab.prNumber {
-                Text("#\(n)")
+            if let n = card.prNumber {
+                Text(verbatim: "#\(n)")
                     .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
                     .foregroundStyle(prColor)
-                if let state = tab.prState, state != "OPEN" {
-                    Text(state == "MERGED" ? String(localized: "Merged") : String(localized: "Closed"))
+                if let state = card.prState, state != "OPEN" {
+                    Text(state == "MERGED" ? String(localized: "Merged", bundle: .module) : String(localized: "Closed", bundle: .module))
                         .font(.system(size: 10.5))
                         .foregroundStyle(.tertiary)
                 }
-                if tab.prURL != nil {
+                if card.prURL != nil {
                     Image(systemName: "arrow.up.right")
                         .font(.system(size: 8.5, weight: .semibold))
                         .foregroundStyle(.tertiary)
                 }
             } else {
-                Text("No PR")
+                Text("No PR", bundle: .module)
                     .font(.system(size: 11.5))
                     .foregroundStyle(.tertiary)
             }
@@ -122,13 +119,13 @@ struct SessionCard: View {
         .frame(height: 15)
         .contentShape(Rectangle())
         .onTapGesture {
-            if let s = tab.prURL, let url = URL(string: s) { NSWorkspace.shared.open(url) } else { store.select(tab) }
+            if let s = card.prURL, let url = URL(string: s) { openURL(url) } else { store.select(card) }
         }
-        .help(tab.prURL.map { String(localized: "Open \($0) in Browser") } ?? "")
+        .help(card.prURL.map { Text("Open \($0) in Browser", bundle: .module) } ?? Text(verbatim: ""))
     }
 
     private var prColor: Color {
-        switch tab.prState {
+        switch card.prState {
         case "MERGED": return Color(red: 0.70, green: 0.52, blue: 1.0)
         case "CLOSED": return Color(red: 0.95, green: 0.42, blue: 0.42)
         default: return Color(red: 0.38, green: 0.82, blue: 0.48)
@@ -137,35 +134,38 @@ struct SessionCard: View {
 
     @ViewBuilder
     private var contextMenu: some View {
-        Button("Close") { store.requestClose(tab) }
-        Button("Close Other Sessions") { store.closeOtherTabs(tab) }
+        Button { store.requestClose(card) } label: { Text("Close", bundle: .module) }
+        if store.features.contains(.closeOthers) {
+            Button { store.closeOthers(card) } label: { Text("Close Other Sessions", bundle: .module) }
+        }
         Divider()
-        if let s = tab.prURL, let url = URL(string: s) {
-            Button("Open PR #\(tab.prNumber ?? 0) in Browser") { NSWorkspace.shared.open(url) }
+        if let s = card.prURL, let url = URL(string: s) {
+            Button { openURL(url) } label: { Text("Open PR #\(card.prNumber ?? 0) in Browser", bundle: .module) }
         }
-        Button("Show Directory in Finder") {
-            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: tab.cwd)])
+        if store.features.contains(.localFiles), let dir = store.directory(of: card) {
+            Button { Platform.reveal(dir) } label: { Text("Show Directory in Finder", bundle: .module) }
         }
-        if !tab.sessionID.isEmpty {
-            Button("Copy Session ID") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(tab.sessionID, forType: .string)
-            }
-            Button("Copy Resume Command") {
-                NSPasteboard.general.clearContents()
-                let command = tab.kind == .claude ? "claude --resume \(tab.sessionID)" : "codex resume \(tab.sessionID)"
-                NSPasteboard.general.setString(command, forType: .string)
-            }
+        if !card.sessionID.isEmpty {
+            Button { Platform.copy(card.sessionID) } label: { Text("Copy Session ID", bundle: .module) }
+            Button {
+                Platform.copy(card.kind == .claude ? "claude --resume \(card.sessionID)" : "codex resume \(card.sessionID)")
+            } label: { Text("Copy Resume Command", bundle: .module) }
         }
     }
 }
 
-struct StatusIndicator: View {
+public struct StatusIndicator: View {
     let status: SessionStatus
     let attention: Bool
     var kind: AgentKind = .claude
 
-    var body: some View {
+    public init(status: SessionStatus, attention: Bool, kind: AgentKind = .claude) {
+        self.status = status
+        self.attention = attention
+        self.kind = kind
+    }
+
+    public var body: some View {
         Group {
             switch status {
             case .working:
@@ -190,30 +190,12 @@ struct StatusIndicator: View {
 
     private var statusHelp: String {
         switch status {
-        case .working: return String(localized: "\(kind.name) is working")
-        case .needsInput: return String(localized: "\(kind.name) needs your input")
-        case .idle: return attention ? String(localized: "\(kind.name) is done (unread)") : String(localized: "Waiting for input")
-        case .starting: return String(localized: "Starting")
-        case .dormant: return String(localized: "Not started (click to resume)")
-        case .exited: return String(localized: "\(kind.name) exited")
+        case .working: return String(localized: "\(kind.name) is working", bundle: .module)
+        case .needsInput: return String(localized: "\(kind.name) needs your input", bundle: .module)
+        case .idle: return attention ? String(localized: "\(kind.name) is done (unread)", bundle: .module) : String(localized: "Waiting for input", bundle: .module)
+        case .starting: return String(localized: "Starting", bundle: .module)
+        case .dormant: return String(localized: "Not started (click to resume)", bundle: .module)
+        case .exited: return String(localized: "\(kind.name) exited", bundle: .module)
         }
-    }
-}
-
-private struct CardDropDelegate: DropDelegate {
-    let target: UUID
-    let store: AppStore
-    @Binding var draggingID: UUID?
-
-    func dropEntered(info: DropInfo) {
-        guard let id = draggingID, id != target else { return }
-        withAnimation(.easeOut(duration: 0.12)) { store.moveTab(id, before: target) }
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
-
-    func performDrop(info: DropInfo) -> Bool {
-        draggingID = nil
-        return true
     }
 }

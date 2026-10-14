@@ -80,7 +80,11 @@ struct RemoteInfoView: View {
     }
 
     private func deviceKind(_ platform: Remote.ClientPlatform) -> String {
-        platform == .iphone ? "iPhone" : "Mac"
+        switch platform {
+        case .iphone: "iPhone"
+        case .ipad: "iPad"
+        default: "Mac"
+        }
     }
 
     private func row<Content: View>(_ title: LocalizedStringKey, @ViewBuilder _ content: () -> Content) -> some View {

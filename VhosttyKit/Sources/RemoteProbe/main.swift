@@ -90,6 +90,9 @@ func handle(_ msg: Remote.ServerMessage) {
         case .session(let s): e["card"] = s.cardID
         case .history(let h): e["sessions"] = h.sessions.map(\.sessionID); e["more"] = h.moreAvailable
         case .closed: e["closed"] = true
+        case .search(let s):
+            e["query"] = s.query; e["sessions"] = s.sessions.map(\.sessionID)
+            e["prompts"] = s.prompts.map { ["session": $0.sessionID, "match": $0.match] }
         case nil: break
         }
         emit(e)
@@ -168,6 +171,13 @@ DispatchQueue.global().async {
                     $0.requestID = id
                     $0.listHistory.projectID = a[1]
                     $0.listHistory.limit = UInt32(a[2]) ?? 10
+                }
+            case "search":
+                let id = nextID; nextID += 1
+                send {
+                    $0.requestID = id
+                    $0.searchHistory.projectID = a[1]
+                    $0.searchHistory.query = a.dropFirst(2).joined(separator: " ")
                 }
             case "open":
                 send { $0.openTerminal.cardID = a[1]; $0.openTerminal.size = size(a[2], a[3]) }

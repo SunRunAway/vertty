@@ -292,7 +292,7 @@ struct SchedulePanelView: View {
             IconButton(systemName: "xmark", help: "Close") { store.schedulePanel = nil }
                 .padding(.trailing, 8)
         }
-        .frame(height: TitleStrip.height)
+        .frame(height: Chrome.titleStripHeight)
         .background(WindowDragArea())
     }
 
