@@ -217,7 +217,7 @@ finally:
 
 if '--skip-starting' in sys.argv:
     sys.exit(0)
-# A card stuck in Starting stops counting after two minutes (plus the 15 s grace).
+# A card stuck in Starting stops counting after two minutes.
 (case / 'value').write_text('0')
 (case / 'state.json').write_text(json.dumps({'projects': [{'id': str(uuid.uuid4()), 'name': 'Sleep fixture', 'path': str(project), 'expanded': True}], 'tabs': []}))
 log = (case / 'app.log').open('a')
@@ -225,7 +225,7 @@ try:
     start()
     drive('new codex')
     wait(lambda: read(case / 'value') == '1', 'starting card did not acquire')
-    wait(lambda: read(case / 'value') == '0', 'stuck starting card kept the Mac awake', timeout=150)
+    wait(lambda: read(case / 'value') == '0', 'stuck starting card kept the Mac awake', timeout=135)
     print('PASS stuck Starting card released', flush=True)
 finally:
     stop(); log.close()

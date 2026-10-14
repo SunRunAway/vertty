@@ -12,9 +12,8 @@ final class SleepProtection {
     /// The running lease; closing `input` ends it and restores sleep.
     private var lease: Process?
     private var input: FileHandle?
-    /// Inside a busy period (tasks running, or within 15 s after they stopped).
+    /// Tasks are running and a lease is held.
     private var active = false
-    private var lastBusy = Date.distantPast
     private var checking = false
     private let queue = DispatchQueue(label: "vhostty.sleep")
     private var declined: URL { AppPaths.support.appendingPathComponent("sleep-declined") }
@@ -171,10 +170,9 @@ final class SleepProtection {
     }
     private func tick() {
         if store.keepsAwake {
-            lastBusy = Date()
             // Each busy period starts one lease.
             if !active { active = true; spawn() }
-        } else if active, -lastBusy.timeIntervalSinceNow >= 15 {
+        } else if active {
             active = false
             endLease()
         }

@@ -75,7 +75,7 @@ print("PASS authorized item is checked")
 store.keepsAwake = true
 wait("busy period did not apply protection") { value() == "1" }
 store.keepsAwake = false
-wait("idle grace did not restore sleep", timeout: 25) { value() == "0" }
+wait("idle did not restore sleep") { value() == "0" }
 print("PASS busy period applies and restores")
 write("fail")
 store.keepsAwake = true
@@ -84,7 +84,7 @@ precondition(item.title == on && controller.authorized, "runtime error with the 
 print("PASS runtime error with authorization intact keeps the item checked")
 try! FileManager.default.removeItem(at: dir.appendingPathComponent("fail"))
 store.keepsAwake = false
-settle(17)
+settle()
 try! FileManager.default.removeItem(at: dir.appendingPathComponent("authorized"))
 write("fail")
 store.keepsAwake = true
