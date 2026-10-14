@@ -4,9 +4,10 @@
 
 - When a change is done and verified, commit it and push to `origin/master`
   without asking first.
-- For documentation-only changes (including `AGENTS.md`, README files, and
-  `docs/`), verify the text and links, then commit and push without building,
-  running tests, starting test instances, or running `make install`.
+- For changes that only touch documentation (including `AGENTS.md`, README
+  files, and `docs/`) or test scripts (`scripts/test-*`), verify the text and
+  links, then commit and push without building, running tests, starting test
+  instances, or running `make install`.
 - After pushing changes that affect the app's code, bundled resources, or
   build configuration, run `make install` without asking.
 - `scripts/bundle.sh` (and so `make app` / `make install`) runs `sandbox-exec`
