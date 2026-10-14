@@ -12,7 +12,7 @@ The terminal engine is [Ghostty](https://ghostty.org) (libghostty), and it uses 
 
 > Vhostty = **V**ertical + G**hostty**: Ghostty's tabs, turned on their side and moved into a sidebar.
 
-<p align="center"><img src="docs/screenshot.png" alt="Vhostty with two projects: Claude Code and Codex session cards showing status, branch, worktree and PR, with a new Claude Code session working on the right"></p>
+<p align="center"><img src="docs/screenshot.png" alt="Vhostty with two projects: Claude Code and Codex session cards showing status, branch, worktree and PR, with a freshly started Claude Code session on the right"></p>
 
 The interface follows your system language (English or Simplified Chinese).
 

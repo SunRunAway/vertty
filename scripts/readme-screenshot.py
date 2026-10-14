@@ -3,11 +3,11 @@
 
 Builds two demo projects from scratch (starboard, 小账本) with git worktrees,
 starts build/Vhostty.app against a scratch state dir and the debug driver
-(see DEVELOPER.md), and captures the window while a brand-new Claude Code
-session is working in the selected card:
+(see DEVELOPER.md), and captures the window with a brand-new Claude Code
+session, which hasn't been given anything to do yet, in the selected card:
 
   starboard
-    [selected] new Claude session, working on a real task
+    [selected] new Claude session, just started
     Claude session that finished in the background (blue dot)
     Codex card on feat/dark-mode with an open PR
     Claude card on chore/vite-6 with a merged PR
@@ -21,8 +21,7 @@ other cards are restored, not-started cards from state.json.
 Usage (run `make app` first; run it outside any sandbox):
   python3 scripts/readme-screenshot.py [--out docs/screenshot.png]
 
-Every frame taken while the main session works is kept in <demo>/frames, in
-case another one looks better than the one picked. Claude transcripts of the
+Claude transcripts of the
 demo projects (~/.claude/projects/-private-tmp-vhostty-readme-demo-*) are
 removed before and after the run so they never show up as history.
 """
@@ -43,7 +42,6 @@ ROOT = Path(__file__).resolve().parent.parent
 DEMO = Path("/private/tmp/vhostty-readme-demo")
 SUPPORT = DEMO / "support"
 SNAP = DEMO / "snap"
-FRAMES = DEMO / "frames"
 STARBOARD = DEMO / "starboard"
 ZHANGBEN = DEMO / "xiaozhangben"
 
@@ -57,9 +55,6 @@ ZHANGBEN_ID = "6B1E3C0A-5F0D-4C55-9E1B-2B7C8E0F4A02"
 
 # The background session: a short question that finishes before the capture.
 BACKGROUND_PROMPT = "Why does applyCoupon ignore FREESHIP codes? Just explain, don't change any files."
-# The selected session: long enough to show edits and tool runs while it works.
-MAIN_PROMPT = ("Add pagination to listOrders in src/api/client.ts (page and pageSize, "
-               "pageSize defaults to 20 and is capped at 100), and add tests for it")
 
 # --- demo repos ------------------------------------------------------------
 
@@ -97,27 +92,6 @@ export function applyCoupon(cart: Cart, code: string): Cart {
     return { ...cart, shipping: 0 };
   }
   return cart;
-}
-""",
-    "src/api/client.ts": """export interface Order {
-  id: string;
-  total: number;
-  status: "pending" | "paid" | "shipped";
-}
-
-const BASE_URL = process.env.STARBOARD_API ?? "https://api.starboard.test";
-
-export async function listOrders(customerId: string): Promise<Order[]> {
-  const url = `${BASE_URL}/customers/${encodeURIComponent(customerId)}/orders`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`listOrders failed: ${res.status}`);
-  return (await res.json()) as Order[];
-}
-
-export async function getOrder(id: string): Promise<Order> {
-  const res = await fetch(`${BASE_URL}/orders/${encodeURIComponent(id)}`);
-  if (!res.ok) throw new Error(`getOrder failed: ${res.status}`);
-  return (await res.json()) as Order;
 }
 """,
     "test/coupons.test.ts": """import { test } from "node:test";
@@ -336,39 +310,23 @@ def submit(tab_id, prompt):
     wait_for("Claude to start working", lambda: read_tabs().get(tab_id, {}).get("status") == "working", 60)
 
 
-def capture(main_id, background_id, min_work, timeout):
-    """Keeps every frame taken while the main session works and picks the first
-    one after `min_work` seconds that shows an edit and the background card's
-    blue dot. Falls back to the last working frame."""
-    FRAMES.mkdir(parents=True, exist_ok=True)
-    start = time.time()
-    last_png, chosen, n = None, None, 0
-    while time.time() - start < timeout:
-        state_file = SNAP / "state.txt"
-        stamp = state_file.stat().st_mtime
+def capture(main_id, background_id, out):
+    """Waits until the new session's input box is up and the background card
+    shows its blue dot, then saves a window image from that same tick."""
+    def ready():
         tabs = read_tabs()
-        main, bg = tabs.get(main_id, {}), tabs.get(background_id, {})
-        if main.get("status") != "working":
-            if last_png:
-                break
-            time.sleep(0.5)
-            continue
+        bg = tabs.get(background_id, {})
+        return bg.get("status") == "idle" and bg.get("attention") and tabs.get(main_id, {}).get("status") != "working"
+    wait_for("the background session to finish", ready, 180)
+    time.sleep(3)  # let Claude's start-up screen settle
+    state_file = SNAP / "state.txt"
+    while True:
+        stamp = state_file.stat().st_mtime
         # window.png is written just before state.txt in the same tick.
-        frame = FRAMES / f"{n:03d}.png"
-        shutil.copy(SNAP / "window.png", frame)
-        if state_file.stat().st_mtime != stamp:
-            continue
-        n += 1
-        last_png = frame
-        ready = (time.time() - start >= min_work
-                 and re.search(r"\b(Update|Write)\(", main["text"])
-                 and bg.get("status") == "idle" and bg.get("attention"))
-        if ready:
-            chosen = frame
-            break
-        while state_file.stat().st_mtime == stamp:
-            time.sleep(0.3)
-    return chosen or last_png
+        shutil.copy(SNAP / "window.png", out)
+        if state_file.stat().st_mtime == stamp and ready():
+            return
+        time.sleep(0.5)
 
 
 # --- app lifecycle -------------------------------------------------------------
@@ -402,8 +360,6 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--app", default=str(ROOT / "build/Vhostty.app"))
     ap.add_argument("--out", default=str(ROOT / "docs/screenshot.png"))
-    ap.add_argument("--min-work", type=float, default=45, help="seconds the main session works before the capture")
-    ap.add_argument("--timeout", type=float, default=300)
     args = ap.parse_args()
 
     binary = Path(args.app) / "Contents/MacOS/Vhostty"
@@ -428,12 +384,8 @@ def main():
         wait_until_ready(background)
         submit(background, BACKGROUND_PROMPT)
         main_tab = new_claude_session()
-        submit(main_tab, MAIN_PROMPT)
-        frame = capture(main_tab, background, args.min_work, args.timeout)
-        if not frame:
-            sys.exit("the main session never worked long enough to capture")
-        shutil.copy(frame, args.out)
-        print(f"wrote {args.out} (from {frame}; other frames in {FRAMES})")
+        capture(main_tab, background, args.out)
+        print(f"wrote {args.out}")
     finally:
         app.send_signal(signal.SIGTERM)
         try:
