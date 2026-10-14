@@ -83,7 +83,7 @@ public struct SidebarTopBar<Layout: SidebarLayoutModel>: View {
         #if os(macOS)
         40
         #else
-        36
+        Touch.minRow
         #endif
     }
 }
@@ -132,7 +132,7 @@ public struct TitleStrip<Layout: SidebarLayoutModel, Label: View, Trailing: View
         .overlay(alignment: .leading) {
             if !layout.sidebarVisible {
                 SidebarToggleButton(layout: layout)
-                    .padding(.leading, Self.hiddenSidebarInset - 32)
+                    .padding(.leading, Self.hiddenSidebarInset - Touch.row(24) - 8)
             }
         }
         .frame(height: Chrome.titleStripHeight)
@@ -143,13 +143,13 @@ public struct TitleStrip<Layout: SidebarLayoutModel, Label: View, Trailing: View
         #if os(macOS)
         112
         #else
-        44
+        60
         #endif
     }
 }
 
 public enum Chrome {
-    public static let titleStripHeight: CGFloat = 34
+    public static let titleStripHeight: CGFloat = Touch.row(34)
 }
 
 /// "Project / session title" in the title strip.
@@ -170,7 +170,7 @@ public struct TitleStripLabel<Card: SessionCardModel>: View {
             }
             Text(card.title).foregroundStyle(.secondary).lineLimit(1)
         }
-        .font(.system(size: 12, weight: .medium))
+        .font(.ui(12, weight: .medium))
         .padding(.horizontal, 16)
     }
 }

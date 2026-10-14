@@ -20,7 +20,7 @@ public struct SidebarView<Store: SidebarStore, Header: View>: View {
 
             HStack(spacing: 6) {
                 Text("Projects", bundle: .module)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.ui(13, weight: .semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
                 if store.features.contains(.manageProjects) {
@@ -40,7 +40,7 @@ public struct SidebarView<Store: SidebarStore, Header: View>: View {
                         if store.features.contains(.manageProjects) {
                             Button { store.addProject() } label: {
                                 Label { Text("Add Your First Project…", bundle: .module) } icon: { Image(systemName: "folder.badge.plus") }
-                                    .font(.system(size: 13))
+                                    .font(.ui(13))
                                     .padding(.horizontal, 10)
                                     .padding(.vertical, 8)
                             }
@@ -49,7 +49,7 @@ public struct SidebarView<Store: SidebarStore, Header: View>: View {
                             .padding(.horizontal, 8)
                         } else {
                             Text("No projects on that computer yet. Add them there.", bundle: .module)
-                                .font(.system(size: 12.5))
+                                .font(.ui(12.5))
                                 .foregroundStyle(.tertiary)
                                 .padding(.horizontal, 16)
                         }
@@ -98,7 +98,7 @@ private struct ProjectSection<Store: SidebarStore>: View {
                         SessionCard(card: card, store: store, draggingID: $draggingID)
                         if let snippet = prompt(card.title, card.sessionID) {
                             PromptSnippetLine(snippet: snippet)
-                                .padding(.leading, 27)
+                                .padding(.leading, Touch.size(27))
                         }
                     }
                 }
@@ -108,7 +108,7 @@ private struct ProjectSection<Store: SidebarStore>: View {
                     VStack(alignment: .leading, spacing: 0) {
                         if !open.isEmpty {
                             Text("Past Sessions", bundle: .module)
-                                .font(.system(size: 11, weight: .medium))
+                                .font(.ui(11, weight: .medium))
                                 .foregroundStyle(.tertiary)
                                 .padding(.leading, 16)
                                 .padding(.top, 4)
@@ -123,10 +123,11 @@ private struct ProjectSection<Store: SidebarStore>: View {
                                 store.showMoreHistory(project)
                             } label: {
                                 Text("Show More", bundle: .module)
-                                    .font(.system(size: 12.5))
+                                    .font(.ui(12.5))
                                     .foregroundStyle(.tertiary)
                                     .padding(.leading, 16)
                                     .padding(.vertical, 5)
+                                    .tapHeight()
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .contentShape(Rectangle())
                             }
@@ -136,17 +137,18 @@ private struct ProjectSection<Store: SidebarStore>: View {
                 }
                 if searching && open.isEmpty && closed.isEmpty {
                     Text("No Matching Sessions", bundle: .module)
-                        .font(.system(size: 12.5))
+                        .font(.ui(12.5))
                         .foregroundStyle(.tertiary)
                         .padding(.leading, 16)
                         .padding(.vertical, 5)
                 } else if query == nil && open.isEmpty && closed.isEmpty {
                     Button { store.newSession(in: project, kind: nil) } label: {
                         Label { Text("New Session", bundle: .module) } icon: { Image(systemName: "plus") }
-                            .font(.system(size: 12.5))
+                            .font(.ui(12.5))
                             .foregroundStyle(.tertiary)
                             .padding(.leading, 16)
                             .padding(.vertical, 5)
+                            .tapHeight()
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .contentShape(Rectangle())
                     }
@@ -167,11 +169,11 @@ private struct ProjectRow<Store: SidebarStore>: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: project.expanded ? "folder" : "folder.fill")
-                .font(.system(size: 13))
+                .font(.ui(13))
                 .foregroundStyle(project.color)
-                .frame(width: 18)
+                .frame(width: Touch.size(18))
             Text(project.name)
-                .font(.system(size: 13.5, weight: .medium))
+                .font(.ui(13.5, weight: .medium))
                 .lineLimit(1)
             Spacer(minLength: 4)
             if hover {
@@ -186,7 +188,7 @@ private struct ProjectRow<Store: SidebarStore>: View {
         }
         .padding(.leading, 8)
         .padding(.trailing, 4)
-        .frame(height: 30)
+        .frame(height: Touch.row(30))
         .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(hover ? 0.07 : 0)))
         .contentShape(Rectangle())
         .onHover { hover = $0 }
@@ -240,21 +242,21 @@ private struct SessionSearchField<Store: SidebarStore>: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 11))
+                .font(.ui(11))
                 .foregroundStyle(.tertiary)
             TextField(text: Binding(
                 get: { store.query(for: project) ?? "" },
                 set: { store.setSearchQuery($0, for: project) }
             )) { Text("Title, Prompt or Session ID", bundle: .module) }
             .textFieldStyle(.plain)
-            .font(.system(size: 12.5))
+            .font(.ui(12.5))
             .focused($focused)
             #if os(macOS)
             .onExitCommand { store.closeSearch(project) }
             #endif
             Button { store.closeSearch(project) } label: {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 11))
+                    .font(.ui(11))
                     .foregroundStyle(.tertiary)
                     .contentShape(Rectangle())
             }
@@ -262,7 +264,7 @@ private struct SessionSearchField<Store: SidebarStore>: View {
             .help(Text("Close Search", bundle: .module))
         }
         .padding(.horizontal, 8)
-        .frame(height: 26)
+        .frame(height: Touch.row(26))
         .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(0.07)))
         .padding(.leading, 6)
         .onAppear { focused = true }
@@ -279,23 +281,23 @@ private struct HistoryRow<Store: SidebarStore>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                AgentIcon(kind: summary.kind, size: 11)
+                AgentIcon(kind: summary.kind, size: Touch.size(11))
                     .opacity(0.7)
-                    .frame(width: 14)
+                    .frame(width: Touch.size(14))
                 Text(summary.title)
-                    .font(.system(size: 13))
+                    .font(.ui(13))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 Text(RelativeTime.short(summary.modified))
-                    .font(.system(size: 11))
+                    .font(.ui(11))
                     .foregroundStyle(.tertiary)
                     .opacity(hover ? 1 : 0.8)
             }
-            .frame(height: 27)
+            .frame(height: Touch.row(27))
             if let snippet {
                 PromptSnippetLine(snippet: snippet)
-                    .padding(.leading, 22)
+                    .padding(.leading, Touch.size(22))
                     .padding(.bottom, 5)
             }
         }
@@ -315,10 +317,10 @@ struct PromptSnippetLine: View {
 
     var body: some View {
         var match = AttributedString(snippet.match)
-        match.font = .system(size: 11.5, weight: .semibold)
+        match.font = .ui(11.5, weight: .semibold)
         match.foregroundColor = .secondary
         return Text(AttributedString(snippet.before) + match + AttributedString(snippet.after))
-            .font(.system(size: 11.5))
+            .font(.ui(11.5))
             .foregroundStyle(.tertiary)
             .lineLimit(1)
             .truncationMode(.tail)

@@ -76,7 +76,11 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
     /// The last request that failed, for an alert.
     @Published public var failure: String?
     @Published public var sidebarVisible = true
+    #if os(iOS)
+    @Published public var sidebarWidth: CGFloat = 340
+    #else
     @Published public var sidebarWidth: CGFloat = 300
+    #endif
     /// The terminal's background (the Mac's Ghostty theme there).
     public var terminalBackground = Color(red: 0.16, green: 0.17, blue: 0.20)
     /// Whether the user is looking at this card right now (no notification

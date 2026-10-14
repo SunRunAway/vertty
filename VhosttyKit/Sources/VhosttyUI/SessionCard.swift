@@ -12,18 +12,18 @@ struct SessionCard<Store: SidebarStore>: View {
     private var selected: Bool { store.selectedCardID == card.id }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 7) {
+        VStack(alignment: .leading, spacing: Touch.size(3)) {
+            HStack(spacing: Touch.size(7)) {
                 StatusIndicator(status: card.status, attention: card.attention, kind: card.kind)
-                AgentIcon(kind: card.kind, size: 11)
+                AgentIcon(kind: card.kind, size: Touch.size(11))
                 if let task = store.scheduleName(for: card) {
                     Image(systemName: "clock")
-                        .font(.system(size: 9.5, weight: .medium))
+                        .font(.ui(9.5, weight: .medium))
                         .foregroundStyle(.secondary)
                         .help(Text("Scheduled task: \(task)", bundle: .module))
                 }
                 Text(card.title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.ui(13, weight: .semibold))
                     .foregroundStyle(selected ? .primary : .secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -33,7 +33,7 @@ struct SessionCard<Store: SidebarStore>: View {
                 closeButton
                 #endif
             }
-            .frame(height: 18)
+            .frame(height: Touch.size(18))
 
             infoLine("arrow.triangle.branch", card.branch, placeholder: String(localized: "No branch info", bundle: .module))
             infoLine("square.stack.3d.up", card.worktree,
@@ -41,9 +41,9 @@ struct SessionCard<Store: SidebarStore>: View {
                      tint: card.worktree == nil ? .secondary : Color(red: 0.72, green: 0.55, blue: 1.0))
             prLine
         }
-        .padding(.leading, 9)
-        .padding(.trailing, 7)
-        .padding(.vertical, 8)
+        .padding(.leading, Touch.size(9))
+        .padding(.trailing, Touch.size(7))
+        .padding(.vertical, Touch.size(8))
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 9)
@@ -65,7 +65,7 @@ struct SessionCard<Store: SidebarStore>: View {
     private var closeButton: some View {
         Button { store.requestClose(card) } label: {
             Image(systemName: "xmark")
-                .font(.system(size: 8.5, weight: .bold))
+                .font(.ui(8.5, weight: .bold))
                 .frame(width: 17, height: 17)
                 .background(Circle().fill(Color.white.opacity(0.08)))
         }
@@ -76,47 +76,47 @@ struct SessionCard<Store: SidebarStore>: View {
     }
 
     private func infoLine(_ icon: String, _ text: String?, placeholder: String, tint: Color = .secondary) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Touch.size(6)) {
             Image(systemName: icon)
-                .font(.system(size: 10, weight: .medium))
+                .font(.ui(10, weight: .medium))
                 .foregroundStyle(text == nil ? Color.secondary.opacity(0.5) : tint)
-                .frame(width: 13)
+                .frame(width: Touch.size(13))
             Text(text ?? placeholder)
-                .font(.system(size: 11.5, design: text == nil ? .default : .monospaced))
+                .font(.ui(11.5, design: text == nil ? .default : .monospaced))
                 .foregroundStyle(text == nil ? .tertiary : .secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
-        .frame(height: 15)
+        .frame(height: Touch.size(15))
     }
 
     private var prLine: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Touch.size(6)) {
             Image(systemName: "arrow.triangle.pull")
-                .font(.system(size: 10, weight: .medium))
+                .font(.ui(10, weight: .medium))
                 .foregroundStyle(card.prNumber == nil ? Color.secondary.opacity(0.5) : prColor)
-                .frame(width: 13)
+                .frame(width: Touch.size(13))
             if let n = card.prNumber {
                 Text(verbatim: "#\(n)")
-                    .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
+                    .font(.ui(11.5, weight: .semibold, design: .monospaced))
                     .foregroundStyle(prColor)
                 if let state = card.prState, state != "OPEN" {
                     Text(state == "MERGED" ? String(localized: "Merged", bundle: .module) : String(localized: "Closed", bundle: .module))
-                        .font(.system(size: 10.5))
+                        .font(.ui(10.5))
                         .foregroundStyle(.tertiary)
                 }
                 if card.prURL != nil {
                     Image(systemName: "arrow.up.right")
-                        .font(.system(size: 8.5, weight: .semibold))
+                        .font(.ui(8.5, weight: .semibold))
                         .foregroundStyle(.tertiary)
                 }
             } else {
                 Text("No PR", bundle: .module)
-                    .font(.system(size: 11.5))
+                    .font(.ui(11.5))
                     .foregroundStyle(.tertiary)
             }
         }
-        .frame(height: 15)
+        .frame(height: Touch.size(15))
         .contentShape(Rectangle())
         .onTapGesture {
             if let s = card.prURL, let url = URL(string: s) { openURL(url) } else { store.select(card) }
@@ -172,19 +172,19 @@ public struct StatusIndicator: View {
                 ProgressView().controlSize(.mini).scaleEffect(0.75)
             case .needsInput:
                 Image(systemName: "hand.raised.fill")
-                    .font(.system(size: 9.5))
+                    .font(.ui(9.5))
                     .foregroundStyle(Color(red: 1.0, green: 0.72, blue: 0.25))
             case .idle:
                 Circle()
                     .fill(attention ? Color(red: 0.35, green: 0.62, blue: 1.0) : Color.clear)
-                    .frame(width: 7, height: 7)
+                    .frame(width: Touch.size(7), height: Touch.size(7))
             case .starting:
-                Circle().fill(Color.gray.opacity(0.7)).frame(width: 7, height: 7)
+                Circle().fill(Color.gray.opacity(0.7)).frame(width: Touch.size(7), height: Touch.size(7))
             case .dormant, .exited:
-                Circle().strokeBorder(Color.gray.opacity(0.8), lineWidth: 1.2).frame(width: 7, height: 7)
+                Circle().strokeBorder(Color.gray.opacity(0.8), lineWidth: 1.2).frame(width: Touch.size(7), height: Touch.size(7))
             }
         }
-        .frame(width: 12, height: 12)
+        .frame(width: Touch.size(12), height: Touch.size(12))
         .help(statusHelp)
     }
 

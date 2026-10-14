@@ -67,12 +67,12 @@ public struct RemoteWorkspace<Terminal: View>: View {
             }
         } detail: {
             ZStack {
-                store.terminalBackground
+                store.terminalBackground.ignoresSafeArea()
                 if let id = store.selectedCardID {
                     terminal(id)
                 } else {
                     Text(store.allCards.isEmpty ? "Start a session from the sidebar." : "Choose a session in the sidebar.", bundle: .module)
-                        .font(.system(size: 13))
+                        .font(.ui(13))
                         .foregroundStyle(.tertiary)
                 }
                 if store.client.status != .connected {
@@ -131,20 +131,20 @@ public struct RemoteBadge: View {
     public var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "desktopcomputer")
-                .font(.system(size: 13))
+                .font(.ui(13))
                 .foregroundStyle(Self.tint)
             VStack(alignment: .leading, spacing: 1) {
                 Text("Remote", bundle: .module)
-                    .font(.system(size: 10.5, weight: .semibold))
+                    .font(.ui(10.5, weight: .semibold))
                     .foregroundStyle(Self.tint)
                 Text(store.serverName)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.ui(13, weight: .medium))
                     .lineLimit(1)
             }
             Spacer(minLength: 4)
             Circle()
                 .fill(store.client.status == .connected ? Color.green : Color.orange)
-                .frame(width: 7, height: 7)
+                .frame(width: Touch.size(7), height: Touch.size(7))
                 .help(store.client.status == .connected ? Text("Connected", bundle: .module) : Text("Not connected", bundle: .module))
             if let onDisconnect {
                 IconButton(systemName: "power", help: Text("Disconnect", bundle: .module), action: onDisconnect)
@@ -178,11 +178,11 @@ public struct RemoteStatusOverlay: View {
                 ProgressView().controlSize(.small)
                 Text("Connection lost. Reconnecting…", bundle: .module)
             case .replaced:
-                Image(systemName: "iphone.and.arrow.forward").font(.system(size: 28))
+                Image(systemName: "iphone.and.arrow.forward").font(.ui(28))
                 Text("Connected on another device", bundle: .module)
                 Button { store.client.connect() } label: { Text("Connect Here", bundle: .module) }
             case .failed(let message):
-                Image(systemName: "exclamationmark.triangle").font(.system(size: 28))
+                Image(systemName: "exclamationmark.triangle").font(.ui(28))
                 Text(message).multilineTextAlignment(.center).frame(maxWidth: 380)
                 HStack {
                     if let onDisconnect {
@@ -197,7 +197,7 @@ public struct RemoteStatusOverlay: View {
                 EmptyView()
             }
         }
-        .font(.system(size: 13))
+        .font(.ui(13))
         .foregroundStyle(.secondary)
         .padding(28)
         .background(RoundedRectangle(cornerRadius: 12).fill(Color.black.opacity(0.75)))

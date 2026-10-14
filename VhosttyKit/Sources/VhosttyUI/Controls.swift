@@ -77,8 +77,8 @@ private struct IconFace: View {
 
     var body: some View {
         Image(systemName: systemName)
-            .font(.system(size: large ? 14 : 12.5, weight: .medium))
-            .frame(width: large ? 32 : 24, height: large ? 30 : 22)
+            .font(.ui(large ? 14 : 12.5, weight: .medium))
+            .frame(width: Touch.row(large ? 32 : 24), height: Touch.row(large ? 30 : 22))
             .background(RoundedRectangle(cornerRadius: large ? 8 : 6).fill(Color.white.opacity(hover ? 0.10 : 0)))
             .contentShape(Rectangle())
     }
@@ -115,6 +115,42 @@ enum Platform {
     static func reveal(_ path: String) {
         #if os(macOS)
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+        #endif
+    }
+}
+
+/// Sizes for the input in use: the desktop's own for a pointer, larger on
+/// iPhone and iPad for fingers. The views are the same; only these differ.
+public enum Touch {
+    #if os(iOS)
+    /// Text and the space around it: 13.5pt (a project's name) becomes 17pt.
+    public static let scale: CGFloat = 1.27
+    /// The shortest a tappable row gets (Apple's minimum tap target).
+    public static let minRow: CGFloat = 44
+    #else
+    public static let scale: CGFloat = 1
+    public static let minRow: CGFloat = 0
+    #endif
+
+    public static func size(_ points: CGFloat) -> CGFloat { points * scale }
+    /// A row's height: scaled, and tall enough to tap.
+    public static func row(_ points: CGFloat) -> CGFloat { max(points * scale, minRow) }
+}
+
+extension Font {
+    /// The system font at a desktop size, scaled for touch.
+    static func ui(_ size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font {
+        .system(size: Touch.size(size), weight: weight, design: design)
+    }
+}
+
+extension View {
+    /// Tall enough to tap (touch only).
+    func tapHeight() -> some View {
+        #if os(iOS)
+        frame(minHeight: Touch.minRow)
+        #else
+        self
         #endif
     }
 }
