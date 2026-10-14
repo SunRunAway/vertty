@@ -219,11 +219,11 @@
 
 "Vhostty quit during the run." = "运行期间 Vhostty 退出了。";
 
-"Closed-Lid Sleep Protection…" = "防合盖睡眠…";
+"Closed-Lid Sleep Protection While Tasks Run" = "任务运行时防合盖睡眠";
+"Closed-Lid Sleep Protection While Tasks Run: Not Authorized…" = "任务运行时防合盖睡眠：未授权…";
 "Keep tasks running with the lid closed?" = "合盖时继续运行任务？";
 "Your Mac stays awake with the lid closed while tasks run, then returns to normal sleep when they finish. Administrator authorization allows this Mac’s administrator accounts to run only these two commands without a password:\n\n/usr/bin/pmset -a disablesleep 1 — prevent sleep\n/usr/bin/pmset -a disablesleep 0 — restore sleep" = "任务运行期间，合盖也不会让 Mac 睡眠；任务结束后恢复正常睡眠。管理员授权仅允许本机管理员账号免密执行以下两条命令：\n\n/usr/bin/pmset -a disablesleep 1（禁止睡眠）\n/usr/bin/pmset -a disablesleep 0（恢复睡眠）";
 "Don’t Allow" = "不允许";
-"Closed-Lid Sleep Protection: Not Active…" = "防合盖睡眠：未生效…";
 "Active" = "已启用";
 "Date" = "日期";
 "Days" = "星期";

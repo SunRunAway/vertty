@@ -4,7 +4,7 @@ import UserNotifications
 import GhosttyC
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, GhosttyRuntimeDelegate,
-    UNUserNotificationCenterDelegate, NSMenuDelegate {
+    UNUserNotificationCenterDelegate, NSMenuDelegate, NSMenuItemValidation {
     let store = AppStore.shared
     var window: NSWindow!
     private lazy var sleepProtection = SleepProtection(store: store)
@@ -60,6 +60,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     }
 
     @objc private func configureSleepProtection() { sleepProtection.configure() }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        // Once authorized, the sleep protection item is only a checked status line.
+        menuItem.action == #selector(configureSleepProtection) ? !sleepProtection.authorized : true
+    }
 
     private func createWindow() {
         window = NSWindow(
@@ -127,7 +132,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: String(localized: "About Vhostty"), action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
-        let sleepItem = item("Closed-Lid Sleep Protection…", #selector(configureSleepProtection), "")
+        let sleepItem = item("Closed-Lid Sleep Protection While Tasks Run: Not Authorized…", #selector(configureSleepProtection), "")
         sleepProtection.menuItem = sleepItem
         appMenu.addItem(sleepItem)
         appMenu.addItem(item("Open Ghostty Config", #selector(openGhosttyConfig), ""))

@@ -148,7 +148,7 @@ try:
     start(); prompt()
     (case / 'authorization-result').write_text('fail')
     button(['Allow', '允许'])
-    wait(lambda: any(x in read(case / 'sleep-menu.txt') for x in ['Not Active', '未生效']), 'failure menu status missing')
+    wait(lambda: any(x in read(case / 'sleep-menu.txt') for x in ['Not Authorized', '未授权']), 'failure menu status missing')
     assert read(case / 'alert.txt') == '', 'failure opened a modal alert'
     stop()
     start(); prompt()

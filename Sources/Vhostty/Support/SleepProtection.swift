@@ -1,11 +1,12 @@
 import AppKit
 import CoreServices
 
-/// Only an explicit refusal is persisted. Authorization is checked on every launch.
+/// Two states: authorized (on) or not. Only an explicit refusal is persisted;
+/// authorization is checked on every launch.
 final class SleepProtection {
-    weak var menuItem: NSMenuItem? { didSet { updateMenuTitle() } }
+    weak var menuItem: NSMenuItem? { didSet { updateMenu() } }
     weak var window: NSWindow?
-    private(set) var hasFailed = false { didSet { updateMenuTitle() } }
+    private(set) var authorized = false { didSet { updateMenu() } }
     private let store: AppStore
     private var timer: Timer?
     /// The running lease; closing `input` ends it and restores sleep.
@@ -32,8 +33,7 @@ final class SleepProtection {
         checkPermission()
     }
     func configure() {
-        guard !checking, !isTest || fixture != nil else { return }
-        if hasFailed { retry(); return }
+        guard !checking, !authorized, !isTest || fixture != nil else { return }
         let alert = NSAlert()
         alert.messageText = String(localized: "Keep tasks running with the lid closed?")
         alert.informativeText = String(localized: "Your Mac stays awake with the lid closed while tasks run, then returns to normal sleep when they finish. Administrator authorization allows this Mac’s administrator accounts to run only these two commands without a password:\n\n/usr/bin/pmset -a disablesleep 1 — prevent sleep\n/usr/bin/pmset -a disablesleep 0 — restore sleep")
@@ -42,8 +42,7 @@ final class SleepProtection {
         let handle = { [self] (answer: NSApplication.ModalResponse) in
             checking = false
             if answer == .alertSecondButtonReturn {
-                do { try Data().write(to: declined, options: .atomic); stop(); hasFailed = false }
-                catch { stop(); hasFailed = true }
+                try? Data().write(to: declined, options: .atomic)
             } else if answer == .alertFirstButtonReturn {
                 // A previous refusal no longer applies, including when authorization is cancelled.
                 try? FileManager.default.removeItem(at: declined)
@@ -106,17 +105,16 @@ final class SleepProtection {
         let compact = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
         return compact.contains("NOPASSWD: /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a disablesleep 0")
     }
-    private func authorize() {
+    /// What Allow does: install the rule (or confirm it), then enable.
+    func authorize() {
         checking = true
         queue.async {
             var success = false
-            var cancelled = false
             if self.hasPermission() {
                 success = true
             } else if let fixture = self.fixture {
                 let outcome = (try? String(contentsOf: fixture.appendingPathComponent("authorization-result"))) ?? "cancel"
                 success = outcome.trimmingCharacters(in: .whitespacesAndNewlines) == "success"
-                cancelled = outcome.trimmingCharacters(in: .whitespacesAndNewlines) == "cancel"
                 if success { try? Data().write(to: fixture.appendingPathComponent("authorized")) }
             } else if let source = Self.ruleResourceURL {
                 // Copy the bundled static rule, validate, then install atomically.
@@ -126,36 +124,39 @@ final class SleepProtection {
                 var error: NSDictionary?
                 let script = NSAppleScript(source: "do shell script \"\(escaped)\" with administrator privileges")
                 script?.executeAndReturnError(&error)
-                cancelled = (error?[NSAppleScript.errorNumber] as? Int) == -128
                 success = error == nil && script != nil && self.hasPermission()
             }
-            let ok = success, cancel = cancelled
+            let ok = success
             DispatchQueue.main.async {
                 self.checking = false
-                if ok { self.enable() } else if !cancel { self.stop(); self.hasFailed = true }
+                if ok { self.enable() }
             }
         }
     }
     private static func quote(_ s: String) -> String { "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'" }
-    private func updateMenuTitle() {
-        menuItem?.title = hasFailed
-            ? String(localized: "Closed-Lid Sleep Protection: Not Active…")
-            : String(localized: "Closed-Lid Sleep Protection…")
-    }
-    func retry() {
-        guard !checking, !isTest || fixture != nil else { return }
-        authorize()
+    /// Checked and greyed out when authorized (AppDelegate disables it); otherwise it asks.
+    private func updateMenu() {
+        menuItem?.title = authorized
+            ? String(localized: "Closed-Lid Sleep Protection While Tasks Run")
+            : String(localized: "Closed-Lid Sleep Protection While Tasks Run: Not Authorized…")
+        menuItem?.state = authorized ? .on : .off
     }
     /// Authorization is in place: start following task activity.
     private func enable() {
-        hasFailed = false
-        if timer == nil {
-            requestAmphetamineConsent()
-            timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.tick() }
-            if let timer { RunLoop.main.add(timer, forMode: .common); RunLoop.main.add(timer, forMode: .modalPanel) }
-            tick()
-        } else if active && lease == nil {
-            spawn() // Retry from the menu during a busy period.
+        authorized = true
+        guard timer == nil else { return }
+        requestAmphetamineConsent()
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.tick() }
+        if let timer { RunLoop.main.add(timer, forMode: .common); RunLoop.main.add(timer, forMode: .modalPanel) }
+        tick()
+    }
+    /// The helper failed. Show the actual state: unauthorized if the rule is gone.
+    private func recheck() {
+        queue.async {
+            let allowed = self.hasPermission()
+            DispatchQueue.main.async {
+                if !allowed { self.stop(); self.authorized = false }
+            }
         }
     }
     /// The only place that may show the automation consent prompt, so it comes at launch
@@ -171,7 +172,7 @@ final class SleepProtection {
     private func tick() {
         if store.keepsAwake {
             lastBusy = Date()
-            // Each busy period starts one lease; a failed one waits for the next period.
+            // Each busy period starts one lease.
             if !active { active = true; spawn() }
         } else if active, -lastBusy.timeIntervalSinceNow >= 15 {
             active = false
@@ -192,17 +193,17 @@ final class SleepProtection {
         stdout.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard !data.isEmpty else { handle.readabilityHandler = nil; return }
-            let last = String(decoding: data, as: UTF8.self).split(separator: "\n").last
-            DispatchQueue.main.async { if self?.lease === p { self?.hasFailed = last == "error" } }
+            guard String(decoding: data, as: UTF8.self).split(separator: "\n").last == "error" else { return }
+            DispatchQueue.main.async { self?.recheck() }
         }
         p.terminationHandler = { [weak self] p in
             DispatchQueue.main.async {
                 guard let self else { return }
                 if self.lease === p { self.lease = nil; try? self.input?.close(); self.input = nil }
-                if p.terminationStatus != 0 { self.hasFailed = true }
+                if p.terminationStatus != 0 { self.recheck() }
             }
         }
-        do { try p.run() } catch { hasFailed = true; return }
+        do { try p.run() } catch { recheck(); return }
         lease = p; input = stdin.fileHandleForWriting
     }
     private func endLease() {
