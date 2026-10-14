@@ -74,16 +74,10 @@ try:
     assert second.stdout.readline() == b'active\n' and read(case / 'value') == '1', 'second lease not applied after first'
     assert end(second) == 0 and read(case / 'value') == '0'
     print('PASS second lease waits for the first to restore', flush=True)
-    # Without Amphetamine running, nothing checks pmset during a lease.
+    # Whoever sets the value back to 0 during a lease, it is re-applied.
     p = helper(); p.stdout.readline()
-    (case / 'value').write_text('0'); time.sleep(7)
-    assert read(case / 'value') == '0', 'lease without Amphetamine touched pmset'
-    end(p)
-    # With Amphetamine running at the start, re-apply after its session ends.
-    (case / 'amphetamine').write_text('true,true')
-    p = helper(); p.stdout.readline()
-    (case / 'amphetamine').write_text('false,true'); (case / 'value').write_text('0')
-    wait(lambda: read(case / 'value') == '1', 'Amphetamine session end not re-applied', timeout=8)
+    (case / 'value').write_text('0')
+    wait(lambda: read(case / 'value') == '1', 'reset during a lease not re-applied', timeout=8)
     assert p.stdout.readline() == b'active\n'
     (case / 'fail').touch(); (case / 'value').write_text('0')
     assert p.stdout.readline() == b'error\n', 're-apply failure not reported'
@@ -91,8 +85,7 @@ try:
     assert p.stdout.readline() == b'active\n', 're-apply recovery not reported'
     end(p)
     assert read(case / 'value') == '0'
-    (case / 'amphetamine').unlink()
-    print('PASS Amphetamine session end re-applied / failure reported', flush=True)
+    print('PASS reset during a lease re-applied / failure reported', flush=True)
 finally:
     if p.poll() is None: p.kill(); p.wait()
 

@@ -83,26 +83,18 @@ func release() -> Bool {
     if amphetamineProtectsSleep() == true { return true }
     return setDisabled(false)
 }
-func amphetamineRunning() -> Bool {
-    if let test { return FileManager.default.fileExists(atPath: test.appendingPathComponent("amphetamine").path) }
-    return !NSRunningApplication.runningApplications(withBundleIdentifier: "com.if.Amphetamine").isEmpty
-}
 func say(_ line: String) { _ = (line + "\n").withCString { write(STDOUT_FILENO, $0, strlen($0)) } }
 // Enabling protection never depends on Amphetamine or its automation permission.
 guard disabled() == true || setDisabled(true) else { exit(1) }
 say("active")
-// Amphetamine sets the value back to 0 when its own session ends. Only when it is
-// running at the start of the lease, check every few seconds and re-apply; otherwise
-// nothing touches pmset until the lease ends.
-let watch = amphetamineRunning()
+// Others can set the value back to 0 during the lease (Amphetamine does when it
+// launches, quits or ends a session), so check every 5 s and re-apply.
 var byte: UInt8 = 0
 while true {
-    if watch {
-        var descriptor = pollfd(fd: STDIN_FILENO, events: Int16(POLLIN), revents: 0)
-        if poll(&descriptor, 1, 5_000) == 0 {
-            if disabled() == false { say(setDisabled(true) ? "active" : "error") }
-            continue
-        }
+    var descriptor = pollfd(fd: STDIN_FILENO, events: Int16(POLLIN), revents: 0)
+    if poll(&descriptor, 1, 5_000) == 0 {
+        if disabled() == false { say(setDisabled(true) ? "active" : "error") }
+        continue
     }
     if read(STDIN_FILENO, &byte, 1) <= 0 { break }
 }
