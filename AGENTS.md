@@ -2,11 +2,18 @@
 
 ## Workflow
 
-- When a change is done and verified, commit it and push to `origin/master`
-  without asking first.
-- For documentation-only changes (including `AGENTS.md`, README files, and
-  `docs/`), verify the text and links, then commit and push without building
-  or running `make install`.
+- A question gets an answer in text, nothing else. Don't edit files, build,
+  run tests, or start Vhostty unless the user asked for a change. Answer every
+  question asked, including "why did you do X", directly and first.
+- When a change the user asked for is done and verified, commit it and push to
+  `origin/master` without asking first. This rule is about when to commit; it
+  does not mean every change needs tests.
+- Verify in proportion to the change. Run builds and tests only for changes to
+  the app's code, bundled resources, or build configuration, and then only the
+  tests that cover what changed.
+- For documentation-only changes (including `AGENTS.md`, `DEVELOPER.md`,
+  README files, and `docs/`), verify by re-reading the text and links, then
+  commit and push. No building, tests, `make install`, or test instances.
 - After pushing changes that affect the app's code, bundled resources, or
   build configuration, run `make install` without asking.
 - `scripts/bundle.sh` (and so `make app` / `make install`) runs `sandbox-exec`
