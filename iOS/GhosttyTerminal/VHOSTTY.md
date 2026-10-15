@@ -14,6 +14,9 @@ as the Mac app, and it isn't checked in. Vhostty's changes:
   `host_resize` in the surface config, `ghostty_surface_write_buffer`): the
   output is a mirror of a terminal the computer already answers, so queries
   in it are never answered here.
+- Frames are paced by the system's `CADisplayLink`
+  (`TerminalSurfaceCoordinator`), not libghostty-spm's DisplayLink package,
+  so the package has no outside dependencies.
 - `UITerminalView.onWillInput` (through `TerminalSurfaceCoordinator` and
   `TerminalSurface`) runs before every key press and paste, so the client can
   align the session's size before the input.

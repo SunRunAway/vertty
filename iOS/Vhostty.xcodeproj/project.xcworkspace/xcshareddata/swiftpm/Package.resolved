@@ -1,15 +1,6 @@
 {
-  "originHash" : "3eaffec6566167a1d297931d0888e58c0178b8e414cbe8762680151ae18874b2",
+  "originHash" : "708fcc823f007bb09346ec2fd4041dbc7379a4f61ab9d8438116e3092e4fd16d",
   "pins" : [
-    {
-      "identity" : "displaylink",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/Lakr233/DisplayLink.git",
-      "state" : {
-        "revision" : "41bea2661e04bebcb1c4f15fc0b6197850100fdd",
-        "version" : "3.0.1"
-      }
-    },
     {
       "identity" : "swift-protobuf",
       "kind" : "remoteSourceControl",

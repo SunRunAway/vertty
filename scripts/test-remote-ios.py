@@ -213,10 +213,12 @@ try:
     def launch():
         subprocess.run(["xcrun", "simctl", "launch", "--terminate-running-process", udid, BUNDLE],
                        env=dict(os.environ, SIMCTL_CHILD_VHOSTTY_DEBUG="1"), check=True, capture_output=True)
-    launch()
     container = Path(simctl("get_app_container", udid, BUNDLE, "data").strip())
     debug_dir = container / "Documents" / "debug"
-    (debug_dir / "input.txt").unlink(missing_ok=True)
+    # A state.txt left by an earlier run would pass for this one's.
+    for name in ("input.txt", "state.txt"):
+        (debug_dir / name).unlink(missing_ok=True)
+    launch()
     wait(lambda: (debug_dir / "state.txt").exists(), "the app's debug driver never started")
 
     def listening():

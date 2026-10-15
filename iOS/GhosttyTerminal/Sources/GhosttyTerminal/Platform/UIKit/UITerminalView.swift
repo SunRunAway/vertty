@@ -6,7 +6,6 @@
 //
 
 #if canImport(UIKit)
-    import DisplayLink
     import GhosttyKit
     import UIKit
 
@@ -212,7 +211,6 @@
             updateDisplayScale()
 
             core.isAttached = { [weak self] in self?.window != nil }
-            core.displayLinkContext = .view(self)
             core.scaleFactor = { [weak self] in
                 Double(self?.resolvedDisplayScale() ?? UITerminalView.fallbackDisplayScale)
             }

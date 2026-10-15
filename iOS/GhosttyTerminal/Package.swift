@@ -18,9 +18,6 @@ let package = Package(
     products: [
         .library(name: "GhosttyTerminal", targets: ["GhosttyTerminal"]),
     ],
-    dependencies: [
-        .package(url: "https://github.com/Lakr233/DisplayLink.git", exact: "3.0.1"),
-    ],
     targets: [
         .target(
             name: "GhosttyKit",
@@ -34,7 +31,7 @@ let package = Package(
         ),
         .target(
             name: "GhosttyTerminal",
-            dependencies: ["GhosttyKit", "DisplayLink"],
+            dependencies: ["GhosttyKit"],
             path: "Sources/GhosttyTerminal",
             resources: [
                 .copy("Resources/Ghostty"),
