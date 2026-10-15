@@ -164,7 +164,7 @@ index 37f8712..380d360 100644
              0,
              null,
 diff --git a/src/Surface.zig b/src/Surface.zig
-index 4d66622..e91e9bd 100644
+index 4d66622..24d27fc 100644
 --- a/src/Surface.zig
 +++ b/src/Surface.zig
 @@ -620,32 +620,40 @@ pub fn init(
@@ -283,31 +283,74 @@ index 4d66622..e91e9bd 100644
  /// Recalculate the balanced padding if needed.
  fn balancePaddingIfNeeded(self: *Surface) void {
      if (!self.config.window_padding_balance) return;
-@@ -2678,9 +2707,7 @@ pub fn keyCallback(
-         // 1. mouse reporting is off
-         // OR
-         // 2. mouse reporting is on and we are not reporting shift to the terminal
+@@ -2674,39 +2703,20 @@ pub fn keyCallback(
+         // Update our modifiers, this will update mouse mods too
+         self.modsChanged(event.mods);
+ 
+-        // We only refresh links if
+-        // 1. mouse reporting is off
+-        // OR
+-        // 2. mouse reporting is on and we are not reporting shift to the terminal
 -        if (self.io.terminal.flags.mouse_event == .none or
 -            (self.mouse.mods.shift and !self.mouseShiftCapture(false)))
 -        {
-+        if (self.linksBypassMouseCapture()) {
-             // Refresh our link state
-             const pos = self.rt_surface.getCursorPos() catch break :mouse_mods;
-             self.renderer_state.mutex.lock();
-@@ -3986,6 +4013,12 @@ pub fn mouseButtonCallback(
+-            // Refresh our link state
+-            const pos = self.rt_surface.getCursorPos() catch break :mouse_mods;
+-            self.renderer_state.mutex.lock();
+-            defer self.renderer_state.mutex.unlock();
+-            self.mouseRefreshLinks(
+-                pos,
+-                self.posToViewport(pos.x, pos.y),
+-                self.mouse.over_link,
+-            ) catch |err| {
+-                log.warn("failed to refresh links err={}", .{err});
+-                break :mouse_mods;
+-            };
+-        } else if (self.io.terminal.flags.mouse_event != .none and !self.mouse.mods.shift) {
+-            // If we have mouse reports on and we don't have shift pressed, we reset state
+-            _ = try self.rt_app.performAction(
+-                .{ .surface = self },
+-                .mouse_shape,
+-                self.io.terminal.mouse_shape,
+-            );
+-            _ = try self.rt_app.performAction(
+-                .{ .surface = self },
+-                .mouse_over_link,
+-                .{ .url = "" },
+-            );
+-            try self.queueRender();
+-        }
++        // Refresh our link state. Vhostty: also while mouse reporting is on,
++        // where linkAtPos only finds vhostty:// links (unless shift lets go
++        // of the capture) and clears the link state otherwise.
++        const pos = self.rt_surface.getCursorPos() catch break :mouse_mods;
++        self.renderer_state.mutex.lock();
++        defer self.renderer_state.mutex.unlock();
++        self.mouseRefreshLinks(
++            pos,
++            self.posToViewport(pos.x, pos.y),
++            self.mouse.over_link,
++        ) catch |err| {
++            log.warn("failed to refresh links err={}", .{err});
++            break :mouse_mods;
++        };
+     }
+ 
+     // Process the cursor state logic. This will update the cursor shape if
+@@ -3986,6 +3996,12 @@ pub fn mouseButtonCallback(
      {
          self.renderer_state.mutex.lock();
          defer self.renderer_state.mutex.unlock();
 +
-+        // Vhostty: a ⌘-click on a link belongs to the link (opened on
-+        // release above), so the app capturing the mouse doesn't get the press.
++        // Vhostty: a click on a vhostty:// link belongs to the link (opened
++        // on release above), so the app capturing the mouse doesn't get the press.
 +        if (button == .left and action == .press and self.mouse.over_link and
 +            self.isMouseReporting()) return true;
 +
          if (self.isMouseReporting()) report: {
              // If we have shift-pressed and we aren't allowed to capture it,
              // then we do not do a mouse report.
-@@ -4409,17 +4442,23 @@ fn linkAtPos(
+@@ -4409,17 +4425,27 @@ fn linkAtPos(
      // Get our comparison mods
      const mouse_mods = self.mouseModsWithCapture(self.mouse.mods);
  
@@ -319,9 +362,14 @@ index 4d66622..e91e9bd 100644
 -        const sel = terminal.Selection.init(mouse_pin, mouse_pin, false);
 -        return .{ .action = ._open_osc8, .selection = sel };
 -    }
++    // Vhostty: while the app has the mouse, only vhostty:// links are ours,
++    // with or without modifiers. Full-screen TUIs like Claude Code open the
++    // other links on click themselves, but not ours.
++    const captured = self.mouseHeldByApp();
++
 +    const link: Link = link: {
 +        // If we have the proper modifiers set then we can check for OSC8 links.
-+        if (mouse_mods.equal(input.ctrlOrSuper(.{}))) hyperlink: {
++        if (captured or mouse_mods.equal(input.ctrlOrSuper(.{}))) hyperlink: {
 +            const rac = mouse_pin.rowAndCell();
 +            const cell = rac.cell;
 +            if (!cell.hyperlink) break :hyperlink;
@@ -332,32 +380,23 @@ index 4d66622..e91e9bd 100644
 -    // Fall back to configured links
 -    return try self.linkAtPin(mouse_pin, mouse_mods);
 +        // Fall back to configured links
-+        break :link (try self.linkAtPin(mouse_pin, mouse_mods)) orelse return null;
++        break :link (try self.linkAtPin(mouse_pin, if (captured) null else mouse_mods)) orelse return null;
 +    };
 +
-+    // Vhostty: while the app captures the mouse, ⌘ only takes our own links.
-+    if (self.linksFreeOfMouseCapture() or self.isVhosttyLink(link)) return link;
++    if (!captured or self.isVhosttyLink(link)) return link;
 +    return null;
  }
  
  /// Detects if a link is present at the given pin.
-@@ -4473,6 +4512,40 @@ fn linkAtPin(
+@@ -4473,6 +4499,32 @@ fn linkAtPin(
      return null;
  }
  
-+/// Whether links are handled whatever they are: when the app doesn't report
-+/// mouse events, or with a shift it can't capture.
-+fn linksFreeOfMouseCapture(self: *Surface) bool {
-+    return self.io.terminal.flags.mouse_event == .none or
-+        (self.mouse.mods.shift and !self.mouseShiftCapture(false));
-+}
-+
-+/// Whether link hover and clicks are handled: as above, or (Vhostty) with ⌘
-+/// held while the app reports mouse events, for vhostty:// links only (see
-+/// linkAtPos). Full-screen TUIs like Claude Code open the other links on
-+/// ⌘-click themselves, but not ours.
-+fn linksBypassMouseCapture(self: *Surface) bool {
-+    return self.linksFreeOfMouseCapture() or self.mouse.mods.super;
++/// Vhostty: whether the app reporting mouse events has the mouse, that is
++/// mouse reporting is on and shift doesn't let go of it.
++fn mouseHeldByApp(self: *Surface) bool {
++    return self.io.terminal.flags.mouse_event != .none and
++        !(self.mouse.mods.shift and !self.mouseShiftCapture(false));
 +}
 +
 +/// Vhostty: whether a link opens a vhostty:// URL.
@@ -382,13 +421,22 @@ index 4d66622..e91e9bd 100644
  /// This returns the mouse mods to consider for link highlighting or
  /// other purposes taking into account when shift is pressed for releasing
  /// the mouse from capture.
-@@ -4714,8 +4787,7 @@ pub fn cursorPosCallback(
-     if ((over_link or
+@@ -4707,15 +4759,10 @@ pub fn cursorPosCallback(
+     // OR
+     // 2. the cursor position has changed (either we have no previous state, or the state has
+     //    changed)
+-    // AND
+-    // 1. mouse reporting is off
+-    // OR
+-    // 2. mouse reporting is on and we are not reporting shift to the terminal
+-    if ((over_link or
++    // Vhostty: also while mouse reporting is on (see linkAtPos).
++    if (over_link or
          self.mouse.link_point == null or
-         (self.mouse.link_point != null and !self.mouse.link_point.?.eql(pos_vp))) and
+-        (self.mouse.link_point != null and !self.mouse.link_point.?.eql(pos_vp))) and
 -        (self.io.terminal.flags.mouse_event == .none or
 -            (self.mouse.mods.shift and !self.mouseShiftCapture(false))))
-+        self.linksBypassMouseCapture())
++        (self.mouse.link_point != null and !self.mouse.link_point.?.eql(pos_vp)))
      {
          // If we were previously over a link, we always update. We do this so that if the text
          // changed underneath us, even if the mouse didn't move, we update the URL hints and state

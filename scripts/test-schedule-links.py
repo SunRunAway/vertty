@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Command-click task links in a scratch terminal: a plain-text URL, and an
-OSC 8 link while the app captures the mouse, as Claude Code's full-screen TUI
-does. The task panel opens beside the session, which stays on screen. Other
-links under mouse capture stay the app's: it gets the click."""
+"""Click task links in a scratch terminal: Command-click a plain-text URL,
+and click an OSC 8 link, with or without Command, while the app captures the
+mouse, as Claude Code's full-screen TUI does. The task panel opens beside the
+session, which stays on screen. Other links under mouse capture stay the
+app's: it gets the click."""
 import json
 import os
 from pathlib import Path
@@ -14,14 +15,18 @@ import testapp
 # What the fixture agent prints on its first line: the escapes to turn mouse
 # capture on, and the link.
 CAPTURE = r'\033[?1049h\033[?1000h\033[?1002h\033[?1003h\033[?1006h'
+TASK_LINK = r'\033]8;;{url}\007Open the clicked task here\033]8;;\007'
+WEB_LINK = r'\033]8;;https://example.com/\007Open the example page\033]8;;\007'
 CASES = {
-    'plain-text URL': ('', '{url}', True),
-    'OSC 8 link under mouse capture': (CAPTURE, r'\033]8;;{url}\007Open the clicked task here\033]8;;\007', True),
-    'https link under mouse capture': (CAPTURE, r'\033]8;;https://example.com/\007Open the example page\033]8;;\007', False),
+    'Command-click on the plain-text URL': ('', '{url}', 'cmdclick', True),
+    'Command-click on the OSC 8 link under mouse capture': (CAPTURE, TASK_LINK, 'cmdclick', True),
+    'Click on the OSC 8 link under mouse capture': (CAPTURE, TASK_LINK, 'click', True),
+    'Command-click on an https link under mouse capture': (CAPTURE, WEB_LINK, 'cmdclick', False),
+    'Click on an https link under mouse capture': (CAPTURE, WEB_LINK, 'click', False),
 }
 
 
-def run(name, setup, text, ours):
+def run(name, setup, text, click, ours):
     root = Path(tempfile.mkdtemp(dir='/private/tmp', prefix='vhostty-links-'))
     home, project, support, snap, bins = [root / p for p in ('home', 'project', 'support', 'snap', 'bin')]
     for p in (home, project, support, snap, bins, home / '.codex'):
@@ -63,21 +68,21 @@ def run(name, setup, text, ours):
         wait(lambda: 'READY' in state())
         # The terminal starts at the right of the 300pt project sidebar, below the title strip.
         # Click well inside the first line's link, not the title or task list.
-        (snap / 'input.txt').write_text(f'to {tid}\ncmdclick 420 50\n')
+        (snap / 'input.txt').write_text(f'to {tid}\n{click} 420 50\n')
         if ours:
             wait(lambda: f'panel={task}' in state())
             assert 'schedulesShown=false' in state(), state()
             time.sleep(.5)
             assert '[<0;' not in state(), 'the app got the click: ' + state()
-            print(f'PASS Command-click on the {name} opens its task panel beside the session', flush=True)
+            print(f'PASS {name} opens its task panel beside the session', flush=True)
         else:
             wait(lambda: '[<0;' in state())
             assert 'panel=-' in state(), state()
-            print(f'PASS Command-click on an {name} goes to the app', flush=True)
+            print(f'PASS {name} goes to the app', flush=True)
     finally:
         app.terminate()
         app.wait(timeout=10)
 
 
-for name, (setup, text, ours) in CASES.items():
-    run(name, setup, text, ours)
+for name, (setup, text, click, ours) in CASES.items():
+    run(name, setup, text, click, ours)
