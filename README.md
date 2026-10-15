@@ -34,6 +34,6 @@ brew install --cask SunRunAway/tap/vhostty
 
 This installs Vhostty into `/Applications` using our [Homebrew tap](https://github.com/SunRunAway/homebrew-tap). Update with `brew update && brew upgrade --cask vhostty`.
 
-The app isn't notarized by Apple. The cask automatically removes its quarantine attribute after installation and upgrades, so you don't need to manually allow it on first launch. This bypasses the quarantine-triggered Gatekeeper check for Vhostty. If you download the zip from [Releases](https://github.com/SunRunAway/vhostty/releases) in a browser instead, allow it under System Settings → Privacy & Security → "Open Anyway", or run `xattr -dr com.apple.quarantine /Applications/Vhostty.app`.
+For installation without Homebrew, see [manual installation](docs/manual-installation.md).
 
 For source builds and debugging, see the [developer documentation](DEVELOPER.md) (in Chinese).

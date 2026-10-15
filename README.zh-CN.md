@@ -32,6 +32,6 @@ brew install --cask SunRunAway/tap/vhostty
 
 它会通过我们的 [Homebrew tap](https://github.com/SunRunAway/homebrew-tap) 将 Vhostty 安装到 `/Applications`。更新请运行 `brew update && brew upgrade --cask vhostty`。
 
-App 没有经过 Apple 公证。Cask 会在安装和升级后自动清除其 quarantine 标记，首次启动无需手动放行；这会绕过 Vhostty 由隔离标记触发的 Gatekeeper 检查。如果你是用浏览器从 [Releases](https://github.com/SunRunAway/vhostty/releases) 页面下载的 zip，需要到「系统设置 → 隐私与安全性」里点「仍要打开」，或者执行 `xattr -dr com.apple.quarantine /Applications/Vhostty.app`。
+不使用 Homebrew 的安装方式见[手动安装](docs/manual-installation.zh-CN.md)。
 
 从源码构建与开发调试见[开发文档](DEVELOPER.md)。
