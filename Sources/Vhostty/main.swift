@@ -7,8 +7,8 @@ where key.hasPrefix("CLAUDE") || key.hasPrefix("GHOSTTY_") || key == "AI_AGENT" 
     unsetenv(key)
 }
 // Nor the variables a Vhostty card sets for its own session.
-for key in ["VHOSTTY_TAB_ID", "VHOSTTY_SOCK", "VHOSTTY_CLAUDE_SETTINGS", "VHOSTTY_HOOK", "VHOSTTY_PLUGIN_DIR",
-            "VHOSTTY_SCHEDULE_CLI", "VHOSTTY_SCHEDULE_RUN"] {
+for key in ["VHOSTTY_TAB_ID", "VHOSTTY_SOCK", "VHOSTTY_CLAUDE_SETTINGS", "VHOSTTY_HOOK", "VHOSTTY_SCHEDULE_CLI",
+            "VHOSTTY_SCHEDULE_RUN"] {
     unsetenv(key)
 }
 var tmpBuf = [CChar](repeating: 0, count: Int(PATH_MAX))

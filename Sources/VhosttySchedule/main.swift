@@ -2,9 +2,9 @@ import Foundation
 
 // vhostty-schedule: reads Vhostty's scheduled tasks and pauses, resumes or runs
 // them. Creating, editing or deleting opens Vhostty's own form or confirmation,
-// filled in, for the user to confirm. Claude uses it through the built-in schedule
-// skill; Codex through `vhostty-schedule mcp`, an MCP server with the same
-// operations as tools. Talks to the running app over its hook socket.
+// filled in, for the user to confirm. Claude and Codex use it through
+// `vhostty-schedule mcp`, an MCP server with the same operations as tools. Talks
+// to the running app over its hook socket.
 
 let usage = """
 usage: vhostty-schedule <command> [options]
@@ -107,7 +107,8 @@ let mcpInstructions = """
 Vhostty (the terminal app this session runs in) can run a prompt on a schedule: once, daily, on weekdays, or on \
 chosen days of the week, at a time on this Mac's clock. A task's first run starts a new session in its project; \
 later runs resume that same session. Runs happen only while Vhostty is running and the Mac is awake. Use these \
-tools for any such request instead of cron, launchd, /loop or cloud tasks.
+tools for any such request ("every Saturday at 9 check dependencies", "move the dependency check to Sunday", \
+"pause that task", "what's scheduled?") instead of cron, cron tools, launchd, /loop or cloud tasks.
 Pause, resume and run take effect at once. Create, edit and delete open Vhostty's own form or delete confirmation, \
 filled in, in front of the user, and take effect only if the user confirms there; if they cancel, nothing is kept. \
 Never say a task was created, changed or deleted unless list or show shows it.

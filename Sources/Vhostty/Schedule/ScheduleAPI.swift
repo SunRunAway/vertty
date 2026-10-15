@@ -1,8 +1,8 @@
 import Foundation
 
-/// Requests from `vhostty-schedule` (the command the built-in schedule skill
-/// runs). Agents can read tasks, and pause, resume or run one, as the user can
-/// with one click. Creating, editing or deleting only opens the form or
+/// Requests from `vhostty-schedule` (the MCP server agents get their
+/// scheduled-task tools from). Agents can read tasks, and pause, resume or run
+/// one, as the user can with one click. Creating, editing or deleting only opens the form or
 /// confirmation the user would use anyway, filled in: nothing is saved unless
 /// the user confirms it there, and cancelling leaves nothing behind.
 extension AppStore {

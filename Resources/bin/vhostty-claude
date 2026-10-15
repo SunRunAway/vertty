@@ -16,9 +16,13 @@ if [ "$1" = "--resume" ] && [ -n "$2" ]; then
     exec claude attach "$job"
   fi
 fi
-# Vhostty's built-in skills (scheduled tasks), for this session only.
-if [ -n "$VHOSTTY_PLUGIN_DIR" ] && [ -d "$VHOSTTY_PLUGIN_DIR" ]; then
-  set -- --plugin-dir "$VHOSTTY_PLUGIN_DIR" "$@"
+# Vhostty's scheduled-task tools come in as an MCP server for this session only
+# (the same one Codex cards get). Unlike a skill listing, an MCP server's
+# instructions are sent again after the conversation is compacted.
+if [ -n "$VHOSTTY_SCHEDULE_CLI" ] && [ -x "$VHOSTTY_SCHEDULE_CLI" ]; then
+  mcp=$(printf '{"mcpServers":{"vhostty":{"command":"%s","args":["mcp"],"env":{"VHOSTTY_TAB_ID":"%s","VHOSTTY_SOCK":"%s"}}}}' \
+    "$VHOSTTY_SCHEDULE_CLI" "$VHOSTTY_TAB_ID" "$VHOSTTY_SOCK")
+  set -- --mcp-config "$mcp" "$@"
 fi
 if [ -n "$VHOSTTY_CLAUDE_SETTINGS" ] && [ -f "$VHOSTTY_CLAUDE_SETTINGS" ]; then
   exec claude --settings "$VHOSTTY_CLAUDE_SETTINGS" "$@"

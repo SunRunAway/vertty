@@ -35,7 +35,6 @@ cp "$BIN/Vhostty" "$APP/Contents/MacOS/Vhostty"
 cp "$BIN/vhostty-sleep" "$APP/Contents/MacOS/vhostty-sleep"
 cp "$BIN/vhostty-hook" "$APP/Contents/MacOS/vhostty-hook"
 cp "$BIN/vhostty-schedule" "$APP/Contents/MacOS/vhostty-schedule"
-cp -R Resources/plugin "$APP/Contents/Resources/plugin"
 # SwiftPM resource bundles of VhosttyKit (the shared code's translations).
 cp -R "$BIN"/VhosttyKit_*.bundle "$APP/Contents/Resources/"
 cp Resources/ghostty-defaults.conf "$APP/Contents/Resources/"
