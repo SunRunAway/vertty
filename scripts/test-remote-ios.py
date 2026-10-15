@@ -259,7 +259,10 @@ try:
     assert input_size("e4bda0e5a5bd") == own, read(agent_log)
     drive("ctrlc")
     wait(lambda: input_size("03") is not None, "Ctrl+C didn't reach the agent")
-    print("PASS typing, IME text and Ctrl+C reach the session at the device's size", flush=True)
+    # Holding the space bar and sliding left moves the cursor: Left presses.
+    drive("slide -2")
+    wait(lambda: input_size("1b5b44") is not None, "sliding on the space bar didn't press Left")
+    print("PASS typing, IME text, Ctrl+C and space-bar sliding reach the session at the device's size", flush=True)
 
     # Typing on the computer takes the session to the computer's size; the
     # iPhone shows it at that grid (scaled down when bigger), and typing on

@@ -30,6 +30,7 @@
         #if !targetEnvironment(macCatalyst)
             var softwareKeyboard: SoftwareKeyboardState = .init()
             var fontZoom: FontZoomState = .init()
+            var floatingCursor: FloatingCursorState = .init()
         #endif
 
         lazy var selectionContextMenuInteraction = UIContextMenuInteraction(delegate: self)

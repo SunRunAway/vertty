@@ -189,6 +189,14 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
     func debugFocus() { terminal.acquireProgrammaticFocus() }
     /// What the bar's hide-keyboard key does.
     func debugHideKeyboard() { terminal.resignFirstResponder() }
+    /// Holding the space bar and sliding this many cells (negative: left).
+    func debugSlide(_ cells: Int) {
+        guard let cell else { return }
+        let width = cell.width / traitCollection.displayScale
+        terminal.beginFloatingCursor(at: .zero)
+        terminal.updateFloatingCursor(at: CGPoint(x: (CGFloat(cells) + 0.5 * CGFloat(cells.signum())) * width, y: 0))
+        terminal.endFloatingCursor()
+    }
     func debugKey(_ key: TerminalKey, modifiers: TerminalInputModifiers = []) { terminal.sendKey(key, modifiers: modifiers) }
 }
 

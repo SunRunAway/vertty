@@ -20,6 +20,9 @@ as the Mac app, and it isn't checked in. Vhostty's changes:
 - `UITerminalView.onWillInput` (through `TerminalSurfaceCoordinator` and
   `TerminalSurface`) runs before every key press and paste, so the client can
   align the session's size before the input.
+- Holding the space bar and sliding presses Left or Right once per cell of
+  travel (`UITerminalView+FloatingCursor.swift`): the text UIKit sees is
+  only the composition, so its own caret can't move.
 - The input accessory bar has `shiftTab` and `ctrlC` keys, shows Esc as the
   text "Esc" rather than a glyph, and
   `UITerminalView.inputAccessoryShowsDismissKey` pins a key that hides the

@@ -65,6 +65,8 @@
                 terminal?.debugFocus()
             case "hidekeyboard":
                 terminal?.debugHideKeyboard()
+            case "slide":
+                if let n = Int(argument) { terminal?.debugSlide(n) }
             case "type":
                 terminal?.debugType(argument)
             case "insert":
