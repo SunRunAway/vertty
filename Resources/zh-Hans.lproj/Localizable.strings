@@ -220,3 +220,5 @@
 "The port is already in use by another program." = "端口已被其他程序占用。";
 
 "Default Agent for New Projects" = "新项目默认 Agent";
+
+"Ended (%lld)" = "已结束（%lld）";

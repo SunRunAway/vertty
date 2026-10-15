@@ -18,17 +18,44 @@ struct ScheduleManagerView: View {
     @ObservedObject var store: AppStore
     @ObservedObject var schedules: ScheduleStore
     @State private var showDeleted = false
+    @State private var showEnded = false
 
     var body: some View {
-        let active = schedules.activeTasks
+        let ended = schedules.activeTasks.filter { task in
+            task.timing.repeatKind == .once && task.nextPlan == nil
+                && (task.timing.onceDate ?? .distantFuture) <= Date()
+                && schedules.shownRun(of: task.id).map { $0.state != .running } == true
+        }
+        let endedIDs = Set(ended.map(\.id))
+        let active = schedules.activeTasks.filter { !endedIDs.contains($0.id) }
         let deleted = schedules.deletedTasks
         ScrollView {
             VStack(alignment: .leading, spacing: 30) {
-                if active.isEmpty {
+                if active.isEmpty && ended.isEmpty {
                     emptyState
                 } else {
                     ForEach(groups(active), id: \.0) { projectID, tasks in
                         section(projectID, tasks)
+                    }
+                }
+                if !ended.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Button {
+                            withAnimation(.easeOut(duration: 0.15)) { showEnded.toggle() }
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .rotationEffect(.degrees(showEnded ? 90 : 0))
+                                Text("Ended (\(ended.count))")
+                            }
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.tertiary)
+                            .padding(.leading, 12)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        if showEnded { rows(ended) }
                     }
                 }
                 if !deleted.isEmpty {
