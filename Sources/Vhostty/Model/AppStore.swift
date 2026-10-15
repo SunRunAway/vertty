@@ -14,6 +14,7 @@ final class AppStore: ObservableObject {
     @Published private(set) var lastProjectID: UUID?
     /// The built-in default kind, picked on first launch from which agents are installed.
     @Published private(set) var detectedKind: AgentKind?
+    @Published private(set) var newProjectKind: AgentKind?
     @Published var history: [UUID: [SessionSummary]] = [:]
     @Published var historyVisibleCounts: [UUID: Int] = [:]
     /// Per-project session search: present while the search field is open.
@@ -84,6 +85,7 @@ final class AppStore: ObservableObject {
             selectedTabID = state.selectedTabID ?? tabs.first?.id
             lastProjectID = state.lastProjectID
             detectedKind = state.detectedKind
+            newProjectKind = state.newProjectKind
             if let w = state.sidebarWidth { sidebarWidth = CGFloat(w) }
             if let v = state.sidebarVisible { sidebarVisible = v }
             if let f = state.shellFraction { shellFraction = CGFloat(f) }
@@ -128,17 +130,39 @@ final class AppStore: ObservableObject {
             detectedKind = first
             scheduleSave()
         }
-        objectWillChange.send()  // VHOSTTY_DEFAULT_AGENT may have changed defaultKind
+        freezeProjectDefaults()
+        scheduleSave()
         watchHistory()
         refreshHistory()  // Codex's history depends on the shell's CODEX_HOME.
     }
 
-    /// The kind new projects start: VHOSTTY_DEFAULT_AGENT, else what was installed on
-    /// first launch (Claude if both were), else Claude.
-    var globalDefaultKind: AgentKind { ShellEnvironment.defaultAgent ?? detectedKind ?? .claude }
+    /// The initial default for projects added from now on.
+    var globalDefaultKind: AgentKind { newProjectKind ?? detectedKind ?? .claude }
 
-    /// What ⌘T and the new-session button start in a project.
-    func defaultKind(_ project: Project) -> AgentKind { project.defaultKind ?? globalDefaultKind }
+    /// Legacy projects retain their original detected default.
+    func defaultKind(_ project: Project) -> AgentKind { project.defaultKind ?? detectedKind ?? .claude }
+
+    private func freezeProjectDefaults() {
+        for index in projects.indices where projects[index].defaultKind == nil {
+            projects[index].defaultKind = detectedKind ?? .claude
+        }
+    }
+
+    func setNewProjectKind(_ kind: AgentKind) {
+        freezeProjectDefaults()
+        newProjectKind = kind
+        scheduleSave()
+    }
+
+    @discardableResult
+    func addProject(at url: URL) -> Project {
+        if let existing = projects.first(where: { $0.path == url.path }) { return existing }
+        let project = Project(name: url.lastPathComponent, path: url.path, defaultKind: globalDefaultKind)
+        schedules.projectAdded(project.id, path: project.path, known: Set(projects.map(\.id)))
+        projects.append(project)
+        scheduleSave()
+        return project
+    }
 
     /// Called once the window exists: start Claude in the selected tab.
     func activateSelection() {
@@ -152,6 +176,7 @@ final class AppStore: ObservableObject {
             selectedTabID: selectedTabID,
             lastProjectID: lastProjectID,
             detectedKind: detectedKind,
+            newProjectKind: newProjectKind,
             sidebarWidth: Double(sidebarWidth),
             sidebarVisible: sidebarVisible,
             shellFraction: Double(shellFraction))
@@ -179,14 +204,7 @@ final class AppStore: ObservableObject {
         guard panel.runModal() == .OK else { return }
         var last: Project?
         for url in panel.urls {
-            if let existing = projects.first(where: { $0.path == url.path }) {
-                last = existing
-                continue
-            }
-            let p = Project(name: url.lastPathComponent, path: url.path)
-            schedules.projectAdded(p.id, path: p.path, known: Set(projects.map(\.id)))
-            projects.append(p)
-            last = p
+            last = addProject(at: url)
         }
         scheduleSave()
         refreshHistory()

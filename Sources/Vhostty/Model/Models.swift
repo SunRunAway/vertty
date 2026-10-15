@@ -103,6 +103,7 @@ struct PersistedState: Codable {
     var selectedTabID: UUID?
     var lastProjectID: UUID?
     var detectedKind: AgentKind?
+    var newProjectKind: AgentKind?
     var sidebarWidth: Double?
     var sidebarVisible: Bool?
     var shellFraction: Double?

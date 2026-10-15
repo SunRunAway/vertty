@@ -218,3 +218,5 @@
 "Failed to start: %@" = "启动失败：%@";
 "VHOSTTY_REMOTE_PORT is “%@”, not a port number (1–65535)." = "VHOSTTY_REMOTE_PORT 的值“%@”不是有效端口号（1–65535）。";
 "The port is already in use by another program." = "端口已被其他程序占用。";
+
+"Default Agent for New Projects" = "新项目默认 Agent";

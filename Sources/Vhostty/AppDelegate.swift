@@ -80,8 +80,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     @objc private func toggleDisplayAwake() { displayAwake.setEnabled(!displayAwake.enabled) }
     @objc private func toggleRemoteConnections() { remoteServer.setEnabled(!remoteServer.enabled) }
 
+    @objc private func setNewProjectAgent(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let kind = AgentKind(rawValue: raw) else { return }
+        store.setNewProjectKind(kind)
+    }
+
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
-        if menuItem.action == #selector(toggleSidebar) {
+        if menuItem.action == #selector(setNewProjectAgent(_:)) {
+            menuItem.state = (menuItem.representedObject as? String) == store.globalDefaultKind.rawValue ? .on : .off
+        } else if menuItem.action == #selector(toggleSidebar) {
             menuItem.title = store.sidebarVisible ? String(localized: "Hide Sidebar") : String(localized: "Show Sidebar")
         } else if menuItem.action == #selector(toggleDisplayAwake) {
             menuItem.state = displayAwake.enabled ? .on : .off
@@ -161,6 +168,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
 
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: String(localized: "About Vhostty"), action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(.separator())
+        let agentMenu = NSMenu()
+        for kind in AgentKind.allCases {
+            let choice = item(kind == .claude ? "Claude Code" : "Codex", #selector(setNewProjectAgent(_:)), "")
+            choice.representedObject = kind.rawValue
+            agentMenu.addItem(choice)
+        }
+        addSubmenu(appMenu, "Default Agent for New Projects", agentMenu)
         appMenu.addItem(.separator())
         let sleepItem = item("Closed-Lid Sleep Protection While Tasks Run: Not Authorized…", #selector(toggleSleepProtection), "")
         sleepProtection.menuItem = sleepItem

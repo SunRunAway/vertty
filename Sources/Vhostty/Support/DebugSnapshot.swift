@@ -74,6 +74,19 @@ final class DebugSnapshot {
                 if buttons.indices.contains(index) { buttons[index].performClick(nil) }
                 continue
             }
+            if line.hasPrefix("newprojectagent "),
+               let menu = NSApp.mainMenu?.items.first?.submenu?.items.compactMap(\.submenu).first(where: {
+                   $0.items.contains { $0.action == NSSelectorFromString("setNewProjectAgent:") }
+               }), let index = menu.items.firstIndex(where: {
+                   ($0.representedObject as? String) == String(line.dropFirst(16))
+               }) {
+                menu.performActionForItem(at: index)
+                continue
+            }
+            if line.hasPrefix("addproject ") {
+                store.addProject(at: URL(fileURLWithPath: String(line.dropFirst(11))))
+                continue
+            }
             if line.hasPrefix("to ") {
                 target = UUID(uuidString: String(line.dropFirst(3))).flatMap { store.tab(withID: $0) }
                 targetShell = false
@@ -314,6 +327,12 @@ final class DebugSnapshot {
 
         var lines: [String] = []
         lines.append("sidebarVisible=\(store.sidebarVisible) sidebarWidth=\(store.sidebarWidth)")
+        if let menu = NSApp.mainMenu?.items.first?.submenu?.items.compactMap(\.submenu).first(where: {
+            $0.items.contains { $0.action == NSSelectorFromString("setNewProjectAgent:") }
+        }) {
+            menu.update()
+            lines.append("new-project-agent-menu: " + menu.items.map { "\($0.title)=\($0.state == .on)" }.joined(separator: ", "))
+        }
         lines.append("projects: " + store.projects.map { "\($0.name)=\($0.path)" }.joined(separator: ", "))
         lines.append("selected: \(store.selectedTabID?.uuidString ?? "-")")
         lines.append("firstResponder: \(String(describing: window.firstResponder.map { type(of: $0) }))")

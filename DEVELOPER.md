@@ -2,6 +2,24 @@
 
 给想了解实现或参与开发的人看。使用说明见 [README](README.zh-CN.md)。
 
+## 从源码构建
+
+### macOS
+
+只需要 Command Line Tools 和 zig，**不需要 Xcode**。
+
+```bash
+brew install zig          # 需要 0.15.2（Ghostty 1.3.1 的要求）
+git clone --recursive https://github.com/SunRunAway/vhostty.git
+cd vhostty
+make                      # 第一次会先编译 libghostty，大约 5 分钟
+make install              # 拷贝到 /Applications/Vhostty.app
+```
+
+### iOS
+
+iPhone 和 iPad app 需要 Xcode。先运行 `scripts/build-ghostty-ios.sh` 编译终端库，再打开 `iOS/Vhostty.xcodeproj`，在 Signing 里选择你的 team，运行到设备上。
+
 ## 工作原理
 
 ### Claude 是怎么启动的
@@ -65,6 +83,8 @@ hooks 事件的传递路径：`vhostty-hook`（App 里自带的一个小程序�
 ### 远程控制
 
 产品规则见 [docs/spec/remote-client-product.md](docs/spec/remote-client-product.md)。
+
+`VHOSTTY_REMOTE_PORT` 设置开启「允许远程连接」后的监听端口，默认 `58563`。在登录 shell 的配置文件（如 `~/.zshrc`）中设置后重启 Vhostty；端口无效或无法使用时，菜单项下方会显示「启动失败」及原因。
 
 - **协议**：一条 WebSocket，消息是 `VhosttyKit/Proto/vhostty_remote.proto` 定义的 Protobuf（每帧一条，客户端发 `ClientMessage`，服务端发 `ServerMessage`）。改了 proto 后运行 `scripts/gen-proto.sh` 重新生成 Swift 代码（protoc 和 protoc-gen-swift 编译到 `build/tools`）。协议代码和客户端 `RemoteClient`（连接、重连、请求、终端流）在 `VhosttyKit` 包的 `VhosttyRemote` 里。
 - **服务端**：`Sources/Vhostty/Remote/RemoteServer.swift` 用 Network.framework 监听，同时只留一个客户端，新连接接管旧连接；`RemoteBridge.swift` 把 `AppStore` 的项目、卡片和历史做成 State（有变化才发），执行新建、恢复、关闭等请求，并把卡片终端转给客户端。
