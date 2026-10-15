@@ -36,6 +36,7 @@
 "%@ is working" = "%@ 正在工作";
 "%@ needs your input" = "%@ 需要你确认";
 "%@ is done (unread)" = "%@ 已完成（未查看）";
+"%lld unread" = "%lld 个会话未查看";
 "Waiting for input" = "等待输入";
 "Starting" = "正在启动";
 "Not started (click to resume)" = "未启动（点击后恢复会话）";

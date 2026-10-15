@@ -9,6 +9,8 @@ final class AppStore: ObservableObject {
 
     @Published var projects: [Project] = []
     @Published var tabs: [TabSession] = []
+    /// Cards with the unread marker, as the Dock badge last counted them.
+    @Published private(set) var unreadTabIDs: Set<UUID> = []
     @Published private(set) var selectedTabID: UUID?
     /// Project of the last selected session, kept after that session closes.
     @Published private(set) var lastProjectID: UUID?
@@ -1045,8 +1047,10 @@ final class AppStore: ObservableObject {
     // MARK: - Attention
 
     func updateDockBadge() {
-        let n = tabs.filter(\.attention).count
-        NSApp.dockTile.badgeLabel = n > 0 ? "\(n)" : nil
+        let unread = Set(tabs.filter(\.attention).map(\.id))
+        // Published so the sidebar's per-project unread counts redraw.
+        if unread != unreadTabIDs { unreadTabIDs = unread }
+        NSApp.dockTile.badgeLabel = unread.isEmpty ? nil : "\(unread.count)"
     }
 
     func notify(_ tab: TabSession, body: String) {

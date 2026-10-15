@@ -170,6 +170,7 @@ private struct ProjectRow<Store: SidebarStore>: View {
                 .lineLimit(1)
             Spacer(minLength: 4)
             #if os(iOS)
+            unreadCount
             // Touch has no hover: the buttons stay, and holding New Session
             // picks the kind.
             searchButton
@@ -183,6 +184,8 @@ private struct ProjectRow<Store: SidebarStore>: View {
                 IconButton(systemName: "square.and.pencil", help: Text(store.defaultKind(project).newSessionTitle)) {
                     store.newSession(in: project, kind: nil)
                 }
+            } else {
+                unreadCount
             }
             #endif
         }
@@ -198,6 +201,21 @@ private struct ProjectRow<Store: SidebarStore>: View {
         }
         .help(project.path.abbreviatingHome)
         .contextMenu { projectMenu }
+    }
+
+    /// How many of the project's cards are unread (blue dot or needing input),
+    /// shown whether the project is collapsed or not, like Mail's mailboxes.
+    @ViewBuilder
+    private var unreadCount: some View {
+        let n = store.cards(of: project).filter(\.attention).count
+        if n > 0 {
+            Text(verbatim: "\(n)")
+                .font(.ui(12.5))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .padding(.trailing, 6)
+                .help(Text("\(n) unread", bundle: .module))
+        }
     }
 
     private var searchButton: some View {
