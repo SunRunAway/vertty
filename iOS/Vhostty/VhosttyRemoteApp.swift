@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import UserNotifications
 import VhosttyRemote
@@ -35,12 +36,27 @@ struct VhosttyRemoteApp: App {
 final class AppModel: ObservableObject {
     static let shared = AppModel()
     static let addressKey = "RemoteAddress"
+    /// The connection's token while connected; the app connects again with
+    /// it when it starts. Gone once the user disconnects or another device
+    /// takes over, so the app then starts on the address screen.
+    static let tokenKey = "RemoteConnectionToken"
 
     @Published private(set) var store: RemoteStore?
     @Published var address = UserDefaults.standard.string(forKey: addressKey) ?? ""
+    private var statusWatch: AnyCancellable?
+
+    private init() {
+        if let token = UserDefaults.standard.string(forKey: Self.tokenKey) {
+            _ = connect(resuming: token)
+        }
+    }
 
     /// Connects to `address`; false if it isn't one.
     func connect() -> Bool {
+        connect(resuming: nil)
+    }
+
+    private func connect(resuming token: String?) -> Bool {
         let text = address.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = remoteURL(from: text) else { return false }
         UserDefaults.standard.set(text, forKey: Self.addressKey)
@@ -52,7 +68,20 @@ final class AppModel: ObservableObject {
             store?.selectedCardID == id && UIApplication.shared.applicationState == .active
         }
         self.store = store
-        store.client.connect()
+        statusWatch = store.client.$status.sink { [weak client = store.client] status in
+            switch status {
+            case .connected:
+                // Read after the change: the token comes with it.
+                DispatchQueue.main.async {
+                    if let token = client?.connectionToken { UserDefaults.standard.set(token, forKey: Self.tokenKey) }
+                }
+            case .replaced:
+                UserDefaults.standard.removeObject(forKey: Self.tokenKey)
+            default:
+                break
+            }
+        }
+        if let token { store.client.connect(resuming: token) } else { store.client.connect() }
         // Not under the debug driver: the system's alert would sit over the
         // app and take the focus a scripted test gives the terminal.
         if ProcessInfo.processInfo.environment["VHOSTTY_DEBUG"] != "1" { store.askForNotifications() }
@@ -60,6 +89,8 @@ final class AppModel: ObservableObject {
     }
 
     func disconnect() {
+        UserDefaults.standard.removeObject(forKey: Self.tokenKey)
+        statusWatch = nil
         store?.close()
         store = nil
     }

@@ -4,8 +4,8 @@
 Starts a scratch instance of build/Vhostty.app with a project, a card and a
 fake agent (logs its terminal size and input), launches the iOS app in a
 simulator with its debug driver (Documents/debug/input.txt and state.txt),
-and checks connecting, the terminal, sizes, input, new sessions and being
-replaced by another client. Build first:
+and checks connecting, the terminal, sizes, input, new sessions, connecting
+again when started, and being replaced by another client. Build first:
 
 make app && (cd VhosttyKit && swift build --product remote-probe)
 scripts/build-ghostty-ios.sh   # once, and after changing the Ghostty patch
@@ -210,8 +210,10 @@ try:
         simctl("boot", udid)
     simctl("bootstatus", udid, "-b")
     simctl("install", udid, str(APP))
-    subprocess.run(["xcrun", "simctl", "launch", "--terminate-running-process", udid, BUNDLE],
-                   env=dict(os.environ, SIMCTL_CHILD_VHOSTTY_DEBUG="1"), check=True, capture_output=True)
+    def launch():
+        subprocess.run(["xcrun", "simctl", "launch", "--terminate-running-process", udid, BUNDLE],
+                       env=dict(os.environ, SIMCTL_CHILD_VHOSTTY_DEBUG="1"), check=True, capture_output=True)
+    launch()
     container = Path(simctl("get_app_container", udid, BUNDLE, "data").strip())
     debug_dir = container / "Documents" / "debug"
     (debug_dir / "input.txt").unlink(missing_ok=True)
@@ -292,6 +294,12 @@ try:
     wait(lambda: terminal("keyboard") == "false", "the hide-keyboard key didn't hide the keyboard")
     print("PASS new session from the device, with the keyboard up; it hides", flush=True)
 
+    # Quit while connected and started again: it connects on its own.
+    (debug_dir / "state.txt").unlink(missing_ok=True)
+    launch()
+    wait(lambda: status() == "connected" and card_id in phone(), "the app didn't connect again when started")
+    print("PASS started again, the app connects to the same computer", flush=True)
+
     # Another client takes over: the iPhone says so and doesn't reconnect,
     # even after coming back to the foreground.
     probe = subprocess.Popen([str(PROBE), url], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
@@ -304,6 +312,14 @@ try:
     assert status() == "replaced", phone()
     simctl("io", udid, "screenshot", str(root / "replaced.png"))
     print("PASS another client replaces the device; it doesn't reconnect on its own", flush=True)
+
+    # Started again after that: it doesn't take the connection back.
+    (debug_dir / "state.txt").unlink(missing_ok=True)
+    launch()
+    wait(lambda: status() is not None, "the app's debug driver didn't start again")
+    time.sleep(2)
+    assert status() == "none", phone()
+    print("PASS started again after being replaced, it waits on the address screen", flush=True)
     print(f"Screenshots: {root}", flush=True)
 finally:
     if probe:

@@ -42,22 +42,38 @@ public struct IconButton: View {
 public struct IconMenu<Content: View>: View {
     var systemName = "ellipsis"
     var large = false
+    /// What a click does; the menu then opens on a long press instead.
+    var primaryAction: (() -> Void)?
     let content: Content
     @State private var hover = false
 
-    public init(systemName: String = "ellipsis", large: Bool = false, @ViewBuilder content: () -> Content) {
+    public init(systemName: String = "ellipsis", large: Bool = false, primaryAction: (() -> Void)? = nil,
+                @ViewBuilder content: () -> Content) {
         self.systemName = systemName
         self.large = large
+        self.primaryAction = primaryAction
         self.content = content()
     }
 
     public var body: some View {
         // The button menu style keeps the label's frame and background; the
         // borderless one draws only the glyph.
-        Menu {
-            content
-        } label: {
-            IconFace(systemName: systemName, large: large, hover: hover)
+        Group {
+            if let primaryAction {
+                Menu {
+                    content
+                } label: {
+                    IconFace(systemName: systemName, large: large, hover: hover)
+                } primaryAction: {
+                    primaryAction()
+                }
+            } else {
+                Menu {
+                    content
+                } label: {
+                    IconFace(systemName: systemName, large: large, hover: hover)
+                }
+            }
         }
         .menuStyle(.button)
         .buttonStyle(.plain)

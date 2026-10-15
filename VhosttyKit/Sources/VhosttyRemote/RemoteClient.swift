@@ -78,6 +78,18 @@ public final class RemoteClient: ObservableObject {
         start()
     }
 
+    /// Connects again as the connection that was given `token`, as when the
+    /// app starts after being quit while connected: refused, as replaced, if
+    /// another device connected since.
+    public func connect(resuming token: String) {
+        self.token = token
+        status = .connecting
+        start()
+    }
+
+    /// What `connect(resuming:)` needs, while connected.
+    public var connectionToken: String? { status == .connected ? token : nil }
+
     /// Closes the connection for good (the user disconnected).
     public func disconnect() {
         cancelRetry()

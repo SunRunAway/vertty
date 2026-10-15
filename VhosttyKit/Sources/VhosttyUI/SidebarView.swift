@@ -176,15 +176,22 @@ private struct ProjectRow<Store: SidebarStore>: View {
                 .font(.ui(13.5, weight: .medium))
                 .lineLimit(1)
             Spacer(minLength: 4)
+            #if os(iOS)
+            // Touch has no hover: the buttons stay, and holding New Session
+            // picks the kind.
+            searchButton
+            IconMenu(systemName: "square.and.pencil", primaryAction: { store.newSession(in: project, kind: nil) }) {
+                newSessionButtons
+            }
+            #else
             if hover {
                 IconMenu { projectMenu }
-                IconButton(systemName: "magnifyingglass", help: Text("Search Sessions", bundle: .module)) {
-                    if store.query(for: project) != nil { store.closeSearch(project) } else { store.openSearch(project) }
-                }
+                searchButton
                 IconButton(systemName: "square.and.pencil", help: Text(store.defaultKind(project).newSessionTitle)) {
                     store.newSession(in: project, kind: nil)
                 }
             }
+            #endif
         }
         .padding(.leading, 8)
         .padding(.trailing, 4)
@@ -200,11 +207,22 @@ private struct ProjectRow<Store: SidebarStore>: View {
         .contextMenu { projectMenu }
     }
 
+    private var searchButton: some View {
+        IconButton(systemName: "magnifyingglass", help: Text("Search Sessions", bundle: .module)) {
+            if store.query(for: project) != nil { store.closeSearch(project) } else { store.openSearch(project) }
+        }
+    }
+
     @ViewBuilder
-    private var projectMenu: some View {
+    private var newSessionButtons: some View {
         ForEach(store.kindsDefaultFirst(project)) { kind in
             Button(kind.newSessionTitle) { store.newSession(in: project, kind: kind) }
         }
+    }
+
+    @ViewBuilder
+    private var projectMenu: some View {
+        newSessionButtons
         Button { store.openSearch(project) } label: { Text("Search Sessions", bundle: .module) }
         if store.features.contains(.schedules) {
             Button { store.newScheduledTask(in: project) } label: { Text("New Scheduled Task…", bundle: .module) }
