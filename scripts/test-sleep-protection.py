@@ -166,6 +166,10 @@ project = case / 'project'; project.mkdir()
 (home / '.zshenv').write_text(f'export PATH="{bin_dir}:/usr/bin:/bin:/usr/sbin:/sbin"\nunsetopt GLOBAL_RCS\n')
 agent = bin_dir / 'codex'
 agent.write_text('''#!/bin/sh
+# Like Codex: it spins while it boots, which isn't a turn; the card is ready
+# (idle) once that first spin stops.
+printf '\\033]0;⠋ Sleep fixture\\007'
+sleep 0.5
 printf '\\033]0;Sleep fixture\\007'
 while IFS= read -r line; do
     case "$line" in
@@ -191,6 +195,7 @@ try:
     drive('new codex')
     wait(lambda: 'Sleep fixture' in read(case / 'state.txt') and '--- tab ' in read(case / 'state.txt'), 'fixture terminal missing')
     tab = re.search(r'--- tab ([0-9A-Fa-f-]+)', read(case / 'state.txt')).group(1)
+    wait(lambda: 'status=idle' in read(case / 'state.txt'), 'fixture Codex did not finish booting')
     drive(f'to {tab}\ntext busy\nenter')
     wait(lambda: read(case / 'value') == '1', 'working terminal did not acquire sleep protection')
     drive(f'to {tab}\ntext idle\nenter')
