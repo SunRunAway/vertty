@@ -55,10 +55,6 @@
             case "new":
                 guard let store, let project = store.currentProject else { return }
                 store.newSession(in: project, kind: nil)
-            case "rotate":
-                let orientations: UIInterfaceOrientationMask = argument == "landscape" ? .landscapeRight : .portrait
-                let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene
-                scene?.requestGeometryUpdate(.iOS(interfaceOrientations: orientations))
             case "focus":
                 terminal?.debugFocus()
             case "hidekeyboard":
