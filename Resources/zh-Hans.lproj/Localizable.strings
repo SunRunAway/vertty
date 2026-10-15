@@ -225,3 +225,7 @@
 
 "Ended" = "已结束";
 "Edit the schedule before resuming." = "请先修改执行计划再恢复。";
+"Discard unsaved changes?" = "放弃未保存的改动？";
+"The changes in the task panel haven’t been saved yet." = "侧栏里的改动还没有保存。";
+"Discard Changes" = "放弃改动";
+"Keep Editing" = "继续编辑";

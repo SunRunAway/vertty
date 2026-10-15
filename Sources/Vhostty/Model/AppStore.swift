@@ -51,6 +51,8 @@ final class AppStore: ObservableObject {
     @Published var showingSchedules = false
     /// The task panel on the right (a task, or a new one).
     @Published var schedulePanel: SchedulePanel?
+    /// The main window, for sheets.
+    weak var window: NSWindow?
     var scheduleTimer: Timer?
     /// Since when a scheduled Claude turn has looked idle without a Stop hook.
     var scheduleIdleSince: [UUID: Date] = [:]

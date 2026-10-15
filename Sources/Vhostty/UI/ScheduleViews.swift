@@ -191,7 +191,7 @@ private struct ScheduleTaskRow: View {
         .contentShape(RoundedRectangle(cornerRadius: 10))
         .opacity(task.isDeleted ? 0.6 : 1)
         .onHover { hover = $0 }
-        .onTapGesture { store.showScheduledTask(task.id) }
+        .onTapGesture { store.openScheduledTask(task.id) }
         .contextMenu { if !task.isDeleted { ScheduleActions(store: store, schedules: schedules, task: task) } }
     }
 }
@@ -314,7 +314,7 @@ struct SchedulePanelView: View {
                 }
                 IconMenu { ScheduleActions(store: store, schedules: schedules, task: task) }
             }
-            IconButton(systemName: "xmark", help: "Close") { store.schedulePanel = nil }
+            IconButton(systemName: "xmark", help: "Close") { store.closeSchedulePanel() }
                 .padding(.trailing, 8)
         }
         .frame(height: Chrome.titleStripHeight)
@@ -839,8 +839,64 @@ extension AppStore {
         if page { showSchedules() }
     }
 
+    /// The user opens a task (its row, a link): its own panel stays as it
+    /// is, another one may be left only after asking about its edits.
+    func openScheduledTask(_ id: UUID, page: Bool = true) {
+        if page { showSchedules() }
+        guard schedulePanel?.taskID != id else { return }
+        leaveSchedulePanel { [self] in showScheduledTask(id, page: false) }
+    }
+
+    /// A task link: opens the task's panel beside what's on screen, or
+    /// closes it when it's already open.
+    func toggleScheduledTask(_ id: UUID) {
+        if schedulePanel?.taskID == id {
+            closeSchedulePanel()
+        } else {
+            openScheduledTask(id, page: false)
+        }
+    }
+
+    /// Closes the panel, after asking if that would lose edits.
+    func closeSchedulePanel() {
+        leaveSchedulePanel { [self] in schedulePanel = nil }
+    }
+
+    /// Typing that closing the panel would lose: changes to a task, or a new
+    /// task's name or prompt.
+    private var schedulePanelHasEdits: Bool {
+        guard let panel = schedulePanel else { return false }
+        guard panel.isNew else { return schedulePanelDirty }
+        return !(panel.draft.name + panel.draft.prompt).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Closes or replaces the panel by running `leave`; if that would lose
+    /// edits, only once the user chooses to discard them.
+    private func leaveSchedulePanel(_ leave: @escaping () -> Void) {
+        guard schedulePanelHasEdits else { return leave() }
+        guard window?.attachedSheet == nil else { return }
+        let alert = NSAlert()
+        alert.messageText = String(localized: "Discard unsaved changes?")
+        alert.informativeText = String(localized: "The changes in the task panel haven’t been saved yet.")
+        alert.addButton(withTitle: String(localized: "Keep Editing"))
+        alert.addButton(withTitle: String(localized: "Discard Changes")).hasDestructiveAction = true
+        let handle = { (answer: NSApplication.ModalResponse) in
+            if answer == .alertSecondButtonReturn { leave() }
+        }
+        // A sheet on the window, like the first-launch question about sleep.
+        if let window, window.isVisible {
+            alert.beginSheetModal(for: window, completionHandler: handle)
+        } else {
+            handle(alert.runModal())
+        }
+    }
+
     func newScheduledTask(in project: Project? = nil) {
         guard let project = project ?? currentProject else { return }
+        leaveSchedulePanel { [self] in openNewScheduledTask(in: project) }
+    }
+
+    private func openNewScheduledTask(in project: Project) {
         var timing = ScheduleTiming()
         let c = timing.calendar.dateComponents([.weekday], from: Date().addingTimeInterval(86400))
         timing.weekdays = [c.weekday ?? 7]

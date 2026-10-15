@@ -64,6 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         buildMenu()
         createWindow()
         sleepProtection.window = window
+        store.window = window
         store.activateSelection()
         if let url = pendingScheduleURL {
             pendingScheduleURL = nil
@@ -138,8 +139,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         guard let id = ScheduleTask.id(from: url) else { return }
         guard window != nil else { pendingScheduleURL = url; return }
         guard store.schedules.task(id) != nil else { return }
-        // The panel opens beside whatever is on screen; it doesn't switch to the task page.
-        store.showScheduledTask(id, page: false)
+        // The panel opens beside whatever is on screen, without switching to
+        // the task page; the same link again closes it.
+        store.toggleScheduledTask(id)
         if ProcessInfo.processInfo.environment["VHOSTTY_DEBUG_SNAPSHOT"] == nil {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)

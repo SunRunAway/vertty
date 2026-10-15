@@ -2,8 +2,9 @@
 """Click task links in a scratch terminal: Command-click a plain-text URL,
 and click an OSC 8 link, with or without Command, while the app captures the
 mouse, as Claude Code's full-screen TUI does. The task panel opens beside the
-session, which stays on screen. Other links under mouse capture stay the
-app's: it gets the click."""
+session, which stays on screen, and the same link again closes it, asking
+first if the panel has unsaved changes. Other links under mouse capture stay
+the app's: it gets the click."""
 import json
 import os
 from pathlib import Path
@@ -24,6 +25,40 @@ CASES = {
     'Command-click on an https link under mouse capture': (CAPTURE, WEB_LINK, 'cmdclick', False),
     'Click on an https link under mouse capture': (CAPTURE, WEB_LINK, 'click', False),
 }
+
+
+def toggle(tid, task, wait, state, snap):
+    def drive(*lines):
+        (snap / 'input.txt').write_text(''.join(line + '\n' for line in lines))
+        wait(lambda: not (snap / 'input.txt').exists())
+
+    def button(*titles):
+        # The sheet's buttons, in the order alertbutton counts them.
+        wait(lambda: any(t in (snap / 'alert.txt').read_text() for t in titles) if (snap / 'alert.txt').exists() else False)
+        shown = (snap / 'alert.txt').read_text().splitlines()
+        drive(f'alertbutton {next(i for i, t in enumerate(shown) if t in titles)}')
+
+    drive(f'to {tid}', 'cmdclick 420 50')
+    wait(lambda: 'panel=-' in state())
+    print('PASS The same link again closes the panel', flush=True)
+
+    drive(f'to {tid}', 'cmdclick 420 50')
+    wait(lambda: f'panel={task}' in state())
+    drive('panelname Edited')
+    wait(lambda: 'dirty=true' in state())
+    drive(f'to {tid}', 'cmdclick 420 50')
+    wait(lambda: 'sheet=open' in state())
+    button('Keep Editing', '继续编辑')
+    wait(lambda: 'sheet=open' not in state())
+    time.sleep(2)
+    assert f'panel={task} dirty=true draft=Edited' in state(), state()
+    print('PASS With unsaved changes it asks first, and Keep Editing keeps them', flush=True)
+
+    drive(f'to {tid}', 'cmdclick 420 50')
+    wait(lambda: 'sheet=open' in state())
+    button('Discard Changes', '放弃改动')
+    wait(lambda: 'panel=-' in state())
+    print('PASS Discard Changes closes the panel', flush=True)
 
 
 def run(name, setup, text, click, ours):
@@ -75,6 +110,8 @@ def run(name, setup, text, click, ours):
             time.sleep(.5)
             assert '[<0;' not in state(), 'the app got the click: ' + state()
             print(f'PASS {name} opens its task panel beside the session', flush=True)
+            if click == 'cmdclick' and not setup:
+                toggle(tid, task, wait, state, snap)
         else:
             wait(lambda: '[<0;' in state())
             assert 'panel=-' in state(), state()

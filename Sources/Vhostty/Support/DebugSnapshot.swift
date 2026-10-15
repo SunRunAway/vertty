@@ -223,6 +223,10 @@ final class DebugSnapshot {
                 store.schedulePanel = nil
                 continue
             }
+            if line.hasPrefix("panelname ") {
+                store.schedulePanel?.draft.name = String(line.dropFirst(10))
+                continue
+            }
             if line == "panelsave" {
                 if let problem = store.saveSchedulePanel() { NSLog("Vhostty debug: panel not saved: %@", problem) }
                 continue
