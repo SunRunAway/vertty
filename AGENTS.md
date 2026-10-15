@@ -2,8 +2,13 @@
 
 ## Workflow
 
-- When a change is done and verified, commit it and push to `origin/master`
-  without asking first.
+- When working in the main checkout, once a change is done and verified,
+  commit it and push to `origin/master` without asking first.
+- When the user asks you to work in a worktree, someone else is working in the
+  main checkout. Commit in the worktree and stop there: don't push, merge into
+  the main checkout, run `make install`, or remove the worktree until the user
+  says whether it goes up as a PR or is merged locally. After it's merged,
+  remove the worktree and its branch and fast-forward the main checkout.
 - For changes that only touch documentation (including `AGENTS.md`, README
   files, and `docs/`) or test scripts (`scripts/test-*`), verify the text and
   links, then commit and push without building, running tests, starting test
