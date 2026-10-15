@@ -106,14 +106,6 @@ private struct ProjectSection<Store: SidebarStore>: View {
 
                 if !closed.isEmpty {
                     VStack(alignment: .leading, spacing: 0) {
-                        if !open.isEmpty {
-                            Text("Past Sessions", bundle: .module)
-                                .font(.ui(11, weight: .medium))
-                                .foregroundStyle(.tertiary)
-                                .padding(.leading, 16)
-                                .padding(.top, 4)
-                                .padding(.bottom, 2)
-                        }
                         ForEach(closed.prefix(visibleCount)) { summary in
                             HistoryRow(store: store, project: project, summary: summary,
                                        snippet: prompt(summary.title, summary.id))
@@ -134,6 +126,7 @@ private struct ProjectSection<Store: SidebarStore>: View {
                             .buttonStyle(.plain)
                         }
                     }
+                    .padding(.top, open.isEmpty ? 0 : 4)
                 }
                 if searching && open.isEmpty && closed.isEmpty {
                     Text("No Matching Sessions", bundle: .module)
