@@ -26,11 +26,12 @@ Vhostty 是一个支持 Claude Code 和 Codex 的 macOS 原生终端（基于 li
 适用于 Apple Silicon 的 Mac，macOS 14 及以上：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/SunRunAway/vhostty/master/scripts/install.sh | bash
+brew tap SunRunAway/tap
+brew install --cask SunRunAway/tap/vhostty
 ```
 
-它会从 [Releases](https://github.com/SunRunAway/vhostty/releases) 下载最新版本装到 `/Applications`。以后再运行一次就是更新。
+它会通过我们的 [Homebrew tap](https://github.com/SunRunAway/homebrew-tap) 将 Vhostty 安装到 `/Applications`。更新请运行 `brew update && brew upgrade --cask vhostty`。
 
-App 没有经过 Apple 公证。如果你是用浏览器从 Releases 页面下载的 zip，macOS 会拒绝打开，需要到「系统设置 → 隐私与安全性」里点「仍要打开」，或者执行 `xattr -dr com.apple.quarantine /Applications/Vhostty.app`。
+App 没有经过 Apple 公证。Cask 会在安装和升级后自动清除其 quarantine 标记，首次启动无需手动放行；这会绕过 Vhostty 由隔离标记触发的 Gatekeeper 检查。如果你是用浏览器从 [Releases](https://github.com/SunRunAway/vhostty/releases) 页面下载的 zip，需要到「系统设置 → 隐私与安全性」里点「仍要打开」，或者执行 `xattr -dr com.apple.quarantine /Applications/Vhostty.app`。
 
 从源码构建与开发调试见[开发文档](DEVELOPER.md)。

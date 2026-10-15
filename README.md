@@ -28,11 +28,12 @@ The interface follows your system language (English or Simplified Chinese).
 Apple Silicon Macs, macOS 14 or later:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/SunRunAway/vhostty/master/scripts/install.sh | bash
+brew tap SunRunAway/tap
+brew install --cask SunRunAway/tap/vhostty
 ```
 
-This downloads the latest build from [Releases](https://github.com/SunRunAway/vhostty/releases) into `/Applications`. Run it again to update.
+This installs Vhostty into `/Applications` using our [Homebrew tap](https://github.com/SunRunAway/homebrew-tap). Update with `brew update && brew upgrade --cask vhostty`.
 
-The app isn't notarized by Apple. If you download the zip from the Releases page in a browser instead, macOS will refuse to open it. Allow it under System Settings → Privacy & Security → "Open Anyway", or run `xattr -dr com.apple.quarantine /Applications/Vhostty.app`.
+The app isn't notarized by Apple. The cask automatically removes its quarantine attribute after installation and upgrades, so you don't need to manually allow it on first launch. This bypasses the quarantine-triggered Gatekeeper check for Vhostty. If you download the zip from [Releases](https://github.com/SunRunAway/vhostty/releases) in a browser instead, allow it under System Settings → Privacy & Security → "Open Anyway", or run `xattr -dr com.apple.quarantine /Applications/Vhostty.app`.
 
 For source builds and debugging, see the [developer documentation](DEVELOPER.md) (in Chinese).
