@@ -1,12 +1,13 @@
 import AppKit
 import CoreServices
 
-/// Two states: authorized (on) or not. Only an explicit refusal is persisted;
-/// authorization is checked on every launch.
+/// A menu toggle. Off by the user's choice (Don't Allow, or turned off from the menu)
+/// is persisted; authorization is checked on every launch.
 final class SleepProtection {
     weak var menuItem: NSMenuItem? { didSet { updateMenu() } }
     weak var window: NSWindow?
     private(set) var authorized = false { didSet { updateMenu() } }
+    private(set) var on = false { didSet { updateMenu() } }
     private let store: AppStore
     private var timer: Timer?
     /// The running lease; closing `input` ends it and restores sleep.
@@ -16,6 +17,7 @@ final class SleepProtection {
     private var active = false
     private var checking = false
     private let queue = DispatchQueue(label: "vhostty.sleep")
+    /// The user turned it off (Don't Allow, or from the menu): don't ask at launch.
     private var declined: URL { AppPaths.support.appendingPathComponent("sleep-declined") }
     private var isTest: Bool { ProcessInfo.processInfo.environment["VHOSTTY_DEBUG_SNAPSHOT"] != nil }
     private var fixture: URL? {
@@ -28,11 +30,24 @@ final class SleepProtection {
     func start() {
         // Ordinary debug instances must never touch real power settings or authorization.
         guard !isTest || fixture != nil else { return }
+        authorized = hasPermission()
         guard !FileManager.default.fileExists(atPath: declined.path) else { return }
-        checkPermission()
+        if authorized { enable() } else { configure() }
     }
-    func configure() {
-        guard !checking, !authorized, !isTest || fixture != nil else { return }
+    /// The menu item: turn off, turn on, or ask for authorization first.
+    func toggle() {
+        guard !checking, !isTest || fixture != nil else { return }
+        if on {
+            try? Data().write(to: declined, options: .atomic)
+            stop()
+        } else if authorized {
+            try? FileManager.default.removeItem(at: declined)
+            enable()
+        } else {
+            configure()
+        }
+    }
+    private func configure() {
         let alert = NSAlert()
         alert.messageText = String(localized: "Keep tasks running with the lid closed?")
         alert.informativeText = String(localized: "Your Mac stays awake with the lid closed while tasks run, then returns to normal sleep when they finish. Administrator authorization allows this Mac’s administrator accounts to run only these two commands without a password:\n\n/usr/bin/pmset -a disablesleep 1 — prevent sleep\n/usr/bin/pmset -a disablesleep 0 — restore sleep")
@@ -54,16 +69,6 @@ final class SleepProtection {
             alert.beginSheetModal(for: window, completionHandler: handle)
         } else {
             handle(alert.runModal())
-        }
-    }
-    private func checkPermission() {
-        checking = true
-        queue.async {
-            let allowed = self.hasPermission()
-            DispatchQueue.main.async {
-                self.checking = false
-                if allowed { self.enable() } else { self.configure() }
-            }
         }
     }
     private static var ruleURL: URL {
@@ -113,16 +118,16 @@ final class SleepProtection {
         }
     }
     private static func quote(_ s: String) -> String { "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'" }
-    /// Checked and greyed out when authorized (AppDelegate disables it); otherwise it asks.
     private func updateMenu() {
         menuItem?.title = authorized
             ? String(localized: "Closed-Lid Sleep Protection While Tasks Run")
             : String(localized: "Closed-Lid Sleep Protection While Tasks Run: Not Authorized…")
-        menuItem?.state = authorized ? .on : .off
+        menuItem?.state = on ? .on : .off
     }
     /// Authorization is in place: start following task activity.
     private func enable() {
         authorized = true
+        on = true
         guard timer == nil else { return }
         requestAmphetamineConsent()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.tick() }
@@ -131,12 +136,7 @@ final class SleepProtection {
     }
     /// The helper failed. Show the actual state: unauthorized if the rule is gone.
     private func recheck() {
-        queue.async {
-            let allowed = self.hasPermission()
-            DispatchQueue.main.async {
-                if !allowed { self.stop(); self.authorized = false }
-            }
-        }
+        if !hasPermission() { stop(); authorized = false }
     }
     /// The only place that may show the automation consent prompt, so it comes at launch
     /// (or when authorizing) and never from a helper started later.
@@ -188,6 +188,7 @@ final class SleepProtection {
         lease = nil // The helper sees EOF and restores sleep on its own.
     }
     func stop() {
+        on = false
         timer?.invalidate(); timer = nil
         active = false
         endLease()

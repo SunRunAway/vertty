@@ -45,41 +45,61 @@ let store = AppStore()
 let controller = SleepProtection(store: store)
 let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
 controller.menuItem = item
-let on = String(localized: "Closed-Lid Sleep Protection While Tasks Run")
-let off = String(localized: "Closed-Lid Sleep Protection While Tasks Run: Not Authorized…")
+let named = String(localized: "Closed-Lid Sleep Protection While Tasks Run")
+let unauthorized = String(localized: "Closed-Lid Sleep Protection While Tasks Run: Not Authorized…")
+let declined = dir.appendingPathComponent("sleep-declined")
 func settle(_ seconds: TimeInterval = 1) { RunLoop.current.run(until: Date().addingTimeInterval(seconds)) }
 func value() -> String? { try? String(contentsOf: dir.appendingPathComponent("value"), encoding: .utf8) }
-precondition(item.title == off && item.state == .off)
+precondition(item.title == unauthorized && item.state == .off)
 write("value", "0")
 for outcome in ["fail", "cancel"] {
     write("authorization-result", outcome)
     controller.authorize()
     settle()
-    precondition(item.title == off && item.state == .off && !controller.authorized, outcome)
-    precondition(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("sleep-declined").path))
+    precondition(item.title == unauthorized && item.state == .off && !controller.authorized, outcome)
+    precondition(!FileManager.default.fileExists(atPath: declined.path))
 }
 print("PASS failed or cancelled authorization stays unauthorized, writes no refusal")
 write("authorization-result", "success")
 controller.authorize()
-wait("authorization did not check the item") { item.title == on && item.state == .on && controller.authorized }
-print("PASS authorized item is checked")
+wait("authorization did not turn it on") { item.title == named && item.state == .on && controller.on }
+print("PASS authorization turns it on and checks the item")
 store.workingAgentCount = 1
 wait("busy period did not apply protection") { value() == "1" }
 store.workingAgentCount = 0
 wait("idle did not restore sleep") { value() == "0" }
 print("PASS busy period applies and restores")
+// Turned off from the menu: no protection, remembered, no prompt at the next launch.
+controller.toggle()
+precondition(item.title == named && item.state == .off && !controller.on && FileManager.default.fileExists(atPath: declined.path))
+store.workingAgentCount = 1
+settle(2)
+precondition(value() == "0", "turned off but still protecting")
+let relaunched = SleepProtection(store: store)
+let relaunchedItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+relaunched.menuItem = relaunchedItem
+relaunched.start() // Would block on a modal alert if it asked.
+precondition(relaunchedItem.title == named && relaunchedItem.state == .off && !relaunched.on)
+print("PASS turning off stops protection and stays off after relaunch without asking")
+// Turned back on while authorized: no prompt.
+controller.toggle()
+precondition(item.state == .on && controller.on && !FileManager.default.fileExists(atPath: declined.path))
+wait("turning on during a task did not apply protection") { value() == "1" }
+store.workingAgentCount = 0
+wait("idle did not restore sleep") { value() == "0" }
+print("PASS turning on with authorization applies protection without asking")
 write("fail")
 store.workingAgentCount = 1
 settle(2)
-precondition(item.title == on && controller.authorized, "runtime error with the rule in place changed the item")
-print("PASS runtime error with authorization intact keeps the item checked")
+precondition(item.state == .on && controller.authorized, "runtime error with the rule in place changed the item")
+print("PASS runtime error with authorization intact keeps it on")
 try! FileManager.default.removeItem(at: dir.appendingPathComponent("fail"))
 store.workingAgentCount = 0
 settle()
 try! FileManager.default.removeItem(at: dir.appendingPathComponent("authorized"))
 write("fail")
 store.workingAgentCount = 1
-wait("lost authorization not shown") { item.title == off && item.state == .off && !controller.authorized }
+wait("lost authorization not shown") { item.title == unauthorized && item.state == .off && !controller.authorized }
 print("PASS runtime error after authorization is gone shows unauthorized")
 controller.stop()
 ''')

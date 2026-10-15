@@ -74,7 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         DispatchQueue.main.async { self.sleepProtection.start() }
     }
 
-    @objc private func configureSleepProtection() { sleepProtection.configure() }
+    @objc private func toggleSleepProtection() { sleepProtection.toggle() }
     @objc private func toggleRemoteConnections() { remoteServer.setEnabled(!remoteServer.enabled) }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
@@ -87,8 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
             // Remote windows have no bottom shell.
             return store.selectedTab != nil && RemoteWindowController.key == nil
         }
-        // Once authorized, the sleep protection item is only a checked status line.
-        return menuItem.action == #selector(configureSleepProtection) ? !sleepProtection.authorized : true
+        return true
     }
 
     private func createWindow() {
@@ -157,7 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: String(localized: "About Vhostty"), action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
-        let sleepItem = item("Closed-Lid Sleep Protection While Tasks Run: Not Authorized…", #selector(configureSleepProtection), "")
+        let sleepItem = item("Closed-Lid Sleep Protection While Tasks Run: Not Authorized…", #selector(toggleSleepProtection), "")
         sleepProtection.menuItem = sleepItem
         appMenu.addItem(sleepItem)
         appMenu.addItem(item("Allow Remote Connections", #selector(toggleRemoteConnections), ""))

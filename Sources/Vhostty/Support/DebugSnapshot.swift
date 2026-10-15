@@ -284,7 +284,7 @@ final class DebugSnapshot {
             try? text.write(to: directory.appendingPathComponent("view-menu.txt"), atomically: true, encoding: .utf8)
         }
         if let menu = NSApp.mainMenu?.items.first?.submenu,
-           let item = menu.items.first(where: { $0.action == NSSelectorFromString("configureSleepProtection") }) {
+           let item = menu.items.first(where: { $0.action == NSSelectorFromString("toggleSleepProtection") }) {
             try? item.title.write(to: directory.appendingPathComponent("sleep-menu.txt"), atomically: true, encoding: .utf8)
         }
         // "Allow Remote Connections" and the visible lines under it.

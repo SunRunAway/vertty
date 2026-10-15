@@ -161,7 +161,7 @@ defaults write dev.vhostty.Vhostty AppleLanguages '("en")'   # 恢复：defaults
 
 ### 防合盖睡眠
 
-`SleepProtection` 只在状态目录保存 `sleep-declined`（明确选「不允许」）。没有启用标记；每次启动检查 `/private/etc/sudoers.d/vhostty_sleep` 存在且内容与 Vhostty 的规则一致，否则弹出询问。不会借用 Amphetamine 的授权文件跳过安装。规则文件为 0444，允许应用只读校验，不含秘密。取消管理员授权或授权失败均不写拒绝标记。菜单项只有两种状态：已授权时显示打勾的「任务运行时防合盖睡眠」，不可点击；未授权时显示「任务运行时防合盖睡眠：未授权…」，点击弹出询问。出错不另设状态，不弹错误框、不发通知。管理员授权把应用内的静态文件 `Resources/vhostty-sleep.sudoers` 复制到固定路径，允许管理员组执行 `/usr/bin/pmset -a disablesleep 1/0` 的规则，经 visudo 校验后原子安装，不授权其他命令。
+`SleepProtection` 只在状态目录保存 `sleep-declined`（用户关闭：选了「不允许」或从菜单关掉）。没有启用标记；每次启动检查 `/private/etc/sudoers.d/vhostty_sleep` 存在且内容与 Vhostty 的规则一致，否则弹出询问。不会借用 Amphetamine 的授权文件跳过安装。规则文件为 0444，允许应用只读校验，不含秘密。取消管理员授权或授权失败均不写拒绝标记。菜单项是开关：开启时显示打勾的「任务运行时防合盖睡眠」，点击关闭并写入 `sleep-declined`；已授权但关闭时不打勾，点击直接开启；未授权时显示「任务运行时防合盖睡眠：未授权…」，点击弹出询问。出错不另设状态，不弹错误框、不发通知。管理员授权把应用内的静态文件 `Resources/vhostty-sleep.sudoers` 复制到固定路径，允许管理员组执行 `/usr/bin/pmset -a disablesleep 1/0` 的规则，经 visudo 校验后原子安装，不授权其他命令。
 
 `vhostty-sleep` 是普通用户进程，按「租约」工作，只在有任务时存在。App 每秒判断一次：有卡片在工作中且进程未退出，就算有任务。从空闲变为有任务时启动守护程序，它设 `disablesleep 1` 后在 stdout 输出 `active`，然后阻塞读 stdin；全部空闲时 App 立即关闭管道，守护程序读到 EOF 恢复后退出。App 崩溃或强制退出时管道同样关闭；管道写端设为 close-on-exec，终端里的 shell 不会继承它。App 卡死时不释放。空闲期间不执行 pmset，外部设的 1 不会被改。设 1 不受 Amphetamine 影响；恢复为 0 前查询运行中的 Amphetamine，只有 `session is active` 和 `closed display mode enabled` 都为 true 才跳过，查询被拒绝、超时或失败时也恢复为 0。租约期间守护程序每 5 秒检查一次，被改回 0（如 Amphetamine 启动、退出或结束会话时）就重新设 1，结果输出 `active` 或 `error`。守护程序非零退出或输出 `error` 时，App 重新校验授权，规则失效就显示为未授权。Amphetamine 自动化授权由 App 在启动（或授权成功）时请求，守护程序只查询、不弹授权框。此机制只覆盖 Vhostty 管理的卡片和任务，不跟踪已脱离卡片的独立后台作业。
 
