@@ -121,7 +121,7 @@ struct ConnectView: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("ws://192.168.1.5:58563", text: $app.address)
+                    TextField("192.168.1.5:58563", text: $app.address)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -141,7 +141,7 @@ struct ConnectView: View {
             .alert("That isn't an address Vhostty can connect to.", isPresented: $invalid) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text("Enter a host and port, such as 192.168.1.5:58563 or ws://mac.local:58563.")
+                Text("Enter a host and port, such as 192.168.1.5:58563 or mac.local:58563.")
             }
         }
     }

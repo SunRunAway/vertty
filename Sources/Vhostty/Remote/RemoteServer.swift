@@ -213,11 +213,12 @@ final class RemoteServer: ObservableObject {
 
     // MARK: - Addresses
 
-    /// Addresses a client on another device may use (ws://…), best first.
+    /// Addresses a client on another device may use, best first: host and
+    /// port only, as the user types them (the client adds ws://).
     func addresses(port: UInt16) -> [String] {
         var result: [String] = []
-        if let name = SCLocalHostName.current { result.append("ws://\(name).local:\(port)") }
-        for ip in Self.interfaceAddresses() { result.append("ws://\(ip):\(port)") }
+        if let name = SCLocalHostName.current { result.append("\(name).local:\(port)") }
+        for ip in Self.interfaceAddresses() { result.append("\(ip):\(port)") }
         return result
     }
 

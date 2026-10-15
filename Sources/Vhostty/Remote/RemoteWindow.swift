@@ -19,7 +19,7 @@ final class RemoteWindowController: NSObject, NSWindowDelegate {
         alert.messageText = String(localized: "Connect to Remote Computer")
         alert.informativeText = String(localized: "The address shown in Remote Connection Info on the other computer. The connection's security is up to you (for example a VPN).")
         let field = NSTextField(string: UserDefaults.standard.string(forKey: lastURLKey) ?? "")
-        field.placeholderString = "ws://192.168.1.5:58563"
+        field.placeholderString = "192.168.1.5:58563"
         field.frame = NSRect(x: 0, y: 0, width: 300, height: 24)
         alert.accessoryView = field
         alert.addButton(withTitle: String(localized: "Connect"))
@@ -29,7 +29,7 @@ final class RemoteWindowController: NSObject, NSWindowDelegate {
         guard let url = remoteURL(from: field.stringValue) else {
             let bad = NSAlert()
             bad.messageText = String(localized: "That isn't an address Vhostty can connect to.")
-            bad.informativeText = String(localized: "Enter a host and port, such as 192.168.1.5:58563 or ws://mac.local:58563.")
+            bad.informativeText = String(localized: "Enter a host and port, such as 192.168.1.5:58563 or mac.local:58563.")
             bad.runModal()
             return
         }

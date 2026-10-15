@@ -210,7 +210,7 @@
 "The address shown in Remote Connection Info on the other computer. The connection's security is up to you (for example a VPN)." = "填写另一台电脑“远程连接信息”中显示的地址。连接的安全由你自己负责（例如使用 VPN）。";
 "Connect" = "连接";
 "That isn't an address Vhostty can connect to." = "Vhostty 无法连接这个地址。";
-"Enter a host and port, such as 192.168.1.5:58563 or ws://mac.local:58563." = "请输入主机和端口，例如 192.168.1.5:58563 或 ws://mac.local:58563。";
+"Enter a host and port, such as 192.168.1.5:58563 or mac.local:58563." = "请输入主机和端口，例如 192.168.1.5:58563 或 mac.local:58563。";
 "Remote" = "远程";
 "Not connected" = "未连接";
 "Port" = "端口";
