@@ -130,7 +130,7 @@ struct ConnectView: View {
                 } header: {
                     Text("Computer")
                 } footer: {
-                    Text("The address shown in Remote Connection Info in Vhostty on your computer. The connection's security is up to you (for example a VPN).")
+                    Text("Your computer's address, with the port shown under Allow Remote Connections in its Vhostty menu. The connection's security is up to you (for example a VPN).")
                 }
                 Section {
                     Button("Connect", action: connect)

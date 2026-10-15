@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import UserNotifications
 import GhosttyC
+import VhosttyRemote
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, GhosttyRuntimeDelegate,
     UNUserNotificationCenterDelegate, NSMenuDelegate, NSMenuItemValidation {
@@ -9,10 +10,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     var window: NSWindow!
     private lazy var sleepProtection = SleepProtection(store: store)
     private lazy var remoteServer = RemoteServer(store: store)
-    private lazy var remoteInfo = RemoteInfoWindow(server: remoteServer)
     private var hookServer: HookServer?
     private var debugSnapshot: DebugSnapshot?
     private var fileMenu: NSMenu?
+    private var appMenu: NSMenu?
+    /// See updateRemoteInfoItems.
+    private let remoteInfoItems: [NSMenuItem] = (0..<2).map { _ in
+        let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        item.indentationLevel = 1
+        item.isEnabled = false
+        item.isHidden = true
+        return item
+    }
     private var newSessionItems: [NSMenuItem] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -67,7 +76,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
 
     @objc private func configureSleepProtection() { sleepProtection.configure() }
     @objc private func toggleRemoteConnections() { remoteServer.setEnabled(!remoteServer.enabled) }
-    @objc private func showRemoteInfo() { remoteInfo.show() }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         if menuItem.action == #selector(toggleSidebar) {
@@ -153,7 +161,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         sleepProtection.menuItem = sleepItem
         appMenu.addItem(sleepItem)
         appMenu.addItem(item("Allow Remote Connections", #selector(toggleRemoteConnections), ""))
-        appMenu.addItem(item("Remote Connection Info…", #selector(showRemoteInfo), ""))
+        for info in remoteInfoItems { appMenu.addItem(info) }
+        appMenu.delegate = self
+        self.appMenu = appMenu
         appMenu.addItem(item("Open Ghostty Config", #selector(openGhosttyConfig), ""))
         appMenu.addItem(item("Reload Config", #selector(reloadConfig), "r", [.command, .shift]))
         appMenu.addItem(.separator())
@@ -260,8 +270,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     }
     @objc private func connectRemote() { RemoteWindowController.connectViaPrompt() }
 
+    /// Gray lines under "Allow Remote Connections" while it's on, like the
+    /// details under the Wi-Fi network in the menu bar: the port and who is
+    /// connected, or why the service couldn't start.
+    private func updateRemoteInfoItems() {
+        let (first, second) = (remoteInfoItems[0], remoteInfoItems[1])
+        switch remoteServer.status {
+        case .off:
+            first.isHidden = true
+            second.isHidden = true
+        case .failed(let reason):
+            first.title = String(localized: "Failed to start: \(reason)")
+            first.isHidden = false
+            second.isHidden = true
+        case .starting(let port), .listening(let port):
+            first.title = String(localized: "Port: \(String(port))")
+            let client = remoteServer.client.map { c in
+                let name = c.deviceName.isEmpty ? Self.deviceKind(c.platform) : c.deviceName
+                return String(localized: "\(name), connected since \(c.since.formatted(date: .omitted, time: .shortened))")
+            } ?? String(localized: "Not connected")
+            second.title = String(localized: "Remote client: \(client)")
+            first.isHidden = false
+            second.isHidden = false
+        }
+    }
+
+    private static func deviceKind(_ platform: Remote.ClientPlatform) -> String {
+        switch platform {
+        case .iphone: "iPhone"
+        case .ipad: "iPad"
+        default: "Mac"
+        }
+    }
+
     /// The File menu's first "New … Session" (⌘T) is the current project's default kind.
     func menuNeedsUpdate(_ menu: NSMenu) {
+        if menu === appMenu { return updateRemoteInfoItems() }
         guard menu === fileMenu else { return }
         let kinds = store.currentProject.map(store.kindsDefaultFirst) ?? AgentKind.allCases
         for (item, kind) in zip(newSessionItems, kinds) {

@@ -17,7 +17,7 @@ final class RemoteWindowController: NSObject, NSWindowDelegate {
     static func connectViaPrompt() {
         let alert = NSAlert()
         alert.messageText = String(localized: "Connect to Remote Computer")
-        alert.informativeText = String(localized: "The address shown in Remote Connection Info on the other computer. The connection's security is up to you (for example a VPN).")
+        alert.informativeText = String(localized: "The other computer's address, with the port shown under Allow Remote Connections in its Vhostty menu. The connection's security is up to you (for example a VPN).")
         let field = NSTextField(string: UserDefaults.standard.string(forKey: lastURLKey) ?? "")
         field.placeholderString = "192.168.1.5:58563"
         field.frame = NSRect(x: 0, y: 0, width: 300, height: 24)

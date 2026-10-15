@@ -287,6 +287,15 @@ final class DebugSnapshot {
            let item = menu.items.first(where: { $0.action == NSSelectorFromString("configureSleepProtection") }) {
             try? item.title.write(to: directory.appendingPathComponent("sleep-menu.txt"), atomically: true, encoding: .utf8)
         }
+        // "Allow Remote Connections" and the visible lines under it.
+        if let menu = NSApp.mainMenu?.items.first?.submenu,
+           let toggle = menu.items.firstIndex(where: { $0.action == NSSelectorFromString("toggleRemoteConnections") }) {
+            menu.delegate?.menuNeedsUpdate?(menu)
+            menu.update()
+            let lines = [menu.items[toggle].title + (menu.items[toggle].state == .on ? " [on]" : " [off]")]
+                + menu.items[(toggle + 1)...].prefix { $0.indentationLevel > 0 }.filter { !$0.isHidden }.map { "  " + $0.title }
+            try? lines.joined(separator: "\n").write(to: directory.appendingPathComponent("remote-menu.txt"), atomically: true, encoding: .utf8)
+        }
         let modal = window?.attachedSheet ?? NSApp.modalWindow
         let titles = modal?.contentView.map { Self.buttons(in: $0).map(\.title).joined(separator: "\n") } ?? ""
         try? titles.write(to: directory.appendingPathComponent("alert.txt"), atomically: true, encoding: .utf8)

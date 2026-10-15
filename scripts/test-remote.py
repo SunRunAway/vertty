@@ -243,6 +243,12 @@ with (root / "app.log").open("w") as log:
         assert st["history"][0]["sessions"] == [past_session], st
         print("PASS hello, welcome and state (projects, cards, history)", flush=True)
 
+        # The menu item is on, with the port and the client under it.
+        menu = lambda: (snapshot / "remote-menu.txt").read_text() if (snapshot / "remote-menu.txt").exists() else ""
+        wait(lambda: "[on]" in menu() and str(port) in menu() and "Probe" in menu(),
+             "the menu didn't show the port and the connected client")
+        print("PASS the menu shows the port and who is connected", flush=True)
+
         # Opening a card puts the session at the client's size.
         a.cmd(f"open {card_id} 40 12")
         a.expect(lambda e: e["event"] == "snapshot" and e["cols"] == 40 and e["rows"] == 12,

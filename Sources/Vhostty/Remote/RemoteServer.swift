@@ -1,6 +1,5 @@
 import AppKit
 import Network
-import SystemConfiguration
 import VhosttyRemote
 
 /// Serves remote clients (the iPhone app, Vhostty on another Mac) over one
@@ -15,7 +14,7 @@ final class RemoteServer: ObservableObject {
         case off
         case starting(UInt16)
         case listening(UInt16)
-        /// Couldn't start; the reason is shown in Remote Connection Info.
+        /// Couldn't start; the reason is shown under the menu item.
         case failed(String)
     }
 
@@ -93,7 +92,7 @@ final class RemoteServer: ObservableObject {
             case .ready:
                 self.status = .listening(port)
             case .failed(let error):
-                // No retry: the reason stays in Remote Connection Info.
+                // No retry: the reason stays under the menu item.
                 self.status = .failed(Self.describe(error))
                 listener.cancel()
                 self.listener = nil
@@ -209,50 +208,6 @@ final class RemoteServer: ObservableObject {
     /// A session's desktop notification, for the client.
     func notify(_ tab: TabSession, title: String, body: String) {
         bridge.notify(tab, title: title, body: body)
-    }
-
-    // MARK: - Addresses
-
-    /// Addresses a client on another device may use, best first: host and
-    /// port only, as the user types them (the client adds ws://).
-    func addresses(port: UInt16) -> [String] {
-        var result: [String] = []
-        if let name = SCLocalHostName.current { result.append("\(name).local:\(port)") }
-        for ip in Self.interfaceAddresses() { result.append("\(ip):\(port)") }
-        return result
-    }
-
-    private static func interfaceAddresses() -> [String] {
-        var v4: [String] = [], v6: [String] = []
-        var ifaddr: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&ifaddr) == 0, let first = ifaddr else { return [] }
-        defer { freeifaddrs(ifaddr) }
-        for p in sequence(first: first, next: { $0.pointee.ifa_next }) {
-            let ifa = p.pointee
-            guard let addr = ifa.ifa_addr,
-                  ifa.ifa_flags & UInt32(IFF_UP) != 0, ifa.ifa_flags & UInt32(IFF_LOOPBACK) == 0 else { continue }
-            let family = Int32(addr.pointee.sa_family)
-            guard family == AF_INET || family == AF_INET6 else { continue }
-            var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-            guard getnameinfo(addr, socklen_t(addr.pointee.sa_len), &host, socklen_t(host.count),
-                              nil, 0, NI_NUMERICHOST) == 0 else { continue }
-            let ip = String(cString: host)
-            if family == AF_INET {
-                v4.append(ip)
-            } else if !ip.hasPrefix("fe80") {
-                // Link-local IPv6 needs a scope id; skip it.
-                v6.append("[\(ip)]")
-            }
-        }
-        return v4 + v6
-    }
-}
-
-/// The Bonjour host name ("Fengs-MacBook-Pro"), as in System Settings ▸ Sharing.
-enum SCLocalHostName {
-    static var current: String? {
-        guard let name = SCDynamicStoreCopyLocalHostName(nil) as String? else { return nil }
-        return name.isEmpty ? nil : name
     }
 }
 
