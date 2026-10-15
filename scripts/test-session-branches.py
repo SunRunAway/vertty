@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import testapp
 import uuid
 
 
@@ -118,8 +119,7 @@ env = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home), ZDOTDIR=str(
            CODEX_HOME=str(home / ".codex"), VHOSTTY_SUPPORT_DIR=str(support),
            VHOSTTY_DEBUG_SNAPSHOT=str(snapshot))
 with (root / "app.log").open("w") as log:
-    app = subprocess.Popen(["build/Vhostty.app/Contents/MacOS/Vhostty"], env=env,
-                           stdout=log, stderr=subprocess.STDOUT)
+    app = testapp.launch(env, log)
     try:
         expected = lambda: (card("New", "feature/new", 771) and card("Old", "master", 769)
                             and card("Codex", "feature/codex", 770)

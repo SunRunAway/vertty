@@ -98,6 +98,8 @@ VHOSTTY_DEBUG_SNAPSHOT=/tmp/vhostty-snap \
 build/Vhostty.app/Contents/MacOS/Vhostty
 ```
 
+这样直接运行会把 App 带到前台。测试（包括自动测试）一律用 `scripts/testapp.py` 的 `launch()` 启动：它让 App 在后台启动，不抢前台、不挡住正在用的窗口，窗口截图照常能拿到；按它返回的 pid 停止。
+
 - `VHOSTTY_SUPPORT_DIR`：使用一份独立的状态目录，不影响正式数据。
 - `VHOSTTY_DEBUG_SNAPSHOT`：每 1.5 秒把窗口截图和状态写到这个目录（`window.png`、`state.txt`）。往 `input.txt` 写命令可以驱动 App，一行一条：
 

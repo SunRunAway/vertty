@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import testapp
 
 root = Path(tempfile.mkdtemp(prefix='vhostty-sleep-', dir='/private/tmp'))
 print(f'Artifacts: {root}', flush=True)
@@ -97,7 +98,7 @@ def start():
     global app
     (case / 'alert.txt').unlink(missing_ok=True)
     (case / 'state.txt').unlink(missing_ok=True)
-    app = subprocess.Popen([str(binary / 'Vhostty')], env=env, stdout=log, stderr=log)
+    app = testapp.launch(env, log)
     wait(lambda: (case / 'state.txt').exists(), 'app debug driver did not start')
 
 def stop():

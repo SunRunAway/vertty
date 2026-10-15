@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import testapp
 import uuid
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -142,17 +143,13 @@ base = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home), ZDOTDIR=str
 apps = []
 try:
     with (root / "server.log").open("w") as log:
-        apps.append(subprocess.Popen(
-            [str(ROOT / "build/Vhostty.app/Contents/MacOS/Vhostty")],
-            env=dict(base, VHOSTTY_SUPPORT_DIR=str(server_state), VHOSTTY_DEBUG_SNAPSHOT=str(server_snap),
-                     VHOSTTY_REMOTE_PORT=str(port)),
-            stdout=log, stderr=subprocess.STDOUT))
+        apps.append(testapp.launch(
+            dict(base, VHOSTTY_SUPPORT_DIR=str(server_state), VHOSTTY_DEBUG_SNAPSHOT=str(server_snap),
+                 VHOSTTY_REMOTE_PORT=str(port)), log))
     with (root / "client.log").open("w") as log:
-        apps.append(subprocess.Popen(
-            [str(ROOT / "build/Vhostty.app/Contents/MacOS/Vhostty")],
-            env=dict(base, VHOSTTY_SUPPORT_DIR=str(client_state), VHOSTTY_DEBUG_SNAPSHOT=str(client_snap),
-                     VHOSTTY_REMOTE_PORT=str(free_port())),
-            stdout=log, stderr=subprocess.STDOUT))
+        apps.append(testapp.launch(
+            dict(base, VHOSTTY_SUPPORT_DIR=str(client_state), VHOSTTY_DEBUG_SNAPSHOT=str(client_snap),
+                 VHOSTTY_REMOTE_PORT=str(free_port())), log))
 
     def listening():
         try:

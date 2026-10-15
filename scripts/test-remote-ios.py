@@ -27,6 +27,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import testapp
 import uuid
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -200,11 +201,9 @@ server = None
 probe = None
 try:
     with (root / "server.log").open("w") as log:
-        server = subprocess.Popen(
-            [str(ROOT / "build/Vhostty.app/Contents/MacOS/Vhostty")],
-            env=dict(base, VHOSTTY_SUPPORT_DIR=str(server_state), VHOSTTY_DEBUG_SNAPSHOT=str(server_snap),
-                     VHOSTTY_REMOTE_PORT=str(port)),
-            stdout=log, stderr=subprocess.STDOUT)
+        server = testapp.launch(
+            dict(base, VHOSTTY_SUPPORT_DIR=str(server_state), VHOSTTY_DEBUG_SNAPSHOT=str(server_snap),
+                 VHOSTTY_REMOTE_PORT=str(port)), log)
 
     if booted_here:
         simctl("boot", udid)

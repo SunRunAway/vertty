@@ -24,11 +24,13 @@
   `VHOSTTY_SUPPORT_DIR=<scratch> VHOSTTY_DEBUG_SNAPSHOT=<scratch>`. Send input
   only with `to <uuid>` to tabs the test created. Never open, type into, or
   start sessions in the user's real projects.
-- The user works in the installed copy (`/Applications/Vhostty.app`). Start the
-  test instance from `build/Vhostty.app/Contents/MacOS/Vhostty`, save `$!`, and
-  stop it by that PID. Don't use `pkill -f`: an absolute-path pattern misses an
-  instance started from the relative path. Also stop any `claude attach` clients
-  the test started, but never the user's own.
+- The user works in the installed copy (`/Applications/Vhostty.app`). Start a
+  test instance of `build/Vhostty.app` only with `launch()` in
+  `scripts/testapp.py`, in tests and by hand alike: it starts the app in the
+  background, so it never comes in front of the user's windows. Running the
+  binary directly brings it to the front. Stop the instance by the pid
+  `launch()` returns; don't use `pkill -f`. Also stop any `claude attach`
+  clients the test started, but never the user's own.
 
 ## Design decisions (keep unless the user says otherwise)
 

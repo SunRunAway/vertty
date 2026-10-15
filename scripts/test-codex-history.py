@@ -7,6 +7,7 @@ import sqlite3
 import subprocess
 import tempfile
 import time
+import testapp
 import uuid
 
 
@@ -84,8 +85,7 @@ def refresh():
 env = dict(os.environ, CODEX_HOME=str(home), VHOSTTY_SUPPORT_DIR=str(support),
            VHOSTTY_DEBUG_SNAPSHOT=str(snapshot))
 with log_path.open("w") as log:
-    app = subprocess.Popen(["build/Vhostty.app/Contents/MacOS/Vhostty"], env=env,
-                           stdout=log, stderr=subprocess.STDOUT)
+    app = testapp.launch(env, log)
     blocker = None
     try:
         wait_for(lambda: all(f"Codex fixture {i}" in state() for i in range(2)),

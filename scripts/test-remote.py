@@ -17,6 +17,7 @@ import sys
 import tempfile
 import threading
 import time
+import testapp
 import uuid
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -217,8 +218,7 @@ env = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home), ZDOTDIR=str(
            VHOSTTY_DEBUG_SNAPSHOT=str(snapshot), VHOSTTY_REMOTE_PORT=str(port))
 probes = []
 with (root / "app.log").open("w") as log:
-    app = subprocess.Popen([str(ROOT / "build/Vhostty.app/Contents/MacOS/Vhostty")], env=env,
-                           stdout=log, stderr=subprocess.STDOUT)
+    app = testapp.launch(env, log)
     try:
         # The service starts once the login shell's environment is read.
         deadline = time.monotonic() + 20
