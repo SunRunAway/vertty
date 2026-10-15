@@ -22,9 +22,7 @@ struct ScheduleManagerView: View {
 
     var body: some View {
         let ended = schedules.activeTasks.filter { task in
-            task.timing.repeatKind == .once && task.nextPlan == nil
-                && (task.timing.onceDate ?? .distantFuture) <= Date()
-                && schedules.shownRun(of: task.id).map { $0.state != .running } == true
+            schedules.state(of: task) == .ended && schedules.openRun(of: task.id) == nil
         }
         let endedIDs = Set(ended.map(\.id))
         let active = schedules.activeTasks.filter { !endedIDs.contains($0.id) }
@@ -207,11 +205,11 @@ private struct ScheduleActions: View {
     var body: some View {
         Button("Run Now") { store.runScheduleNow(task.id) }
             .disabled(schedules.openRun(of: task.id) != nil || store.project(task.projectID) == nil)
-        if task.enabled {
+        if schedules.state(of: task) == .active {
             Button("Pause") { schedules.setEnabled(task.id, false) }
         } else {
             Button("Resume") { schedules.setEnabled(task.id, true) }
-                .disabled(store.project(task.projectID) == nil || !task.timing.canResume)
+                .disabled(schedules.state(of: task) == .ended || store.project(task.projectID) == nil || !task.timing.canResume)
         }
         if let id = task.sessionID, !id.isEmpty {
             Button("Open Session") {
@@ -308,11 +306,11 @@ struct SchedulePanelView: View {
             if let task, !task.isDeleted {
                 IconButton(systemName: "play", help: "Run Now") { store.runScheduleNow(task.id) }
                     .disabled(schedules.openRun(of: task.id) != nil || store.project(task.projectID) == nil)
-                if task.enabled {
+                if schedules.state(of: task) == .active {
                     IconButton(systemName: "pause", help: "Pause") { schedules.setEnabled(task.id, false) }
                 } else {
-                    IconButton(systemName: "arrow.clockwise", help: "Resume") { schedules.setEnabled(task.id, true) }
-                        .disabled(store.project(task.projectID) == nil || !task.timing.canResume)
+                    IconButton(systemName: "arrow.clockwise", help: schedules.state(of: task) == .ended ? "Edit the schedule before resuming." : "Resume") { schedules.setEnabled(task.id, true) }
+                        .disabled(schedules.state(of: task) == .ended || store.project(task.projectID) == nil || !task.timing.canResume)
                 }
                 IconMenu { ScheduleActions(store: store, schedules: schedules, task: task) }
             }
@@ -325,13 +323,17 @@ struct SchedulePanelView: View {
 
     private var statusTitle: String {
         guard let task else { return String(localized: "New Scheduled Task") }
-        if task.isDeleted { return String(localized: "Deleted") }
-        return task.enabled ? String(localized: "Active") : String(localized: "Paused")
+        switch schedules.state(of: task) {
+        case .active: return String(localized: "Active")
+        case .paused: return String(localized: "Paused")
+        case .ended: return String(localized: "Ended")
+        case .deleted: return String(localized: "Deleted")
+        }
     }
 
     private var statusColor: Color {
         guard let task, !task.isDeleted else { return .secondary }
-        return task.enabled ? Color(red: 0.35, green: 0.62, blue: 1.0) : .secondary
+        return schedules.state(of: task) == .active ? Color(red: 0.35, green: 0.62, blue: 1.0) : .secondary
     }
 
     // MARK: Prompt

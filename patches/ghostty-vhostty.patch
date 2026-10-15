@@ -164,7 +164,7 @@ index 37f8712..380d360 100644
              0,
              null,
 diff --git a/src/Surface.zig b/src/Surface.zig
-index 4d66622..ef784e3 100644
+index 4d66622..e91e9bd 100644
 --- a/src/Surface.zig
 +++ b/src/Surface.zig
 @@ -620,32 +620,40 @@ pub fn init(
@@ -307,23 +307,82 @@ index 4d66622..ef784e3 100644
          if (self.isMouseReporting()) report: {
              // If we have shift-pressed and we aren't allowed to capture it,
              // then we do not do a mouse report.
-@@ -4473,6 +4506,15 @@ fn linkAtPin(
+@@ -4409,17 +4442,23 @@ fn linkAtPos(
+     // Get our comparison mods
+     const mouse_mods = self.mouseModsWithCapture(self.mouse.mods);
+ 
+-    // If we have the proper modifiers set then we can check for OSC8 links.
+-    if (mouse_mods.equal(input.ctrlOrSuper(.{}))) hyperlink: {
+-        const rac = mouse_pin.rowAndCell();
+-        const cell = rac.cell;
+-        if (!cell.hyperlink) break :hyperlink;
+-        const sel = terminal.Selection.init(mouse_pin, mouse_pin, false);
+-        return .{ .action = ._open_osc8, .selection = sel };
+-    }
++    const link: Link = link: {
++        // If we have the proper modifiers set then we can check for OSC8 links.
++        if (mouse_mods.equal(input.ctrlOrSuper(.{}))) hyperlink: {
++            const rac = mouse_pin.rowAndCell();
++            const cell = rac.cell;
++            if (!cell.hyperlink) break :hyperlink;
++            const sel = terminal.Selection.init(mouse_pin, mouse_pin, false);
++            break :link .{ .action = ._open_osc8, .selection = sel };
++        }
+ 
+-    // Fall back to configured links
+-    return try self.linkAtPin(mouse_pin, mouse_mods);
++        // Fall back to configured links
++        break :link (try self.linkAtPin(mouse_pin, mouse_mods)) orelse return null;
++    };
++
++    // Vhostty: while the app captures the mouse, ⌘ only takes our own links.
++    if (self.linksFreeOfMouseCapture() or self.isVhosttyLink(link)) return link;
++    return null;
+ }
+ 
+ /// Detects if a link is present at the given pin.
+@@ -4473,6 +4512,40 @@ fn linkAtPin(
      return null;
  }
  
-+/// Whether link hover and clicks are handled even if the app reports mouse
-+/// events: when it doesn't, with a shift it can't capture, or (Vhostty) with
-+/// ⌘ held, so ⌘-click opens links in full-screen TUIs like Claude Code.
-+fn linksBypassMouseCapture(self: *Surface) bool {
++/// Whether links are handled whatever they are: when the app doesn't report
++/// mouse events, or with a shift it can't capture.
++fn linksFreeOfMouseCapture(self: *Surface) bool {
 +    return self.io.terminal.flags.mouse_event == .none or
-+        self.mouse.mods.super or
 +        (self.mouse.mods.shift and !self.mouseShiftCapture(false));
++}
++
++/// Whether link hover and clicks are handled: as above, or (Vhostty) with ⌘
++/// held while the app reports mouse events, for vhostty:// links only (see
++/// linkAtPos). Full-screen TUIs like Claude Code open the other links on
++/// ⌘-click themselves, but not ours.
++fn linksBypassMouseCapture(self: *Surface) bool {
++    return self.linksFreeOfMouseCapture() or self.mouse.mods.super;
++}
++
++/// Vhostty: whether a link opens a vhostty:// URL.
++fn isVhosttyLink(self: *Surface, link: Link) bool {
++    const prefix = "vhostty://";
++    switch (link.action) {
++        ._open_osc8 => {
++            const uri = self.osc8URI(link.selection.start()) orelse return false;
++            return std.mem.startsWith(u8, uri, prefix);
++        },
++        .open => {
++            const str = self.renderer_state.terminal.screens.active.selectionString(self.alloc, .{
++                .sel = link.selection,
++                .trim = false,
++            }) catch return false;
++            defer self.alloc.free(str);
++            return std.mem.startsWith(u8, str, prefix);
++        },
++    }
 +}
 +
  /// This returns the mouse mods to consider for link highlighting or
  /// other purposes taking into account when shift is pressed for releasing
  /// the mouse from capture.
-@@ -4714,8 +4756,7 @@ pub fn cursorPosCallback(
+@@ -4714,8 +4787,7 @@ pub fn cursorPosCallback(
      if ((over_link or
          self.mouse.link_point == null or
          (self.mouse.link_point != null and !self.mouse.link_point.?.eql(pos_vp))) and

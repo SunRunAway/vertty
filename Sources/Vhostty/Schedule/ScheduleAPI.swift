@@ -27,9 +27,12 @@ extension AppStore {
             if !fields.isEmpty { return error("\(op) takes no fields.") }
             switch op {
             case "pause":
+                guard schedules.state(of: task) != .ended else {
+                    return error("This task has ended. Edit its schedule first.")
+                }
                 schedules.setEnabled(id, false)
             case "resume":
-                guard project(task.projectID) != nil, task.timing.canResume else {
+                guard schedules.state(of: task) != .ended, project(task.projectID) != nil, task.timing.canResume else {
                     return error("This task can't be resumed as it is: its project is gone or its one-time date has passed. Edit it first.")
                 }
                 schedules.setEnabled(id, true)
@@ -181,7 +184,7 @@ extension AppStore {
             "project": project(t.projectID).map { ["name": $0.name, "path": $0.path] } ?? NSNull(),
             "schedule": t.timing.summary, "repeat": t.timing.repeatKind.rawValue,
             "time": String(format: "%02d:%02d", t.timing.hour, t.timing.minute),
-            "enabled": t.enabled, "deleted": t.isDeleted,
+            "enabled": t.enabled, "deleted": t.isDeleted, "state": schedules.state(of: t).rawValue,
             "nextRun": t.enabled ? (t.nextPlan.map(iso) ?? NSNull()) : NSNull(),
             "lastRunState": schedules.shownRun(of: t.id)?.state.rawValue ?? NSNull(),
         ]

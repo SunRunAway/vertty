@@ -55,6 +55,21 @@ final class ScheduleStore: ObservableObject {
     var activeTasks: [ScheduleTask] { tasks.filter { !$0.isDeleted } }
     var deletedTasks: [ScheduleTask] { tasks.filter(\.isDeleted).sorted { $0.deletedAt! > $1.deletedAt! } }
 
+    /// Only the scheduled run for the current one-time plan can end it.
+    /// Manual reruns do not change the scheduling lifecycle.
+    func state(of task: ScheduleTask) -> ScheduleState {
+        if task.isDeleted { return .deleted }
+        if !task.enabled { return .paused }
+        if task.timing.repeatKind == .once, task.nextPlan == nil,
+           let plannedAt = task.timing.onceDate,
+           let run = runs.last(where: {
+               $0.taskID == task.id && $0.trigger != .manual && $0.plannedAt == plannedAt
+           }), run.state != .running {
+            return .ended
+        }
+        return .active
+    }
+
     /// Project and agent are fixed once the task has its session, or while its
     /// first run is creating it.
     func sessionFixed(_ task: ScheduleTask) -> Bool {
@@ -138,6 +153,8 @@ final class ScheduleStore: ObservableObject {
     /// Pause keeps the current run going. Resume plans from now: nothing missed
     /// while paused (or before) is caught up.
     func setEnabled(_ id: UUID, _ enabled: Bool) {
+        guard let task = task(id), !task.isDeleted, state(of: task) != .ended else { return }
+        if enabled && task.timing.next(after: Date()) == nil { return }
         modify(id) { t in
             t.enabled = enabled
             t.nextPlan = enabled ? t.timing.next(after: Date()) : nil

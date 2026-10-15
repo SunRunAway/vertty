@@ -222,3 +222,6 @@
 "Default Agent for New Projects" = "新项目默认 Agent";
 
 "Ended (%lld)" = "已结束（%lld）";
+
+"Ended" = "已结束";
+"Edit the schedule before resuming." = "请先修改执行计划再恢复。";

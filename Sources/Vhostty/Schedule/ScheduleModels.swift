@@ -143,6 +143,11 @@ struct ScheduleTask: Codable, Identifiable, Equatable {
     var isBound: Bool { !(sessionID ?? "").isEmpty }
 }
 
+/// Scheduling lifecycle, independent of the outcome of any individual run.
+enum ScheduleState: String {
+    case active, paused, ended, deleted
+}
+
 enum RunTrigger: String, Codable {
     case scheduled, catchUp, manual
 }
