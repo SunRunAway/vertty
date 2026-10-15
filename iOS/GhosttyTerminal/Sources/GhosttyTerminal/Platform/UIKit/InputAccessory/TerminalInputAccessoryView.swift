@@ -198,7 +198,7 @@
                     return makeTrackedModifierButton(title: title, systemImage: item.systemImage ?? "", modifier: .command)
 
                 case .esc:
-                    return makeTrackedKeyButton(title: title, systemImage: item.systemImage, key: .esc)
+                    return makeTrackedKeyButton(title: title, presentation: item.presentation, key: .esc)
 
                 case .tab:
                     return makeTrackedKeyButton(title: title, systemImage: item.systemImage, key: .tab)

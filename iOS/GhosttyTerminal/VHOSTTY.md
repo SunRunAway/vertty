@@ -20,6 +20,7 @@ as the Mac app, and it isn't checked in. Vhostty's changes:
 - `UITerminalView.onWillInput` (through `TerminalSurfaceCoordinator` and
   `TerminalSurface`) runs before every key press and paste, so the client can
   align the session's size before the input.
-- The input accessory bar has `shiftTab` and `ctrlC` keys, and
+- The input accessory bar has `shiftTab` and `ctrlC` keys, shows Esc as the
+  text "Esc" rather than a glyph, and
   `UITerminalView.inputAccessoryShowsDismissKey` pins a key that hides the
   software keyboard to the bar's trailing edge, outside the scrolling keys.

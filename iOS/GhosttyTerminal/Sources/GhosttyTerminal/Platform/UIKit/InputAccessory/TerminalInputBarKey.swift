@@ -78,6 +78,8 @@
                 case let .symbol(symbol): .text(symbol)
                 case let .presentedSymbol(symbol, .text(label)) where label.isEmpty: .text(symbol)
                 case let .presentedSymbol(_, presentation): presentation
+                // Vhostty: Esc as text, like ⇧Tab and ^C beside it.
+                case .esc: .text("Esc")
                 case .shiftTab: .text("⇧Tab")
                 case .ctrlC: .text("^C")
                 default: nil
@@ -97,7 +99,6 @@
             /// so a host's bar-configuration UI shows the same glyphs as the bar.
             public var systemImage: String? {
                 switch self {
-                case .esc: "escape"
                 case .ctrl: "control"
                 case .alt: "option"
                 case .command: "command"
@@ -107,7 +108,7 @@
                 case .arrowDown: "arrowtriangle.down.fill"
                 case .arrowRight: "arrowtriangle.right.fill"
                 case .paste: "doc.on.clipboard"
-                case .symbol, .presentedSymbol, .shiftTab, .ctrlC, .divider: nil
+                case .esc, .symbol, .presentedSymbol, .shiftTab, .ctrlC, .divider: nil
                 }
             }
 
