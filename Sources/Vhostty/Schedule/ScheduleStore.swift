@@ -85,12 +85,17 @@ final class ScheduleStore: ObservableObject {
 
     // MARK: - Changes
 
-    func create(_ task: ScheduleTask) {
+    @discardableResult
+    func create(_ task: ScheduleTask) -> Bool {
         var t = task
         t.createdAt = Date()
         t.nextPlan = t.enabled ? t.timing.next(after: Date()) : nil
         tasks.append(t)
-        save()
+        guard save() else {
+            tasks.removeLast()
+            return false
+        }
+        return true
     }
 
     /// Applies an edit's settings (name, prompt, schedule, project, agent) to the
@@ -115,8 +120,12 @@ final class ScheduleStore: ObservableObject {
             t.timing = edit.timing
             t.nextPlan = t.enabled ? t.timing.next(after: Date()) : nil
         }
+        let previous = tasks[i]
         tasks[i] = t
-        save()
+        guard save() else {
+            tasks[i] = previous
+            return String(localized: "Couldn’t save the task.")
+        }
         return nil
     }
 
@@ -135,12 +144,18 @@ final class ScheduleStore: ObservableObject {
         }
     }
 
-    func delete(_ id: UUID) {
-        modify(id) { t in
-            t.deletedAt = Date()
-            t.enabled = false
-            t.nextPlan = nil
+    @discardableResult
+    func delete(_ id: UUID) -> Bool {
+        guard let i = tasks.firstIndex(where: { $0.id == id }) else { return false }
+        let previous = tasks[i]
+        tasks[i].deletedAt = Date()
+        tasks[i].enabled = false
+        tasks[i].nextPlan = nil
+        guard save() else {
+            tasks[i] = previous
+            return false
         }
+        return true
     }
 
     func add(_ run: ScheduleRun) {

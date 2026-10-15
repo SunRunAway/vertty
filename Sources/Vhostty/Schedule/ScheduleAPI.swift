@@ -1,10 +1,6 @@
 import Foundation
 
-/// Requests from `vhostty-schedule` (the MCP server agents get their
-/// scheduled-task tools from). Agents can read tasks, and pause, resume or run
-/// one, as the user can with one click. Creating, editing or deleting only opens the form or
-/// confirmation the user would use anyway, filled in: nothing is saved unless
-/// the user confirms it there, and cancelling leaves nothing behind.
+/// Agent requests apply directly and return a link to inspect the saved task.
 extension AppStore {
     func handleScheduleRequest(_ request: [String: Any]) -> [String: Any] {
         let allowed: Set<String> = ["op", "taskID", "fields", "tabID", "cwd"]
@@ -26,7 +22,7 @@ extension AppStore {
             d["recentRuns"] = schedules.runs(of: id).prefix(10).map(describe)
             return ["ok": true, "task": d]
         case "pause", "resume", "run":
-            // The same one click as in the window: the task is one the user confirmed.
+            // The same actions as in the window.
             guard let id = taskID, let task = schedules.task(id), !task.isDeleted else { return error("No task with that id.") }
             if !fields.isEmpty { return error("\(op) takes no fields.") }
             switch op {
@@ -44,42 +40,41 @@ extension AppStore {
             }
             return ["ok": true, "task": describe(schedules.task(id)!)]
         case "create", "edit", "delete":
-            guard !schedulePanelDirty, !scheduleAsking else {
-                return error("A scheduled-task form is already open in Vhostty. Ask the user to finish it, then try again.")
-            }
+            let refreshPanel = taskID != nil && schedulePanel?.taskID == taskID && !schedulePanelDirty
+            let changedID: UUID
             if op == "create" {
                 switch filledTask(nil, fields, source: source, cwd: cwd) {
                 case .failure(let e): return error(e.message)
-                case .success(let task): newScheduledTask(filledIn: task)
+                case .success(let task):
+                    guard schedules.create(task) else { return error("Couldn't save the task.") }
+                    changedID = task.id
                 }
-                return opened("The New Scheduled Task form")
+            } else {
+                guard let id = taskID, let task = schedules.task(id), !task.isDeleted else { return error("No task with that id.") }
+                changedID = id
+                if op == "delete" {
+                    if !fields.isEmpty { return error("delete takes no fields.") }
+                    guard schedules.delete(id) else { return error("Couldn't save the task.") }
+                } else {
+                    switch filledTask(task, fields, source: source, cwd: cwd) {
+                    case .failure(let e): return error(e.message)
+                    case .success(let changed):
+                        if let problem = schedules.applyEdit(changed) { return error(problem) }
+                    }
+                }
             }
-            guard let id = taskID, let task = schedules.task(id), !task.isDeleted else { return error("No task with that id.") }
-            if op == "delete" {
-                if !fields.isEmpty { return error("delete takes no fields.") }
-                askDeleteScheduledTask(task)
-                return opened("The delete confirmation")
-            }
-            switch filledTask(task, fields, source: source, cwd: cwd) {
-            case .failure(let e): return error(e.message)
-            case .success(let changed):
-                if changed == task { return error("Nothing would change.") }
-                editScheduledTask(changed)
-            }
-            return opened("The Edit Scheduled Task form")
+            // Refresh an already visible, unchanged panel without opening one or stealing focus.
+            if refreshPanel { showScheduledTask(changedID, page: false) }
+            let task = schedules.task(changedID)!
+            return ["ok": true, "task": describe(task), "url": task.link.absoluteString]
         default:
             return error("Unknown op: \(op)")
         }
     }
 
-    private func opened(_ what: String) -> [String: Any] {
-        ["ok": true,
-         "message": "\(what) is open in Vhostty, filled in. Nothing changes unless the user confirms it there; cancelling drops it. Use list or show to see whether it took effect."]
-    }
-
     struct APIError: Error { let message: String }
 
-    /// Builds the task a create or edit fills in. Project and agent come from the
+    /// Validates the task a create or edit will save. Project and agent come from the
     /// asking session unless given, and can't change once the task has its session.
     private func filledTask(_ existing: ScheduleTask?, _ f: [String: Any], source: TabSession?,
                            cwd: String?) -> Result<ScheduleTask, APIError> {
@@ -182,7 +177,7 @@ extension AppStore {
 
     private func describe(_ t: ScheduleTask) -> [String: Any] {
         var d: [String: Any] = [
-            "id": t.id.uuidString, "name": t.name, "agent": t.kind.rawValue, "prompt": t.prompt,
+            "id": t.id.uuidString, "url": t.link.absoluteString, "name": t.name, "agent": t.kind.rawValue, "prompt": t.prompt,
             "project": project(t.projectID).map { ["name": $0.name, "path": $0.path] } ?? NSNull(),
             "schedule": t.timing.summary, "repeat": t.timing.repeatKind.rawValue,
             "time": String(format: "%02d:%02d", t.timing.hour, t.timing.minute),

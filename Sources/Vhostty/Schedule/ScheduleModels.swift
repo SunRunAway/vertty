@@ -179,3 +179,16 @@ struct ScheduleFile: Codable {
     var tasks: [ScheduleTask] = []
     var runs: [ScheduleRun] = []
 }
+
+/// Stable links also work after deletion, when the task is kept as history.
+extension ScheduleTask {
+    var link: URL { URL(string: "vhostty://schedule/\(id.uuidString)")! }
+
+    static func id(from url: URL) -> UUID? {
+        guard url.scheme?.lowercased() == "vhostty", url.host == "schedule",
+              url.user == nil, url.password == nil, url.port == nil,
+              url.query == nil, url.fragment == nil,
+              url.pathComponents.count == 2 else { return nil }
+        return UUID(uuidString: url.lastPathComponent)
+    }
+}

@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     private lazy var sleepProtection = SleepProtection(store: store)
     private lazy var displayAwake = DisplayAwake(store: store)
     private lazy var remoteServer = RemoteServer(store: store)
+    private var pendingScheduleURL: URL?
     private var hookServer: HookServer?
     private var debugSnapshot: DebugSnapshot?
     private var fileMenu: NSMenu?
@@ -64,6 +65,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         createWindow()
         sleepProtection.window = window
         store.activateSelection()
+        if let url = pendingScheduleURL {
+            pendingScheduleURL = nil
+            openScheduleURL(url)
+        }
 
         if let dir = ProcessInfo.processInfo.environment["VHOSTTY_DEBUG_SNAPSHOT"] {
             // Test instances stay in the background so they don't steal the user's typing.
@@ -122,6 +127,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         window.setFrameAutosaveName("VhosttyMainWindow")
         if ProcessInfo.processInfo.environment["VHOSTTY_DEBUG_SNAPSHOT"] == nil {
             window.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls { openScheduleURL(url) }
+    }
+
+    func openScheduleURL(_ url: URL) {
+        guard let id = ScheduleTask.id(from: url) else { return }
+        guard window != nil else { pendingScheduleURL = url; return }
+        guard store.schedules.task(id) != nil else { return }
+        store.showScheduledTask(id)
+        if ProcessInfo.processInfo.environment["VHOSTTY_DEBUG_SNAPSHOT"] == nil {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
         }
     }
 

@@ -180,6 +180,10 @@ final class DebugSnapshot {
                 store.toggleExpanded(project)
                 continue
             }
+            if line.hasPrefix("openurl "), let url = URL(string: String(line.dropFirst(8))) {
+                (NSApp.delegate as? AppDelegate)?.application(NSApp, open: [url])
+                continue
+            }
             if line == "schedules" {
                 store.showSchedules()
                 continue

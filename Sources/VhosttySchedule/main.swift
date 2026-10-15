@@ -1,21 +1,18 @@
 import Foundation
 
-// vhostty-schedule: reads Vhostty's scheduled tasks and pauses, resumes or runs
-// them. Creating, editing or deleting opens Vhostty's own form or confirmation,
-// filled in, for the user to confirm. Claude and Codex use it through
-// `vhostty-schedule mcp`, an MCP server with the same operations as tools. Talks
-// to the running app over its hook socket.
+// Agent schedule management over the running app's hook socket.
+// CLI and MCP mutations take effect immediately and return a task link.
 
 let usage = """
 usage: vhostty-schedule <command> [options]
 
   list                      tasks
   show <task-id>            one task with its recent runs
-  create [fields]           open the new-task form, filled in
-  edit <task-id> [fields]   open the task's edit form with these changes
+  create [fields]           create and enable a task
+  edit <task-id> [fields]   apply these changes to the task
   pause|resume|run <task-id>
                             done at once ("run" = run now)
-  delete <task-id>          ask the user to confirm deleting it
+  delete <task-id>          delete the task (keep its history)
   mcp                       serve these as MCP tools on stdin/stdout
 
 fields:
@@ -28,8 +25,7 @@ fields:
   --project PATH|NAME       default: the project of this session
   --agent claude|codex      default: this session's agent
 
-create, edit and delete change nothing until the user confirms them in
-Vhostty; cancelling drops them.
+create, edit and delete take effect immediately and return a vhostty://schedule/<id> URL.
 """
 
 func fail(_ message: String) -> Never {
@@ -109,9 +105,10 @@ chosen days of the week, at a time on this Mac's clock. A task's first run start
 later runs resume that same session. Runs happen only while Vhostty is running and the Mac is awake. Use these \
 tools for any such request ("every Saturday at 9 check dependencies", "move the dependency check to Sunday", \
 "pause that task", "what's scheduled?") instead of cron, cron tools, launchd, /loop or cloud tasks.
-Pause, resume and run take effect at once. Create, edit and delete open Vhostty's own form or delete confirmation, \
-filled in, in front of the user, and take effect only if the user confirms there; if they cancel, nothing is kept. \
-Never say a task was created, changed or deleted unless list or show shows it.
+Create, edit, delete, pause, resume and run take effect immediately without a Vhostty confirmation dialog. \
+Create, edit and delete return the saved task and its url. You may include that URL as a Markdown link in your reply \
+so the user can open the task's sidebar in Vhostty. Deleted tasks remain accessible through their links. \
+Only report success when the tool returns ok=true; report errors honestly.
 If the time, day or target task is unclear, ask; don't guess. If several tasks could match, ask which. Write the \
 prompt so it stands alone: the task runs later in a fresh session that hasn't seen this conversation, so include \
 the context it needs (files, goals, what to report). This conversation isn't the task's session.
@@ -138,15 +135,15 @@ let tools: [[String: Any]] = [
     tool("list_scheduled_tasks", "List Vhostty's scheduled tasks with their ids. Use it first when a request refers to an existing task.", [:], []),
     tool("show_scheduled_task", "Show one scheduled task and its recent runs.", taskIDField, ["task_id"]),
     tool("create_scheduled_task",
-         "Open Vhostty's New Scheduled Task form, filled in, for the user to check and confirm. Nothing is created unless they confirm. Afterwards tell the user the form is open in Vhostty and what you filled in.",
+         "Create and enable a scheduled task immediately. Returns the saved task and its URL; you may share the link with the user.",
          taskFields, ["name", "prompt", "repeat", "time"]),
     tool("edit_scheduled_task",
-         "Open the task's Edit form in Vhostty with these changes filled in, for the user to confirm. Give only what changes.",
+         "Apply changes to a scheduled task immediately. Give only what changes. Returns the saved task and its URL; you may share the link with the user.",
          taskFields.merging(taskIDField) { a, _ in a }, ["task_id"]),
     tool("pause_scheduled_task", "Pause a scheduled task (at once). A run going on isn't stopped.", taskIDField, ["task_id"]),
     tool("resume_scheduled_task", "Resume a paused scheduled task (at once), from now on.", taskIDField, ["task_id"]),
     tool("run_scheduled_task", "Run a scheduled task once now (at once); its schedule stays as it is.", taskIDField, ["task_id"]),
-    tool("delete_scheduled_task", "Ask the user, in Vhostty, to confirm deleting a scheduled task.", taskIDField, ["task_id"]),
+    tool("delete_scheduled_task", "Delete a scheduled task immediately, keeping its history and current run. Returns the deleted task and its URL; you may share the link with the user.", taskIDField, ["task_id"]),
 ]
 
 func callTool(_ name: String, _ arguments: [String: Any]) -> [String: Any] {

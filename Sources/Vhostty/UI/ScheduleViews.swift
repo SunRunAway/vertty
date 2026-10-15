@@ -816,7 +816,7 @@ extension AppStore {
             t.timing.day = nil
         }
         if panel.isNew {
-            schedules.create(t)
+            guard schedules.create(t) else { return String(localized: "Couldn’t save the task.") }
         } else if let problem = schedules.applyEdit(t) {
             return problem
         }
@@ -844,29 +844,6 @@ extension AppStore {
         timing.weekdays = [c.weekday ?? 7]
         let task = ScheduleTask(name: "", projectID: project.id, kind: defaultKind(project), prompt: "", timing: timing)
         schedulePanel = SchedulePanel(taskID: nil, draft: Self.formDraft(task))
-    }
-
-    /// The same panel, filled in by an agent.
-    func newScheduledTask(filledIn task: ScheduleTask) {
-        schedulePanel = SchedulePanel(taskID: nil, draft: Self.formDraft(task))
-    }
-
-    /// A task in the panel with an agent's changes filled in, not saved yet.
-    func editScheduledTask(_ changed: ScheduleTask) {
-        schedulePanel = SchedulePanel(taskID: changed.id, draft: Self.formDraft(changed))
-    }
-
-    /// An agent's delete, asked on the window as a sheet: a modal alert would
-    /// hold up the main thread (and the hook socket) for as long as the user is
-    /// away. It asks what the Delete menu item asks.
-    func askDeleteScheduledTask(_ task: ScheduleTask) {
-        guard let window = (NSApp.delegate as? AppDelegate)?.window else { return }
-        scheduleAsking = true
-        deleteAlert(task).beginSheetModal(for: window) { [self] answer in
-            scheduleAsking = false
-            guard answer == .alertFirstButtonReturn else { return }
-            schedules.delete(task.id)
-        }
     }
 
     private func deleteAlert(_ task: ScheduleTask) -> NSAlert {

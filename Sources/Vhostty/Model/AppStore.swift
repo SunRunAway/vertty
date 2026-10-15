@@ -49,8 +49,6 @@ final class AppStore: ObservableObject {
     let schedules = ScheduleStore()
     /// The scheduled-task page replaces the terminal while shown.
     @Published var showingSchedules = false
-    /// An agent's delete is waiting for the user's answer.
-    var scheduleAsking = false
     /// The task panel on the right (a task, or a new one).
     @Published var schedulePanel: SchedulePanel?
     var scheduleTimer: Timer?
