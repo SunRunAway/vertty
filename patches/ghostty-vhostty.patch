@@ -164,7 +164,7 @@ index 37f8712..380d360 100644
              0,
              null,
 diff --git a/src/Surface.zig b/src/Surface.zig
-index 4d66622..c90edc9 100644
+index 4d66622..ef784e3 100644
 --- a/src/Surface.zig
 +++ b/src/Surface.zig
 @@ -620,32 +620,40 @@ pub fn init(
@@ -283,6 +283,56 @@ index 4d66622..c90edc9 100644
  /// Recalculate the balanced padding if needed.
  fn balancePaddingIfNeeded(self: *Surface) void {
      if (!self.config.window_padding_balance) return;
+@@ -2678,9 +2707,7 @@ pub fn keyCallback(
+         // 1. mouse reporting is off
+         // OR
+         // 2. mouse reporting is on and we are not reporting shift to the terminal
+-        if (self.io.terminal.flags.mouse_event == .none or
+-            (self.mouse.mods.shift and !self.mouseShiftCapture(false)))
+-        {
++        if (self.linksBypassMouseCapture()) {
+             // Refresh our link state
+             const pos = self.rt_surface.getCursorPos() catch break :mouse_mods;
+             self.renderer_state.mutex.lock();
+@@ -3986,6 +4013,12 @@ pub fn mouseButtonCallback(
+     {
+         self.renderer_state.mutex.lock();
+         defer self.renderer_state.mutex.unlock();
++
++        // Vhostty: a ⌘-click on a link belongs to the link (opened on
++        // release above), so the app capturing the mouse doesn't get the press.
++        if (button == .left and action == .press and self.mouse.over_link and
++            self.isMouseReporting()) return true;
++
+         if (self.isMouseReporting()) report: {
+             // If we have shift-pressed and we aren't allowed to capture it,
+             // then we do not do a mouse report.
+@@ -4473,6 +4506,15 @@ fn linkAtPin(
+     return null;
+ }
+ 
++/// Whether link hover and clicks are handled even if the app reports mouse
++/// events: when it doesn't, with a shift it can't capture, or (Vhostty) with
++/// ⌘ held, so ⌘-click opens links in full-screen TUIs like Claude Code.
++fn linksBypassMouseCapture(self: *Surface) bool {
++    return self.io.terminal.flags.mouse_event == .none or
++        self.mouse.mods.super or
++        (self.mouse.mods.shift and !self.mouseShiftCapture(false));
++}
++
+ /// This returns the mouse mods to consider for link highlighting or
+ /// other purposes taking into account when shift is pressed for releasing
+ /// the mouse from capture.
+@@ -4714,8 +4756,7 @@ pub fn cursorPosCallback(
+     if ((over_link or
+         self.mouse.link_point == null or
+         (self.mouse.link_point != null and !self.mouse.link_point.?.eql(pos_vp))) and
+-        (self.io.terminal.flags.mouse_event == .none or
+-            (self.mouse.mods.shift and !self.mouseShiftCapture(false))))
++        self.linksBypassMouseCapture())
+     {
+         // If we were previously over a link, we always update. We do this so that if the text
+         // changed underneath us, even if the mouse didn't move, we update the URL hints and state
 diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
 index 0d5a4f8..e468c4f 100644
 --- a/src/apprt/embedded.zig
@@ -575,6 +625,30 @@ index 9276c99..bb3bd48 100644
          });
      }
  
+diff --git a/src/config/url.zig b/src/config/url.zig
+index e7cf860..f138712 100644
+--- a/src/config/url.zig
++++ b/src/config/url.zig
+@@ -25,7 +25,7 @@ const oni = @import("oniguruma");
+ /// There are many complicated cases where these heuristics break down, but
+ /// handling them well requires a non-regex approach.
+ const url_schemes =
+-    \\https?://|mailto:|ftp://|file:|ssh:|git://|ssh://|tel:|magnet:|ipfs://|ipns://|gemini://|gopher://|news:
++    \\vhostty://|https?://|mailto:|ftp://|file:|ssh:|git://|ssh://|tel:|magnet:|ipfs://|ipns://|gemini://|gopher://|news:
+ ;
+ 
+ const ipv6_url_pattern =
+@@ -156,6 +156,10 @@ test "url regex" {
+             .input = "Link inside (https://example.com) parens",
+             .expect = "https://example.com",
+         },
++        .{
++            .input = "[Task](vhostty://schedule/84A8794E-56AD-41B9-9AC8-4546E7111A8C)",
++            .expect = "vhostty://schedule/84A8794E-56AD-41B9-9AC8-4546E7111A8C",
++        },
+         .{
+             .input = "Link period https://example.com. More text.",
+             .expect = "https://example.com",
 diff --git a/src/font/shaper/coretext.zig b/src/font/shaper/coretext.zig
 index 5a8a6cc..2aef758 100644
 --- a/src/font/shaper/coretext.zig
@@ -1617,19 +1691,3 @@ index 8c1b5b8..a0142dc 100644
          self.termio_mailbox.send(msg, self.renderer_state.mutex);
          self.termio_messaged = true;
      }
-diff --git a/src/config/url.zig b/src/config/url.zig
-index e7cf860..f138712 100644
---- a/src/config/url.zig
-+++ b/src/config/url.zig
-@@ -27,3 +27,3 @@ const oni = @import("oniguruma");
- const url_schemes =
--    \\https?://|mailto:|ftp://|file:|ssh:|git://|ssh://|tel:|magnet:|ipfs://|ipns://|gemini://|gopher://|news:
-+    \\vhostty://|https?://|mailto:|ftp://|file:|ssh:|git://|ssh://|tel:|magnet:|ipfs://|ipns://|gemini://|gopher://|news:
- ;
-@@ -158,2 +158,6 @@ test "url regex" {
-         },
-+        .{
-+            .input = "[Task](vhostty://schedule/84A8794E-56AD-41B9-9AC8-4546E7111A8C)",
-+            .expect = "vhostty://schedule/84A8794E-56AD-41B9-9AC8-4546E7111A8C",
-+        },
-         .{
