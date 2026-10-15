@@ -170,3 +170,7 @@ defaults write dev.vhostty.Vhostty AppleLanguages '("en")'   # 恢复：defaults
 `python3 scripts/test-sleep-protection.py` 用真实守护程序、模拟 pmset 和隔离 AppKit 实例验证租约、恢复、Amphetamine 状态组合、首次询问和真实终端状态；加 `--watchdog-only` 只验证守护程序，不打开窗口。测试实例默认完全跳过电源功能；同时指定 `VHOSTTY_SUPPORT_DIR`、`VHOSTTY_DEBUG_SNAPSHOT`、`VHOSTTY_SLEEP_TEST_DIR` 才运行模拟电源后端，绝不触发真实提权。debug driver 的 `alertbutton <从 0 开始的索引>` 点击当前模态框按钮；`alert.txt` 和 `alert.png` 输出按钮列表及截图。自动测试不验证物理合盖和真实管理员密码输入。
 
 `python3 scripts/test-sleep-failure-menu.py` 无窗口验证真实控制器与 `NSMenuItem`：授权失败、取消、授权成功后的打勾状态，以及运行出错时授权仍在则保持、授权失效则显示为未授权。不打开询问框、不执行真实提权或 pmset。
+
+### 不允许屏幕关闭
+
+`DisplayAwake` 独立于防合盖睡眠。状态目录有 `display-awake` 标记时开启（菜单项打勾）；开启后 App 每秒判断一次，有卡片在工作中就持有一个 `PreventUserIdleDisplaySleep` 电源断言（同 `caffeinate -d`），全部空闲时立即释放，退出时也释放。不需要授权，不碰 pmset。`python3 scripts/test-display-awake.py` 无窗口验证开关、任务开始持有断言、空闲和关闭时释放。

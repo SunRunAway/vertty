@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     let store = AppStore.shared
     var window: NSWindow!
     private lazy var sleepProtection = SleepProtection(store: store)
+    private lazy var displayAwake = DisplayAwake(store: store)
     private lazy var remoteServer = RemoteServer(store: store)
     private var hookServer: HookServer?
     private var debugSnapshot: DebugSnapshot?
@@ -72,14 +73,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
             NSApp.activate(ignoringOtherApps: true)
         }
         DispatchQueue.main.async { self.sleepProtection.start() }
+        displayAwake.start()
     }
 
     @objc private func toggleSleepProtection() { sleepProtection.toggle() }
+    @objc private func toggleDisplayAwake() { displayAwake.setEnabled(!displayAwake.enabled) }
     @objc private func toggleRemoteConnections() { remoteServer.setEnabled(!remoteServer.enabled) }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         if menuItem.action == #selector(toggleSidebar) {
             menuItem.title = store.sidebarVisible ? String(localized: "Hide Sidebar") : String(localized: "Show Sidebar")
+        } else if menuItem.action == #selector(toggleDisplayAwake) {
+            menuItem.state = displayAwake.enabled ? .on : .off
         } else if menuItem.action == #selector(toggleRemoteConnections) {
             menuItem.state = remoteServer.enabled ? .on : .off
         } else if menuItem.action == #selector(toggleShell) {
@@ -136,6 +141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
 
     func applicationWillTerminate(_ notification: Notification) {
         sleepProtection.stop()
+        displayAwake.stop()
         store.save()
         unlink(AppPaths.hookSocket)
     }
@@ -159,6 +165,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         let sleepItem = item("Closed-Lid Sleep Protection While Tasks Run: Not Authorized…", #selector(toggleSleepProtection), "")
         sleepProtection.menuItem = sleepItem
         appMenu.addItem(sleepItem)
+        appMenu.addItem(item("Don’t Let the Display Turn Off", #selector(toggleDisplayAwake), ""))
         appMenu.addItem(item("Allow Remote Connections", #selector(toggleRemoteConnections), ""))
         for info in remoteInfoItems { appMenu.addItem(info) }
         appMenu.delegate = self
