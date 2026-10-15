@@ -104,10 +104,10 @@ public enum RelativeTime {
     public static func short(_ date: Date) -> String {
         let s = Date().timeIntervalSince(date)
         switch s {
-        case ..<60: return String(localized: "now", bundle: .module)
-        case ..<3600: return String(localized: "\(Int(s / 60))m", bundle: .module)
-        case ..<86400: return String(localized: "\(Int(s / 3600))h", bundle: .module)
-        case ..<(86400 * 30): return String(localized: "\(Int(s / 86400))d", bundle: .module)
+        case ..<60: return String(localized: "now", bundle: .vhosttyUIResources)
+        case ..<3600: return String(localized: "\(Int(s / 60))m", bundle: .vhosttyUIResources)
+        case ..<86400: return String(localized: "\(Int(s / 3600))h", bundle: .vhosttyUIResources)
+        case ..<(86400 * 30): return String(localized: "\(Int(s / 86400))d", bundle: .vhosttyUIResources)
         default:
             let f = DateFormatter()
             f.dateFormat = "M/d"

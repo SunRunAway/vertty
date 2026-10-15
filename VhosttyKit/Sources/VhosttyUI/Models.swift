@@ -45,8 +45,8 @@ public enum AgentKind: String, Codable, CaseIterable, Identifiable {
     public var name: String { self == .claude ? "Claude" : "Codex" }
 
     public var newSessionTitle: String {
-        self == .claude ? String(localized: "New Claude Session", bundle: .module)
-            : String(localized: "New Codex Session", bundle: .module)
+        self == .claude ? String(localized: "New Claude Session", bundle: .vhosttyUIResources)
+            : String(localized: "New Codex Session", bundle: .vhosttyUIResources)
     }
 }
 

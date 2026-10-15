@@ -19,12 +19,12 @@ public struct SidebarView<Store: SidebarStore, Header: View>: View {
             header
 
             HStack(spacing: 6) {
-                Text("Projects", bundle: .module)
+                Text("Projects", bundle: .vhosttyUIResources)
                     .font(.ui(13, weight: .semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
                 if store.features.contains(.manageProjects) {
-                    IconButton(systemName: "plus", help: Text("Add Project (⇧⌘O)", bundle: .module)) { store.addProject() }
+                    IconButton(systemName: "plus", help: Text("Add Project (⇧⌘O)", bundle: .vhosttyUIResources)) { store.addProject() }
                 }
             }
             .padding(.leading, 16)
@@ -39,7 +39,7 @@ public struct SidebarView<Store: SidebarStore, Header: View>: View {
                     if store.projects.isEmpty && store.projectsLoaded {
                         if store.features.contains(.manageProjects) {
                             Button { store.addProject() } label: {
-                                Label { Text("Add Your First Project…", bundle: .module) } icon: { Image(systemName: "folder.badge.plus") }
+                                Label { Text("Add Your First Project…", bundle: .vhosttyUIResources) } icon: { Image(systemName: "folder.badge.plus") }
                                     .font(.ui(13))
                                     .padding(.horizontal, 10)
                                     .padding(.vertical, 8)
@@ -48,7 +48,7 @@ public struct SidebarView<Store: SidebarStore, Header: View>: View {
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 8)
                         } else {
-                            Text("No projects on that computer yet. Add them there.", bundle: .module)
+                            Text("No projects on that computer yet. Add them there.", bundle: .vhosttyUIResources)
                                 .font(.ui(12.5))
                                 .foregroundStyle(.tertiary)
                                 .padding(.horizontal, 16)
@@ -114,7 +114,7 @@ private struct ProjectSection<Store: SidebarStore>: View {
                             Button {
                                 store.showMoreHistory(project)
                             } label: {
-                                Text("Show More", bundle: .module)
+                                Text("Show More", bundle: .vhosttyUIResources)
                                     .font(.ui(12.5))
                                     .foregroundStyle(.tertiary)
                                     .padding(.leading, 16)
@@ -129,14 +129,14 @@ private struct ProjectSection<Store: SidebarStore>: View {
                     .padding(.top, open.isEmpty ? 0 : 4)
                 }
                 if searching && open.isEmpty && closed.isEmpty {
-                    Text("No Matching Sessions", bundle: .module)
+                    Text("No Matching Sessions", bundle: .vhosttyUIResources)
                         .font(.ui(12.5))
                         .foregroundStyle(.tertiary)
                         .padding(.leading, 16)
                         .padding(.vertical, 5)
                 } else if query == nil && open.isEmpty && closed.isEmpty {
                     Button { store.newSession(in: project, kind: nil) } label: {
-                        Label { Text("New Session", bundle: .module) } icon: { Image(systemName: "plus") }
+                        Label { Text("New Session", bundle: .vhosttyUIResources) } icon: { Image(systemName: "plus") }
                             .font(.ui(12.5))
                             .foregroundStyle(.tertiary)
                             .padding(.leading, 16)
@@ -214,12 +214,12 @@ private struct ProjectRow<Store: SidebarStore>: View {
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
                 .padding(.trailing, 6)
-                .help(Text("\(n) unread", bundle: .module))
+                .help(Text("\(n) unread", bundle: .vhosttyUIResources))
         }
     }
 
     private var searchButton: some View {
-        IconButton(systemName: "magnifyingglass", help: Text("Search Sessions", bundle: .module)) {
+        IconButton(systemName: "magnifyingglass", help: Text("Search Sessions", bundle: .vhosttyUIResources)) {
             if store.query(for: project) != nil { store.closeSearch(project) } else { store.openSearch(project) }
         }
     }
@@ -234,9 +234,9 @@ private struct ProjectRow<Store: SidebarStore>: View {
     @ViewBuilder
     private var projectMenu: some View {
         newSessionButtons
-        Button { store.openSearch(project) } label: { Text("Search Sessions", bundle: .module) }
+        Button { store.openSearch(project) } label: { Text("Search Sessions", bundle: .vhosttyUIResources) }
         if store.features.contains(.schedules) {
-            Button { store.newScheduledTask(in: project) } label: { Text("New Scheduled Task…", bundle: .module) }
+            Button { store.newScheduledTask(in: project) } label: { Text("New Scheduled Task…", bundle: .vhosttyUIResources) }
         }
         if store.features.contains(.defaultKindSetting) {
             Menu {
@@ -245,19 +245,19 @@ private struct ProjectRow<Store: SidebarStore>: View {
                         get: { store.defaultKind(project) == kind },
                         set: { if $0 { store.setDefaultKind(kind, for: project) } }))
                 }
-            } label: { Text("Set Default Session", bundle: .module) }
+            } label: { Text("Set Default Session", bundle: .vhosttyUIResources) }
         }
         if store.features.contains(.localFiles) {
             Divider()
-            Button { Platform.reveal(project.path) } label: { Text("Show in Finder", bundle: .module) }
-            Button { Platform.copy(project.path) } label: { Text("Copy Path", bundle: .module) }
+            Button { Platform.reveal(project.path) } label: { Text("Show in Finder", bundle: .vhosttyUIResources) }
+            Button { Platform.copy(project.path) } label: { Text("Copy Path", bundle: .vhosttyUIResources) }
         }
         if store.features.contains(.manageProjects) {
             Divider()
-            Button { store.renameProject(project) } label: { Text("Rename…", bundle: .module) }
-            Button { store.changeProjectDirectory(project) } label: { Text("Change Directory…", bundle: .module) }
+            Button { store.renameProject(project) } label: { Text("Rename…", bundle: .vhosttyUIResources) }
+            Button { store.changeProjectDirectory(project) } label: { Text("Change Directory…", bundle: .vhosttyUIResources) }
             Divider()
-            Button { store.removeProject(project) } label: { Text("Remove Project…", bundle: .module) }
+            Button { store.removeProject(project) } label: { Text("Remove Project…", bundle: .vhosttyUIResources) }
         }
     }
 }
@@ -276,7 +276,7 @@ private struct SessionSearchField<Store: SidebarStore>: View {
             TextField(text: Binding(
                 get: { store.query(for: project) ?? "" },
                 set: { store.setSearchQuery($0, for: project) }
-            )) { Text("Title, Prompt or Session ID", bundle: .module) }
+            )) { Text("Title, Prompt or Session ID", bundle: .vhosttyUIResources) }
             .textFieldStyle(.plain)
             .font(.ui(12.5))
             .focused($focused)
@@ -290,7 +290,7 @@ private struct SessionSearchField<Store: SidebarStore>: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(Text("Close Search", bundle: .module))
+            .help(Text("Close Search", bundle: .vhosttyUIResources))
         }
         .padding(.horizontal, 8)
         .frame(height: Touch.row(26))
@@ -336,7 +336,7 @@ private struct HistoryRow<Store: SidebarStore>: View {
         .contentShape(Rectangle())
         .onHover { hover = $0 }
         .onTapGesture { store.resumeSession(summary, in: project) }
-        .help(Text("Resume \(summary.kind.name) session: \(summary.title)", bundle: .module))
+        .help(Text("Resume \(summary.kind.name) session: \(summary.title)", bundle: .vhosttyUIResources))
     }
 }
 

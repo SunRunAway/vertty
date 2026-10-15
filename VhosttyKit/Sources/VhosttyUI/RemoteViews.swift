@@ -33,17 +33,17 @@ public struct RemoteWorkspace<Terminal: View>: View {
             #endif
         }
         .preferredColorScheme(.dark)
-        .alert(Text("Close “\(store.confirmingClose?.title ?? "")”?", bundle: .module),
+        .alert(Text("Close “\(store.confirmingClose?.title ?? "")”?", bundle: .vhosttyUIResources),
                isPresented: Binding(get: { store.confirmingClose != nil }, set: { if !$0 { store.confirmingClose = nil } }),
                presenting: store.confirmingClose) { card in
-            Button(role: .destructive) { store.close(card, confirmed: true) } label: { Text("Close", bundle: .module) }
-            Button(role: .cancel) {} label: { Text("Cancel", bundle: .module) }
+            Button(role: .destructive) { store.close(card, confirmed: true) } label: { Text("Close", bundle: .vhosttyUIResources) }
+            Button(role: .cancel) {} label: { Text("Cancel", bundle: .vhosttyUIResources) }
         } message: { card in
-            Text("\(card.kind.name) is still running on the computer. Closing will end it. The history is kept and can be resumed later.", bundle: .module)
+            Text("\(card.kind.name) is still running on the computer. Closing will end it. The history is kept and can be resumed later.", bundle: .vhosttyUIResources)
         }
-        .alert(Text("Couldn't do that on the computer", bundle: .module),
+        .alert(Text("Couldn't do that on the computer", bundle: .vhosttyUIResources),
                isPresented: Binding(get: { store.failure != nil }, set: { if !$0 { store.failure = nil } })) {
-            Button(role: .cancel) {} label: { Text("OK", bundle: .module) }
+            Button(role: .cancel) {} label: { Text("OK", bundle: .vhosttyUIResources) }
         } message: {
             Text(store.failure ?? "")
         }
@@ -71,7 +71,7 @@ public struct RemoteWorkspace<Terminal: View>: View {
                 if let id = store.selectedCardID {
                     terminal(id)
                 } else {
-                    Text(store.allCards.isEmpty ? "Start a session from the sidebar." : "Choose a session in the sidebar.", bundle: .module)
+                    Text(store.allCards.isEmpty ? "Start a session from the sidebar." : "Choose a session in the sidebar.", bundle: .vhosttyUIResources)
                         .font(.ui(13))
                         .foregroundStyle(.tertiary)
                 }
@@ -134,7 +134,7 @@ public struct RemoteBadge: View {
                 .font(.ui(13))
                 .foregroundStyle(Self.tint)
             VStack(alignment: .leading, spacing: 1) {
-                Text("Remote", bundle: .module)
+                Text("Remote", bundle: .vhosttyUIResources)
                     .font(.ui(10.5, weight: .semibold))
                     .foregroundStyle(Self.tint)
                 Text(store.serverName)
@@ -145,9 +145,9 @@ public struct RemoteBadge: View {
             Circle()
                 .fill(store.client.status == .connected ? Color.green : Color.orange)
                 .frame(width: Touch.size(7), height: Touch.size(7))
-                .help(store.client.status == .connected ? Text("Connected", bundle: .module) : Text("Not connected", bundle: .module))
+                .help(store.client.status == .connected ? Text("Connected", bundle: .vhosttyUIResources) : Text("Not connected", bundle: .vhosttyUIResources))
             if let onDisconnect {
-                IconButton(systemName: "power", help: Text("Disconnect", bundle: .module), action: onDisconnect)
+                IconButton(systemName: "power", help: Text("Disconnect", bundle: .vhosttyUIResources), action: onDisconnect)
             }
         }
         .padding(.horizontal, 10)
@@ -173,26 +173,26 @@ public struct RemoteStatusOverlay: View {
             switch store.client.status {
             case .connecting:
                 ProgressView().controlSize(.small)
-                Text("Connecting…", bundle: .module)
+                Text("Connecting…", bundle: .vhosttyUIResources)
             case .reconnecting:
                 ProgressView().controlSize(.small)
-                Text("Connection lost. Reconnecting…", bundle: .module)
+                Text("Connection lost. Reconnecting…", bundle: .vhosttyUIResources)
             case .replaced:
                 Image(systemName: "iphone.and.arrow.forward").font(.ui(28))
-                Text("Connected on another device", bundle: .module)
-                Button { store.client.connect() } label: { Text("Connect Here", bundle: .module) }
+                Text("Connected on another device", bundle: .vhosttyUIResources)
+                Button { store.client.connect() } label: { Text("Connect Here", bundle: .vhosttyUIResources) }
             case .failed(let message):
                 Image(systemName: "exclamationmark.triangle").font(.ui(28))
                 Text(message).multilineTextAlignment(.center).frame(maxWidth: 380)
                 HStack {
                     if let onDisconnect {
-                        Button(action: onDisconnect) { Text("Change Address", bundle: .module) }
+                        Button(action: onDisconnect) { Text("Change Address", bundle: .vhosttyUIResources) }
                     }
-                    Button { store.client.connect() } label: { Text("Try Again", bundle: .module) }
+                    Button { store.client.connect() } label: { Text("Try Again", bundle: .vhosttyUIResources) }
                 }
             case .closed:
-                Text("Disconnected", bundle: .module)
-                Button { store.client.connect() } label: { Text("Connect", bundle: .module) }
+                Text("Disconnected", bundle: .vhosttyUIResources)
+                Button { store.client.connect() } label: { Text("Connect", bundle: .vhosttyUIResources) }
             case .connected:
                 EmptyView()
             }

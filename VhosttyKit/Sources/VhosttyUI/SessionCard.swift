@@ -20,7 +20,7 @@ struct SessionCard<Store: SidebarStore>: View {
                     Image(systemName: "clock")
                         .font(.ui(9.5, weight: .medium))
                         .foregroundStyle(.secondary)
-                        .help(Text("Scheduled task: \(task)", bundle: .module))
+                        .help(Text("Scheduled task: \(task)", bundle: .vhosttyUIResources))
                 }
                 Text(card.title)
                     .font(.ui(13, weight: .semibold))
@@ -35,9 +35,9 @@ struct SessionCard<Store: SidebarStore>: View {
             }
             .frame(height: Touch.size(18))
 
-            infoLine("arrow.triangle.branch", card.branch, placeholder: String(localized: "No branch info", bundle: .module))
+            infoLine("arrow.triangle.branch", card.branch, placeholder: String(localized: "No branch info", bundle: .vhosttyUIResources))
             infoLine("square.stack.3d.up", card.worktree,
-                     placeholder: card.branch == nil ? "—" : String(localized: "Main worktree", bundle: .module),
+                     placeholder: card.branch == nil ? "—" : String(localized: "Main worktree", bundle: .vhosttyUIResources),
                      tint: card.worktree == nil ? .secondary : Color(red: 0.72, green: 0.55, blue: 1.0))
             prLine
         }
@@ -72,7 +72,7 @@ struct SessionCard<Store: SidebarStore>: View {
         .buttonStyle(.plain)
         .foregroundStyle(.secondary)
         .opacity(hover ? 1 : 0)
-        .help(Text("Close (⌘W)", bundle: .module))
+        .help(Text("Close (⌘W)", bundle: .vhosttyUIResources))
     }
 
     private func infoLine(_ icon: String, _ text: String?, placeholder: String, tint: Color = .secondary) -> some View {
@@ -101,7 +101,7 @@ struct SessionCard<Store: SidebarStore>: View {
                     .font(.ui(11.5, weight: .semibold, design: .monospaced))
                     .foregroundStyle(prColor)
                 if let state = card.prState, state != "OPEN" {
-                    Text(state == "MERGED" ? String(localized: "Merged", bundle: .module) : String(localized: "Closed", bundle: .module))
+                    Text(state == "MERGED" ? String(localized: "Merged", bundle: .vhosttyUIResources) : String(localized: "Closed", bundle: .vhosttyUIResources))
                         .font(.ui(10.5))
                         .foregroundStyle(.tertiary)
                 }
@@ -111,7 +111,7 @@ struct SessionCard<Store: SidebarStore>: View {
                         .foregroundStyle(.tertiary)
                 }
             } else {
-                Text("No PR", bundle: .module)
+                Text("No PR", bundle: .vhosttyUIResources)
                     .font(.ui(11.5))
                     .foregroundStyle(.tertiary)
             }
@@ -121,7 +121,7 @@ struct SessionCard<Store: SidebarStore>: View {
         .onTapGesture {
             if let s = card.prURL, let url = URL(string: s) { openURL(url) } else { store.select(card) }
         }
-        .help(card.prURL.map { Text("Open \($0) in Browser", bundle: .module) } ?? Text(verbatim: ""))
+        .help(card.prURL.map { Text("Open \($0) in Browser", bundle: .vhosttyUIResources) } ?? Text(verbatim: ""))
     }
 
     private var prColor: Color {
@@ -134,22 +134,22 @@ struct SessionCard<Store: SidebarStore>: View {
 
     @ViewBuilder
     private var contextMenu: some View {
-        Button { store.requestClose(card) } label: { Text("Close", bundle: .module) }
+        Button { store.requestClose(card) } label: { Text("Close", bundle: .vhosttyUIResources) }
         if store.features.contains(.closeOthers) {
-            Button { store.closeOthers(card) } label: { Text("Close Other Sessions", bundle: .module) }
+            Button { store.closeOthers(card) } label: { Text("Close Other Sessions", bundle: .vhosttyUIResources) }
         }
         Divider()
         if let s = card.prURL, let url = URL(string: s) {
-            Button { openURL(url) } label: { Text("Open PR #\(card.prNumber ?? 0) in Browser", bundle: .module) }
+            Button { openURL(url) } label: { Text("Open PR #\(card.prNumber ?? 0) in Browser", bundle: .vhosttyUIResources) }
         }
         if store.features.contains(.localFiles), let dir = store.directory(of: card) {
-            Button { Platform.reveal(dir) } label: { Text("Show Directory in Finder", bundle: .module) }
+            Button { Platform.reveal(dir) } label: { Text("Show Directory in Finder", bundle: .vhosttyUIResources) }
         }
         if !card.sessionID.isEmpty {
-            Button { Platform.copy(card.sessionID) } label: { Text("Copy Session ID", bundle: .module) }
+            Button { Platform.copy(card.sessionID) } label: { Text("Copy Session ID", bundle: .vhosttyUIResources) }
             Button {
                 Platform.copy(card.kind == .claude ? "claude --resume \(card.sessionID)" : "codex resume \(card.sessionID)")
-            } label: { Text("Copy Resume Command", bundle: .module) }
+            } label: { Text("Copy Resume Command", bundle: .vhosttyUIResources) }
         }
     }
 }
@@ -195,12 +195,12 @@ public struct StatusIndicator: View {
 
     private var statusHelp: String {
         switch status {
-        case .working: return String(localized: "\(kind.name) is working", bundle: .module)
-        case .needsInput: return String(localized: "\(kind.name) needs your input", bundle: .module)
-        case .idle: return attention ? String(localized: "\(kind.name) is done (unread)", bundle: .module) : String(localized: "Waiting for input", bundle: .module)
-        case .starting: return String(localized: "Starting", bundle: .module)
-        case .dormant: return attention ? String(localized: "Unread (click to resume)", bundle: .module) : String(localized: "Not started (click to resume)", bundle: .module)
-        case .exited: return String(localized: "\(kind.name) exited", bundle: .module)
+        case .working: return String(localized: "\(kind.name) is working", bundle: .vhosttyUIResources)
+        case .needsInput: return String(localized: "\(kind.name) needs your input", bundle: .vhosttyUIResources)
+        case .idle: return attention ? String(localized: "\(kind.name) is done (unread)", bundle: .vhosttyUIResources) : String(localized: "Waiting for input", bundle: .vhosttyUIResources)
+        case .starting: return String(localized: "Starting", bundle: .vhosttyUIResources)
+        case .dormant: return attention ? String(localized: "Unread (click to resume)", bundle: .vhosttyUIResources) : String(localized: "Not started (click to resume)", bundle: .vhosttyUIResources)
+        case .exited: return String(localized: "\(kind.name) exited", bundle: .vhosttyUIResources)
         }
     }
 }

@@ -167,7 +167,7 @@ public final class RemoteClient: ObservableObject {
         let wasConnecting = status == .connecting
         stop()
         if wasConnecting {
-            status = .failed(String(localized: "Can't reach the computer. Check the address and that remote connections are allowed in Vhostty there.", bundle: .module))
+            status = .failed(String(localized: "Can't reach the computer. Check the address and that remote connections are allowed in Vhostty there.", bundle: .vhosttyRemoteResources))
             return
         }
         guard status == .connected || status == .reconnecting else { return }

@@ -41,6 +41,9 @@ jobs:
           scripts/bundle.sh
           ditto -c -k --keepParent build/Vhostty.app build/Vhostty.zip
 
+      - name: Verify packaged app startup
+        run: python3 scripts/test-release-startup.py build/Vhostty.zip
+
       - uses: actions/upload-artifact@v4
         with:
           name: Vhostty

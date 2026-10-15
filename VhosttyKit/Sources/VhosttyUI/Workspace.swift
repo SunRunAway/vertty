@@ -95,7 +95,7 @@ public struct SidebarToggleButton<Layout: SidebarLayoutModel>: View {
 
     public var body: some View {
         IconButton(systemName: "sidebar.left",
-                   help: layout.sidebarVisible ? Text("Hide Sidebar (⌃⌘S)", bundle: .module) : Text("Show Sidebar (⌃⌘S)", bundle: .module)) {
+                   help: layout.sidebarVisible ? Text("Hide Sidebar (⌃⌘S)", bundle: .vhosttyUIResources) : Text("Show Sidebar (⌃⌘S)", bundle: .vhosttyUIResources)) {
             layout.toggleSidebar()
         }
     }

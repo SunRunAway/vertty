@@ -64,12 +64,12 @@ public struct RemoteError: Swift.Error, LocalizedError, Equatable {
 
     public var errorDescription: String? {
         switch code {
-        case .incompatibleVersion: return String(localized: "This computer runs a Vhostty version that can't be used remotely from here. Update both to the same version.", bundle: .module)
-        case .notFound: return String(localized: "It no longer exists on the computer.", bundle: .module)
-        case .resumeFailed: return String(localized: "The session can't be resumed. Its history may have been removed.", bundle: .module)
-        case .replaced: return String(localized: "Connected on another device.", bundle: .module)
-        case .unspecified where self == .disconnected: return String(localized: "The connection was lost.", bundle: .module)
-        default: return message.isEmpty ? String(localized: "Something went wrong.", bundle: .module) : message
+        case .incompatibleVersion: return String(localized: "This computer runs a Vhostty version that can't be used remotely from here. Update both to the same version.", bundle: .vhosttyRemoteResources)
+        case .notFound: return String(localized: "It no longer exists on the computer.", bundle: .vhosttyRemoteResources)
+        case .resumeFailed: return String(localized: "The session can't be resumed. Its history may have been removed.", bundle: .vhosttyRemoteResources)
+        case .replaced: return String(localized: "Connected on another device.", bundle: .vhosttyRemoteResources)
+        case .unspecified where self == .disconnected: return String(localized: "The connection was lost.", bundle: .vhosttyRemoteResources)
+        default: return message.isEmpty ? String(localized: "Something went wrong.", bundle: .vhosttyRemoteResources) : message
         }
     }
 }
