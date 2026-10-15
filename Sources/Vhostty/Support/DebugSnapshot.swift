@@ -44,7 +44,7 @@ final class DebugSnapshot {
         var targetShell = false
         for line in content.split(separator: "\n").map(String.init) {
             // Window-local points from the top left; never clicks another app.
-            if line.hasPrefix("click "), let window {
+            if line.hasPrefix("click ") || line.hasPrefix("cmdclick "), let window {
                 let parts = line.split(separator: " ")
                 if parts.count == 3, let x = Double(parts[1]), let y = Double(parts[2]),
                    let view = window.contentView {
@@ -54,11 +54,12 @@ final class DebugSnapshot {
                     window.makeKey()
                     for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
                         if let event = NSEvent.mouseEvent(
-                            with: type, location: point, modifierFlags: [],
+                            with: type, location: point, modifierFlags: line.hasPrefix("cmdclick ") ? [.command] : [],
                             timestamp: ProcessInfo.processInfo.systemUptime,
                             windowNumber: window.windowNumber, context: nil,
                             eventNumber: 0, clickCount: 1, pressure: 1) {
                             if type == .leftMouseDown {
+                                view.hitTest(local)?.mouseMoved(with: event)
                                 view.hitTest(local)?.mouseDown(with: event)
                             } else {
                                 view.hitTest(local)?.mouseUp(with: event)

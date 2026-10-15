@@ -1617,3 +1617,19 @@ index 8c1b5b8..a0142dc 100644
          self.termio_mailbox.send(msg, self.renderer_state.mutex);
          self.termio_messaged = true;
      }
+diff --git a/src/config/url.zig b/src/config/url.zig
+index e7cf860..f138712 100644
+--- a/src/config/url.zig
++++ b/src/config/url.zig
+@@ -27,3 +27,3 @@ const oni = @import("oniguruma");
+ const url_schemes =
+-    \\https?://|mailto:|ftp://|file:|ssh:|git://|ssh://|tel:|magnet:|ipfs://|ipns://|gemini://|gopher://|news:
++    \\vhostty://|https?://|mailto:|ftp://|file:|ssh:|git://|ssh://|tel:|magnet:|ipfs://|ipns://|gemini://|gopher://|news:
+ ;
+@@ -158,2 +158,6 @@ test "url regex" {
+         },
++        .{
++            .input = "[Task](vhostty://schedule/84A8794E-56AD-41B9-9AC8-4546E7111A8C)",
++            .expect = "vhostty://schedule/84A8794E-56AD-41B9-9AC8-4546E7111A8C",
++        },
+         .{

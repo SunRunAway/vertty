@@ -289,7 +289,15 @@ final class GhosttyRuntime {
             guard let ptr = u.url else { return false }
             let str = String(decoding: UnsafeRawBufferPointer(start: ptr, count: Int(u.len)), as: UTF8.self)
             let url: URL? = str.hasPrefix("/") ? URL(fileURLWithPath: str) : URL(string: str)
-            if let url { NSWorkspace.shared.open(url) }
+            if let url {
+                DispatchQueue.main.async {
+                    if ScheduleTask.id(from: url) != nil {
+                        (NSApp.delegate as? AppDelegate)?.openScheduleURL(url)
+                    } else {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+            }
 
         case GHOSTTY_ACTION_CELL_SIZE:
             guard let view else { return false }
