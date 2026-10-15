@@ -1,8 +1,19 @@
 diff --git a/build.zig b/build.zig
-index f9d861b..54311c9 100644
+index f9d861b..287b31f 100644
 --- a/build.zig
 +++ b/build.zig
-@@ -145,6 +145,13 @@ pub fn build(b: *std.Build) !void {
+@@ -116,7 +116,9 @@ pub fn build(b: *std.Build) !void {
+         );
+     };
+     libghostty_vt_shared.install(libvt_step);
+-    libghostty_vt_shared.install(b.getInstallStep());
++    // Vhostty: the iOS app links only libghostty.a, and this dylib's libc++
++    // doesn't build against the iOS SDK.
++    if (config.target.result.os.tag != .ios) libghostty_vt_shared.install(b.getInstallStep());
+ 
+     // Helpgen
+     if (config.emit_helpgen) deps.help_strings.install();
+@@ -145,6 +147,13 @@ pub fn build(b: *std.Build) !void {
          }
      }
  
@@ -16,11 +27,48 @@ index f9d861b..54311c9 100644
      // macOS only artifacts. These will error if they're initialized for
      // other targets.
      if (config.target.result.os.tag.isDarwin()) {
+diff --git a/build.zig.zon b/build.zig.zon
+index 05547bd..b1e0642 100644
+--- a/build.zig.zon
++++ b/build.zig.zon
+@@ -9,8 +9,10 @@
+ 
+         .libxev = .{
+             // mitchellh/libxev
+-            .url = "https://deps.files.ghostty.org/libxev-34fa50878aec6e5fa8f532867001ab3c36fae23e.tar.gz",
+-            .hash = "libxev-0.0.0-86vtc4IcEwCqEYxEYoN_3KXmc6A9VLcm22aVImfvecYs",
++            // Vhostty: a newer libxev whose kqueue loop handles iOS's mach
++            // ports (the bundled one panics there and the IO thread dies).
++            .url = "https://github.com/mitchellh/libxev/archive/7e7d2f2ab4700544657f8ec268715c8ef320d839.tar.gz",
++            .hash = "libxev-0.0.0-86vtcwE9EwB942iWRnaNMXHv3n0BeLAs_tVhrs5cT8cQ",
+             .lazy = true,
+         },
+         .vaxis = .{
 diff --git a/include/ghostty.h b/include/ghostty.h
-index 40ff55c..72d0fcd 100644
+index 40ff55c..249f903 100644
 --- a/include/ghostty.h
 +++ b/include/ghostty.h
-@@ -437,6 +437,11 @@ typedef enum {
+@@ -413,6 +413,19 @@ typedef struct {
+   bool rectangle;
+ } ghostty_selection_s;
+ 
++// Vhostty (from libghostty-spm): ghostty_surface_selection_viewport
++typedef struct {
++  uint32_t top_left_x;
++  uint32_t top_left_y;
++  uint32_t bottom_right_x;
++  uint32_t bottom_right_y;
++  uint32_t columns;
++  uint32_t rows;
++  bool rectangle;
++  bool top_left_clipped;
++  bool bottom_right_clipped;
++} ghostty_selection_viewport_s;
++
+ typedef struct {
+   const char* key;
+   const char* value;
+@@ -437,6 +450,11 @@ typedef enum {
    GHOSTTY_SURFACE_CONTEXT_SPLIT = 2,
  } ghostty_surface_context_e;
  
@@ -32,7 +80,7 @@ index 40ff55c..72d0fcd 100644
  typedef struct {
    ghostty_platform_e platform_tag;
    ghostty_platform_u platform;
-@@ -450,6 +455,9 @@ typedef struct {
+@@ -450,6 +468,9 @@ typedef struct {
    const char* initial_input;
    bool wait_after_command;
    ghostty_surface_context_e context;
@@ -42,7 +90,7 @@ index 40ff55c..72d0fcd 100644
  } ghostty_surface_config_s;
  
  typedef struct {
-@@ -1080,6 +1088,11 @@ ghostty_surface_config_s ghostty_surface_inherited_config(ghostty_surface_t, gho
+@@ -1080,6 +1101,11 @@ ghostty_surface_config_s ghostty_surface_inherited_config(ghostty_surface_t, gho
  void ghostty_surface_update_config(ghostty_surface_t, ghostty_config_t);
  bool ghostty_surface_needs_confirm_quit(ghostty_surface_t);
  bool ghostty_surface_process_exited(ghostty_surface_t);
@@ -54,6 +102,67 @@ index 40ff55c..72d0fcd 100644
  void ghostty_surface_refresh(ghostty_surface_t);
  void ghostty_surface_draw(ghostty_surface_t);
  void ghostty_surface_set_content_scale(ghostty_surface_t, double, double);
+@@ -1127,6 +1153,8 @@ void ghostty_surface_complete_clipboard_request(ghostty_surface_t,
+                                                 bool);
+ bool ghostty_surface_has_selection(ghostty_surface_t);
+ bool ghostty_surface_read_selection(ghostty_surface_t, ghostty_text_s*);
++bool ghostty_surface_selection_viewport(ghostty_surface_t,
++                                       ghostty_selection_viewport_s*);
+ bool ghostty_surface_read_text(ghostty_surface_t,
+                                ghostty_selection_s,
+                                ghostty_text_s*);
+diff --git a/pkg/macos/iosurface/iosurface.zig b/pkg/macos/iosurface/iosurface.zig
+index 37f8712..380d360 100644
+--- a/pkg/macos/iosurface/iosurface.zig
++++ b/pkg/macos/iosurface/iosurface.zig
+@@ -20,6 +20,10 @@ pub const IOSurface = opaque {
+     };
+ 
+     pub fn init(properties: Properties) Allocator.Error!*IOSurface {
++        // Ensure row stride is 64-byte aligned for Metal texture compatibility.
++        const aligned_stride: c_int = @intCast(
++            (properties.width * properties.bytes_per_element + 63) & ~@as(c_int, 63),
++        );
+         var w = try foundation.Number.create(.int, &properties.width);
+         defer w.release();
+         var h = try foundation.Number.create(.int, &properties.height);
+@@ -29,14 +33,18 @@ pub const IOSurface = opaque {
+         var bpe = try foundation.Number.create(.int, &properties.bytes_per_element);
+         defer bpe.release();
+ 
++        var stride_num = try foundation.Number.create(.int, &aligned_stride);
++        defer stride_num.release();
++
+         var properties_dict = try foundation.Dictionary.create(
+             &[_]?*const anyopaque{
+                 c.kIOSurfaceWidth,
+                 c.kIOSurfaceHeight,
+                 c.kIOSurfacePixelFormat,
+                 c.kIOSurfaceBytesPerElement,
++                c.kIOSurfaceBytesPerRow,
+             },
+-            &[_]?*const anyopaque{ w, h, pf, bpe },
++            &[_]?*const anyopaque{ w, h, pf, bpe, stride_num },
+         );
+         defer properties_dict.release();
+ 
+@@ -84,14 +92,14 @@ pub const IOSurface = opaque {
+     }
+ 
+     pub inline fn lock(self: *IOSurface) void {
+-        c.IOSurfaceLock(
++        _ = c.IOSurfaceLock(
+             @ptrCast(self),
+             0,
+             null,
+         );
+     }
+     pub inline fn unlock(self: *IOSurface) void {
+-        c.IOSurfaceUnlock(
++        _ = c.IOSurfaceUnlock(
+             @ptrCast(self),
+             0,
+             null,
 diff --git a/src/Surface.zig b/src/Surface.zig
 index 4d66622..c90edc9 100644
 --- a/src/Surface.zig
@@ -175,7 +284,7 @@ index 4d66622..c90edc9 100644
  fn balancePaddingIfNeeded(self: *Surface) void {
      if (!self.config.window_padding_balance) return;
 diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
-index 0d5a4f8..e325f59 100644
+index 0d5a4f8..e468c4f 100644
 --- a/src/apprt/embedded.zig
 +++ b/src/apprt/embedded.zig
 @@ -18,6 +18,7 @@ const terminal = @import("../terminal/main.zig");
@@ -255,7 +364,27 @@ index 0d5a4f8..e325f59 100644
      pub fn rtApp(self: *const Surface) *App {
          return self.app;
      }
-@@ -1598,6 +1618,77 @@ pub const CAPI = struct {
+@@ -1385,6 +1405,19 @@ pub const CAPI = struct {
+         }
+     };
+ 
++    // ghostty_selection_viewport_s (Vhostty, from libghostty-spm)
++    const SelectionViewport = extern struct {
++        top_left_x: u32,
++        top_left_y: u32,
++        bottom_right_x: u32,
++        bottom_right_y: u32,
++        columns: u32,
++        rows: u32,
++        rectangle: bool,
++        top_left_clipped: bool,
++        bottom_right_clipped: bool,
++    };
++
+     // Reference the conditional exports based on target platform
+     // so they're included in the C API.
+     comptime {
+@@ -1598,6 +1631,77 @@ pub const CAPI = struct {
          return surface.core_surface.child_exited;
      }
  
@@ -333,6 +462,68 @@ index 0d5a4f8..e325f59 100644
      /// Returns true if the surface has a selection.
      export fn ghostty_surface_has_selection(surface: *Surface) bool {
          return surface.core_surface.hasSelection();
+@@ -1620,6 +1724,61 @@ pub const CAPI = struct {
+         return readTextLocked(surface, core_sel, result);
+     }
+ 
++    /// Vhostty (from libghostty-spm): the user selection's corners as
++    /// viewport cells, in the terminal's own column and row count, for the
++    /// iOS touch selection. False when there is no selection or none of it
++    /// is in the viewport.
++    export fn ghostty_surface_selection_viewport(
++        surface: *Surface,
++        result: *SelectionViewport,
++    ) bool {
++        const core_surface = &surface.core_surface;
++        core_surface.renderer_state.mutex.lock();
++        defer core_surface.renderer_state.mutex.unlock();
++
++        const screen = core_surface.io.terminal.screens.active;
++        const sel = screen.selection orelse return false;
++        const pages = &screen.pages;
++        const vp_tl = pages.getTopLeft(.viewport);
++        const vp_br = pages.getBottomRight(.viewport) orelse return false;
++        const tl_pin = sel.topLeft(screen);
++        const br_pin = sel.bottomRight(screen);
++        if (br_pin.before(vp_tl) or vp_br.before(tl_pin)) return false;
++
++        const cols: u32 = pages.cols;
++        const rows: u32 = pages.rows;
++        if (cols == 0 or rows == 0) return false;
++        const last_col = cols - 1;
++
++        // A corner above or below the viewport is clipped to its edge. A
++        // rectangle keeps its column there; a linear selection runs to the
++        // viewport's first or last cell.
++        const tl_pt: ?terminal.point.Coordinate = if (pages.pointFromPin(.viewport, tl_pin)) |pt|
++            if (pt.coord().y < rows) pt.coord() else null
++        else
++            null;
++        const br_pt: ?terminal.point.Coordinate = if (pages.pointFromPin(.viewport, br_pin)) |pt|
++            if (pt.coord().y < rows) pt.coord() else null
++        else
++            null;
++
++        const tl_x: u32 = if (tl_pt) |pt| pt.x else if (sel.rectangle) tl_pin.x else 0;
++        const br_x: u32 = if (br_pt) |pt| pt.x else if (sel.rectangle) br_pin.x else last_col;
++
++        result.* = .{
++            .top_left_x = @min(tl_x, last_col),
++            .top_left_y = if (tl_pt) |pt| pt.y else 0,
++            .bottom_right_x = @min(br_x, last_col),
++            .bottom_right_y = if (br_pt) |pt| pt.y else rows - 1,
++            .columns = cols,
++            .rows = rows,
++            .rectangle = sel.rectangle,
++            .top_left_clipped = tl_pt == null,
++            .bottom_right_clipped = br_pt == null,
++        };
++        return true;
++    }
++
+     /// Read some arbitrary text from the surface.
+     ///
+     /// This is an expensive operation so it shouldn't be called too
 diff --git a/src/build/LibtoolStep.zig b/src/build/LibtoolStep.zig
 index d2b5149..9c57a79 100644
 --- a/src/build/LibtoolStep.zig
@@ -384,6 +575,143 @@ index 9276c99..bb3bd48 100644
          });
      }
  
+diff --git a/src/font/shaper/coretext.zig b/src/font/shaper/coretext.zig
+index 5a8a6cc..2aef758 100644
+--- a/src/font/shaper/coretext.zig
++++ b/src/font/shaper/coretext.zig
+@@ -75,8 +75,8 @@ pub const Shaper = struct {
+     /// Dedicated thread for releasing CoreFoundation objects. Some objects,
+     /// such as those produced by CoreText, have excessively slow release
+     /// callback logic.
+-    cf_release_thread: *CFReleaseThread,
+-    cf_release_thr: std.Thread,
++    cf_release_thread: ?*CFReleaseThread,
++    cf_release_thr: ?std.Thread,
+ 
+     const CellBuf = std.ArrayListUnmanaged(font.shape.Cell);
+     const CodepointList = std.ArrayListUnmanaged(Codepoint);
+@@ -201,19 +201,21 @@ pub const Shaper = struct {
+         };
+         errdefer typesetter_attr_dict.release();
+ 
+-        // Create the CF release thread.
+-        var cf_release_thread = try alloc.create(CFReleaseThread);
+-        errdefer alloc.destroy(cf_release_thread);
+-        cf_release_thread.* = try .init(alloc);
+-        errdefer cf_release_thread.deinit();
+-
+-        // Start the CF release thread.
+-        var cf_release_thr = try std.Thread.spawn(
+-            .{},
+-            CFReleaseThread.threadMain,
+-            .{cf_release_thread},
+-        );
+-        cf_release_thr.setName("cf_release") catch {};
++        // On iOS the kqueue-based event loop used by the release thread
++        // crashes due to Mach port sandbox restrictions. Skip it entirely
++        // and fall through to synchronous release in endFrame.
++        var cf_release_thread: ?*CFReleaseThread = null;
++        var cf_release_thr: ?std.Thread = null;
++        if (comptime builtin.os.tag != .ios) {
++            const thr_obj = try alloc.create(CFReleaseThread);
++            errdefer alloc.destroy(thr_obj);
++            thr_obj.* = try .init(alloc);
++            errdefer thr_obj.deinit();
++            const thr = try std.Thread.spawn(.{}, CFReleaseThread.threadMain, .{thr_obj});
++            thr.setName("cf_release") catch {};
++            cf_release_thread = thr_obj;
++            cf_release_thr = thr;
++        }
+ 
+         return .{
+             .alloc = alloc,
+@@ -257,14 +259,14 @@ pub const Shaper = struct {
+         }
+         self.cf_release_pool.deinit(self.alloc);
+ 
+-        // Stop the CF release thread
+-        {
+-            self.cf_release_thread.stop.notify() catch |err|
++        // Stop the CF release thread (nil on iOS)
++        if (self.cf_release_thread) |thr_obj| {
++            thr_obj.stop.notify() catch |err|
+                 log.err("error notifying cf release thread to stop, may stall err={}", .{err});
+-            self.cf_release_thr.join();
++            self.cf_release_thr.?.join();
++            thr_obj.deinit();
++            self.alloc.destroy(thr_obj);
+         }
+-        self.cf_release_thread.deinit();
+-        self.alloc.destroy(self.cf_release_thread);
+     }
+ 
+     pub fn endFrame(self: *Shaper) void {
+@@ -279,20 +281,21 @@ pub const Shaper = struct {
+             return;
+         };
+ 
+-        // Send the items. If the send succeeds then we wake up the
+-        // thread to process the items. If the send fails then do a manual
+-        // cleanup.
+-        if (self.cf_release_thread.mailbox.push(.{ .release = .{
+-            .refs = items,
+-            .alloc = self.alloc,
+-        } }, .{ .forever = {} }) != 0) {
+-            self.cf_release_thread.wakeup.notify() catch |err| {
+-                log.warn(
+-                    "error notifying cf release thread to wake up, may stall err={}",
+-                    .{err},
+-                );
+-            };
+-            return;
++        // Offload to the background release thread when available.
++        // On iOS cf_release_thread is nil, so we fall through to sync release.
++        if (self.cf_release_thread) |thr_obj| {
++            if (thr_obj.mailbox.push(.{ .release = .{
++                .refs = items,
++                .alloc = self.alloc,
++            } }, .{ .forever = {} }) != 0) {
++                thr_obj.wakeup.notify() catch |err| {
++                    log.warn(
++                        "error notifying cf release thread to wake up, may stall err={}",
++                        .{err},
++                    );
++                };
++                return;
++            }
+         }
+ 
+         for (items) |ref| macos.foundation.CFRelease(ref);
+diff --git a/src/renderer/Metal.zig b/src/renderer/Metal.zig
+index 6c7432d..f2ae266 100644
+--- a/src/renderer/Metal.zig
++++ b/src/renderer/Metal.zig
+@@ -167,6 +167,12 @@ pub fn loopEnter(self: *Metal) void {
+         @ptrCast(&displayCallback),
+         @ptrCast(renderer),
+     );
++
++    // iOS: sublayer bounds are already set before the callback is wired up,
++    // so no display message fires automatically. Kick the first frame.
++    if (comptime builtin.os.tag == .ios) {
++        self.layer.layer.msgSend(void, objc.sel("setNeedsDisplay"), .{});
++    }
+ }
+ 
+ fn displayCallback(renderer: *Renderer) align(8) void {
+@@ -251,6 +257,12 @@ pub fn initTarget(self: *const Metal, width: usize, height: usize) !Target {
+ 
+ /// Present the provided target.
+ pub inline fn present(self: *Metal, target: Target, sync: bool) !void {
++    // iOS: always present synchronously — the render loop already runs on
++    // the main thread, so the async GCD hop is unnecessary overhead.
++    if (comptime builtin.os.tag == .ios) {
++        try self.layer.setSurface(target.surface);
++        return;
++    }
+     if (sync) {
+         self.layer.setSurfaceSync(target.surface);
+     } else {
 diff --git a/src/renderer/generic.zig b/src/renderer/generic.zig
 index ff632f6..ca4e0bb 100644
 --- a/src/renderer/generic.zig
@@ -400,6 +728,73 @@ index ff632f6..ca4e0bb 100644
                  else
                      null,
                  else => null,
+diff --git a/src/renderer/metal/IOSurfaceLayer.zig b/src/renderer/metal/IOSurfaceLayer.zig
+index 34fbfbe..b8651d3 100644
+--- a/src/renderer/metal/IOSurfaceLayer.zig
++++ b/src/renderer/metal/IOSurfaceLayer.zig
+@@ -3,14 +3,13 @@
+ const IOSurfaceLayer = @This();
+ 
+ const std = @import("std");
++const builtin = @import("builtin");
+ const Allocator = std.mem.Allocator;
+ const objc = @import("objc");
+ const macos = @import("macos");
+ 
+ const IOSurface = macos.iosurface.IOSurface;
+ 
+-const log = std.log.scoped(.IOSurfaceLayer);
+-
+ /// We subclass CALayer with a custom display handler, we only need
+ /// to make the subclass once, and then we can use it as a singleton.
+ var Subclass: ?objc.Class = null;
+@@ -32,6 +31,7 @@ pub fn init() !IOSurfaceLayer {
+     // The layer gravity is set to top-left so that the contents aren't
+     // stretched during resize operations before a new frame has been drawn.
+     layer.setProperty("contentsGravity", macos.animation.kCAGravityTopLeft);
++    layer.setProperty("opaque", true);
+ 
+     layer.setInstanceVariable("display_cb", .{ .value = null });
+     layer.setInstanceVariable("display_ctx", .{ .value = null });
+@@ -107,13 +107,13 @@ fn setSurfaceCallback(
+     const scale = layer.getProperty(f64, "contentsScale");
+     const width: usize = @intFromFloat(bounds.size.width * scale);
+     const height: usize = @intFromFloat(bounds.size.height * scale);
+-    if (width != surface.getWidth() or height != surface.getHeight()) {
+-        log.debug(
+-            "setSurfaceCallback(): surface is wrong size for layer, discarding. surface = {d}x{d}, layer = {d}x{d}",
+-            .{ surface.getWidth(), surface.getHeight(), width, height },
+-        );
+-        return;
+-    }
++    const sw = surface.getWidth();
++    const sh = surface.getHeight();
++    const dw: usize = if (width > sw) width - sw else sw - width;
++    const dh: usize = if (height > sh) height - sh else sh - height;
++    // iOS UIKit rounding can produce ±1px discrepancy; macOS must match exactly
++    const max_drift: usize = if (comptime builtin.os.tag == .ios) 1 else 0;
++    if (dw > max_drift or dh > max_drift) return;
+ 
+     layer.setProperty("contents", surface);
+ }
+@@ -138,11 +138,15 @@ pub fn setDisplayCallback(
+ fn getSubclass() error{ObjCFailed}!objc.Class {
+     if (Subclass) |c| return c;
+ 
+-    const CALayer =
++    const parent_cls = if (comptime builtin.os.tag == .ios)
++        // CAIOSurfaceLayer provides native zero-copy IOSurface compositing
++        objc.getClass("CAIOSurfaceLayer") orelse
++            objc.getClass("CALayer") orelse return error.ObjCFailed
++    else
+         objc.getClass("CALayer") orelse return error.ObjCFailed;
+ 
+     var subclass =
+-        objc.allocateClassPair(CALayer, "IOSurfaceLayer") orelse return error.ObjCFailed;
++        objc.allocateClassPair(parent_cls, "IOSurfaceLayer") orelse return error.ObjCFailed;
+     errdefer objc.disposeClassPair(subclass);
+ 
+     if (!subclass.addIvar("display_cb")) return error.ObjCFailed;
 diff --git a/src/renderer/metal/shaders.zig b/src/renderer/metal/shaders.zig
 index 0be0235..408e021 100644
 --- a/src/renderer/metal/shaders.zig
@@ -605,16 +1000,20 @@ index 0000000..b7d8c53
 +    }
 +};
 diff --git a/src/termio/Termio.zig b/src/termio/Termio.zig
-index dcd0d8c..883f974 100644
+index dcd0d8c..81f271b 100644
 --- a/src/termio/Termio.zig
 +++ b/src/termio/Termio.zig
-@@ -70,6 +70,14 @@ last_cursor_reset: ?std.time.Instant = null,
+@@ -70,6 +70,18 @@ last_cursor_reset: ?std.time.Instant = null,
  /// to keep track of any state or if its already been freed.
  thread_enter_state: ?*ThreadEnterState = null,
  
 +/// Vhostty: mirrors the terminal to a remote client (see termio.remote).
 +/// Only accessed with the renderer state mutex held.
 +tap: ?termio.remote.Tap = null,
++
++/// Vhostty: the tap's first snapshot is still to come (see setTap); until
++/// then it gets no output, which that snapshot will contain.
++tap_pending: bool = false,
 +
 +/// Vhostty: this terminal mirrors a program another terminal already
 +/// answers (host-managed backend), so it never writes responses.
@@ -623,7 +1022,7 @@ index dcd0d8c..883f974 100644
  /// The state we need to keep around only until we enter the IO
  /// thread. Then we can throw it all away.
  const ThreadEnterState = struct {
-@@ -316,7 +324,9 @@ pub fn init(self: *Termio, alloc: Allocator, opts: termio.Options) !void {
+@@ -316,7 +328,9 @@ pub fn init(self: *Termio, alloc: Allocator, opts: termio.Options) !void {
          .mailbox = opts.mailbox,
          .terminal_stream = .initAlloc(alloc, handler),
          .thread_enter_state = thread_enter_state,
@@ -633,7 +1032,7 @@ index dcd0d8c..883f974 100644
  }
  
  pub fn deinit(self: *Termio) void {
-@@ -491,6 +501,9 @@ pub fn resize(
+@@ -491,6 +505,9 @@ pub fn resize(
          self.renderer_state.mutex.lock();
          defer self.renderer_state.mutex.unlock();
  
@@ -643,13 +1042,16 @@ index dcd0d8c..883f974 100644
          // Update the size of our terminal state
          try self.terminal.resize(
              self.alloc,
-@@ -510,6 +523,16 @@ pub fn resize(
+@@ -510,6 +527,19 @@ pub fn resize(
          if (self.terminal.modes.get(.in_band_size_reports)) {
              try self.sizeReportLocked(td, .mode_2048);
          }
 +
 +        // Vhostty: a remote mirror starts over at the new size.
-+        if (grid_changed) if (self.tap) |t| t.snapshot(self.alloc, &self.terminal);
++        if (grid_changed) if (self.tap) |t| {
++            t.snapshot(self.alloc, &self.terminal);
++            self.tap_pending = false;
++        };
 +    }
 +
 +    // Vhostty: a host-managed terminal tells its host now that it has the
@@ -660,7 +1062,7 @@ index dcd0d8c..883f974 100644
      }
  
      // Mail the renderer so that it can update the GPU and re-render
-@@ -525,6 +548,7 @@ pub fn sizeReport(self: *Termio, td: *ThreadData, style: termio.Message.SizeRepo
+@@ -525,6 +555,7 @@ pub fn sizeReport(self: *Termio, td: *ThreadData, style: termio.Message.SizeRepo
  }
  
  fn sizeReportLocked(self: *Termio, td: *ThreadData, style: termio.Message.SizeReport) !void {
@@ -668,7 +1070,7 @@ index dcd0d8c..883f974 100644
      const grid_size = self.size.grid();
  
      // 1024 bytes should be enough for size report since report
-@@ -658,6 +682,7 @@ pub fn jumpToPrompt(self: *Termio, delta: isize) !void {
+@@ -658,6 +689,7 @@ pub fn jumpToPrompt(self: *Termio, delta: isize) !void {
  
  /// Called when focus is gained or lost (when focus events are enabled)
  pub fn focusGained(self: *Termio, td: *ThreadData, focused: bool) !void {
@@ -676,33 +1078,49 @@ index dcd0d8c..883f974 100644
      self.renderer_state.mutex.lock();
      const focus_event = self.renderer_state.terminal.modes.get(.focus_event);
      self.renderer_state.mutex.unlock();
-@@ -688,6 +713,9 @@ fn processOutputLocked(self: *Termio, buf: []const u8) void {
+@@ -688,6 +720,9 @@ fn processOutputLocked(self: *Termio, buf: []const u8) void {
      // Schedule a render. We can call this first because we have the lock.
      self.terminal_stream.handler.queueRender() catch unreachable;
  
 +    // Vhostty: pass the bytes on to a remote mirror.
-+    if (self.tap) |t| t.output(&self.terminal, buf);
++    if (self.tap) |t| if (!self.tap_pending) t.output(&self.terminal, buf);
 +
      // Whenever a character is typed, we ensure the cursor is in the
      // non-blink state so it is rendered if visible. If we're under
      // HEAVY read load, we don't want to send a ton of these so we
-@@ -737,6 +765,15 @@ fn processOutputLocked(self: *Termio, buf: []const u8) void {
+@@ -737,6 +772,31 @@ fn processOutputLocked(self: *Termio, buf: []const u8) void {
      }
  }
  
 +/// Vhostty: starts mirroring to `tap` (null stops), beginning with a
-+/// snapshot. Callable from any thread.
++/// snapshot. Callable from any thread. The tap is in (or out) when this
++/// returns, but its snapshot is taken on the IO thread after the messages
++/// queued before this one: a resize asked for just before (a client opening
++/// at its own size) is applied first, so the client gets one snapshot, at
++/// the size it asked for.
 +pub fn setTap(self: *Termio, tap: ?termio.remote.Tap) void {
++    {
++        self.renderer_state.mutex.lock();
++        defer self.renderer_state.mutex.unlock();
++        self.tap = tap;
++        self.tap_pending = tap != null;
++    }
++    if (tap != null) self.queueMessage(.tap_snapshot, .unlocked);
++}
++
++/// Vhostty: the snapshot setTap queued, unless a resize has sent one since.
++pub fn tapSnapshot(self: *Termio) void {
 +    self.renderer_state.mutex.lock();
 +    defer self.renderer_state.mutex.unlock();
-+    self.tap = tap;
-+    if (tap) |t| t.snapshot(self.alloc, &self.terminal);
++    if (!self.tap_pending) return;
++    self.tap_pending = false;
++    if (self.tap) |t| t.snapshot(self.alloc, &self.terminal);
 +}
 +
  /// Sends a DSR response for the current color scheme to the pty.
  pub fn colorSchemeReport(self: *Termio, td: *ThreadData, force: bool) !void {
      self.renderer_state.mutex.lock();
-@@ -746,6 +783,7 @@ pub fn colorSchemeReport(self: *Termio, td: *ThreadData, force: bool) !void {
+@@ -746,6 +806,7 @@ pub fn colorSchemeReport(self: *Termio, td: *ThreadData, force: bool) !void {
  }
  
  pub fn colorSchemeReportLocked(self: *Termio, td: *ThreadData, force: bool) !void {
@@ -711,10 +1129,21 @@ index dcd0d8c..883f974 100644
          return;
      }
 diff --git a/src/termio/Thread.zig b/src/termio/Thread.zig
-index ce4c1f4..cc9fccf 100644
+index ce4c1f4..1530680 100644
 --- a/src/termio/Thread.zig
 +++ b/src/termio/Thread.zig
-@@ -333,18 +333,25 @@ fn drainMailbox(
+@@ -319,6 +319,10 @@ fn drainMailbox(
+             },
+             .inspector => |v| self.flags.has_inspector = v,
+             .resize => |v| self.handleResize(cb, v),
++            .tap_snapshot => {
++                self.flushResize(cb);
++                io.tapSnapshot();
++            },
+             .size_report => |v| try io.sizeReport(data, v),
+             .clear_screen => |v| try io.clearScreen(data, v.history),
+             .scroll_viewport => |v| io.scrollViewport(v),
+@@ -333,18 +337,25 @@ fn drainMailbox(
              .start_synchronized_output => self.startSynchronizedOutput(cb),
              .linefeed_mode => |v| self.flags.linefeed_mode = v,
              .focused => |v| try io.focusGained(data, v),
@@ -750,7 +1179,7 @@ index ce4c1f4..cc9fccf 100644
                  try io.queueWrite(
                      data,
                      v.data,
-@@ -392,6 +399,17 @@ fn handleResize(self: *Thread, cb: *CallbackData, resize: renderer.Size) void {
+@@ -392,6 +403,17 @@ fn handleResize(self: *Thread, cb: *CallbackData, resize: renderer.Size) void {
      );
  }
  
@@ -868,6 +1297,20 @@ index ae0e200..a146481 100644
          }
      }
  
+diff --git a/src/termio/message.zig b/src/termio/message.zig
+index d7a59bf..5b3abb4 100644
+--- a/src/termio/message.zig
++++ b/src/termio/message.zig
+@@ -39,6 +39,9 @@ pub const Message = union(enum) {
+     /// Resize the window.
+     resize: renderer.Size,
+ 
++    /// Vhostty: send a newly set tap its first snapshot (see Termio.setTap).
++    tap_snapshot: void,
++
+     /// Request a size report is sent to the pty ([in-band
+     /// size report, mode 2048](https://gist.github.com/rockorager/e695fb2924d36b2bcf1fff4a3704bd83) and
+     /// [XTWINOPS](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h4-Functions-using-CSI-_-ordered-by-the-final-character-lparen-s-rparen:CSI-Ps;Ps;Ps-t.1EB0)).
 diff --git a/src/termio/remote.zig b/src/termio/remote.zig
 new file mode 100644
 index 0000000..0e3d9ab

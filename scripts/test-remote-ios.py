@@ -8,6 +8,7 @@ and checks connecting, the terminal, sizes, input, new sessions and being
 replaced by another client. Build first:
 
 make app && (cd VhosttyKit && swift build --product remote-probe)
+scripts/build-ghostty-ios.sh   # once, and after changing the Ghostty patch
 xcodebuild -project iOS/Vhostty.xcodeproj -scheme Vhostty \\
     -destination 'platform=iOS Simulator,name=iPhone 17' \\
     -derivedDataPath build/ios-dd build
@@ -18,6 +19,7 @@ A simulator this script boots is shut down again at the end.
 """
 import json
 import os
+import re
 from pathlib import Path
 import socket
 import sqlite3
@@ -115,6 +117,8 @@ def wait(check, what, timeout=20):
             return
         time.sleep(0.2)
     simctl("io", udid, "screenshot", str(root / "failure.png"), check=False)
+    if debug_dir and (debug_dir / "terminal.log").exists():
+        (root / "terminal.log").write_bytes((debug_dir / "terminal.log").read_bytes())
     raise AssertionError(what + "\n--- phone\n" + phone() + "\n--- server\n" + read(server_snap / "state.txt")
                          + "\n--- agent\n" + read(agent_log))
 
@@ -169,9 +173,12 @@ def last_size():
 
 
 def input_size(hex_input):
+    """The size the agent was at when it read these bytes; keys typed
+    quickly can arrive in one read ("type hi" as 6869)."""
     for line in read(agent_log).splitlines():
         parts = line.split()
-        if parts[0] == "input" and parts[1] == hex_input:
+        if parts[0] == "input" and any(parts[1][i:i + len(hex_input)] == hex_input
+                                       for i in range(0, len(parts[1]), 2)):
             return parts[2]
     return None
 
@@ -232,6 +239,7 @@ try:
     own = terminal("own")
     assert terminal("scale") == "1.00", phone()
     assert terminal("keyboard") == "false", phone()
+    assert terminal("config") == "ok", phone()
     simctl("io", udid, "screenshot", str(root / "terminal.png"))
     print(f"PASS opening shows the terminal at the device's size ({own}), without the keyboard", flush=True)
 
@@ -241,7 +249,7 @@ try:
     drive("type hi")
     wait(lambda: input_size("69") is not None, "typing didn't reach the agent")
     assert input_size("68") == own and input_size("69") == own, read(agent_log)
-    wait(lambda: "GOT 69" in phone(), "the echo didn't show on the iPhone")
+    wait(lambda: re.search(r"GOT (..)*69", phone()), "the echo didn't show on the iPhone")
     drive("insert 你好")
     wait(lambda: input_size("e4bda0e5a5bd") is not None, "committed IME text didn't reach the agent")
     assert input_size("e4bda0e5a5bd") == own, read(agent_log)

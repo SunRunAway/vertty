@@ -1,7 +1,14 @@
 #!/bin/bash
 # zig 0.15.x cannot match the arm64e-only .tbd stubs in macOS 26+ SDKs.
-# Point zig at our patched SDK clone (see scripts/make-zig-sdk.sh).
+# Point zig at our patched SDK clone (see scripts/make-zig-sdk.sh) when it
+# asks for the macOS SDK; other SDKs (iOS) come from the real xcrun.
+sdk=macosx
+prev=
 for a in "$@"; do
-  if [ "$a" = "--show-sdk-path" ]; then echo "${VHOSTTY_ZIG_SDK:?}"; exit 0; fi
+  [ "$prev" = "--sdk" ] && sdk="$a"
+  prev="$a"
+done
+for a in "$@"; do
+  if [ "$a" = "--show-sdk-path" ] && [ "$sdk" = macosx ]; then echo "${VHOSTTY_ZIG_SDK:?}"; exit 0; fi
 done
 exec /usr/bin/xcrun "$@"

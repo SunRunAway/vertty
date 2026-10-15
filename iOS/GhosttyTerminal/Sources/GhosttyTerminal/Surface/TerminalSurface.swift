@@ -425,40 +425,6 @@ public final class TerminalSurface {
         }
     #endif
 
-    // MARK: - Process
-
-    /// PID of the pty's foreground process group (`tcgetpgrp(pty)`). When the
-    /// user runs a program in the pty this is that program's pid, so hosts can
-    /// correlate a surface with an external process list. Ghostty returns 0
-    /// when the surface has no process yet — surfaced here as nil.
-    ///
-    /// Always nil on the pinned Ghostty 1.3.1, for every backend: that release
-    /// predates upstream's process-info API, and the shipped
-    /// `ghostty_surface_foreground_pid` is a stub from
-    /// `Patches/ghostty/0002-host-managed-io.patch` that reports 0.
-    var foregroundPid: pid_t? {
-        guard let s = surface else { return nil }
-        let pid = ghostty_surface_foreground_pid(s)
-        return pid == 0 ? nil : pid_t(pid)
-    }
-
-    /// Name of the pty's controlling tty (e.g. `/dev/ttys004`), or nil when the
-    /// surface has no process yet. Useful as a cross-check for ``foregroundPid``.
-    ///
-    /// Always nil on the pinned Ghostty 1.3.1, for every backend: the shipped
-    /// `ghostty_surface_tty_name` is a stub that returns the empty string, for
-    /// the same reason ``foregroundPid`` is nil there.
-    var ttyName: String? {
-        guard let s = surface else { return nil }
-        let str = ghostty_surface_tty_name(s)
-        defer { ghostty_string_free(str) }
-        guard let ptr = str.ptr, str.len > 0 else { return nil }
-        return String(
-            decoding: UnsafeRawBufferPointer(start: ptr, count: Int(str.len)),
-            as: UTF8.self,
-        )
-    }
-
     // MARK: - Lifecycle
 
     func free() {

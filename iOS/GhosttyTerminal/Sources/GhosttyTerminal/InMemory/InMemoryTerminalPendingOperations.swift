@@ -9,7 +9,6 @@ import Foundation
 struct InMemoryTerminalPendingOperations {
     enum Operation {
         case write(Data)
-        case processExit(exitCode: UInt32, runtimeMilliseconds: UInt64)
     }
 
     private struct Entry {

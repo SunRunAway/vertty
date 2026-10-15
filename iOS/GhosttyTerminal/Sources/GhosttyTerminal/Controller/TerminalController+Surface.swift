@@ -22,7 +22,7 @@ extension TerminalController {
         var surfaceConfig = ghostty_surface_config_new()
         surfaceConfig.userdata = Unmanaged.passUnretained(bridge).toOpaque()
         surfaceConfig.context = configuration.context.ghosttyValue
-        configureBackend(&surfaceConfig, from: configuration)
+        configureBackend(&surfaceConfig, from: configuration, bridge: bridge)
 
         if let fontSize = configuration.fontSize {
             surfaceConfig.font_size = fontSize
@@ -82,19 +82,18 @@ extension TerminalController {
         retainedBridges.count
     }
 
+    /// A host-managed surface (no process) when the backend is in memory:
+    /// its callbacks get the surface's userdata, the bridge, which leads
+    /// them to the session.
     private func configureBackend(
         _ config: inout ghostty_surface_config_s,
         from options: TerminalSurfaceOptions,
+        bridge: TerminalCallbackBridge,
     ) {
-        guard case let .inMemory(session) = options.backend else {
-            config.backend = GHOSTTY_SURFACE_IO_BACKEND_EXEC
-            return
-        }
-
-        config.backend = GHOSTTY_SURFACE_IO_BACKEND_HOST_MANAGED
-        config.receive_userdata = Unmanaged.passUnretained(session).toOpaque()
-        config.receive_buffer = InMemoryTerminalSession.receiveBufferCallback
-        config.receive_resize = InMemoryTerminalSession.receiveResizeCallback
+        guard case let .inMemory(session) = options.backend else { return }
+        bridge.inMemorySession = session
+        config.host_write = InMemoryTerminalSession.receiveBufferCallback
+        config.host_resize = InMemoryTerminalSession.receiveResizeCallback
     }
 
     private func finalizeSurface(

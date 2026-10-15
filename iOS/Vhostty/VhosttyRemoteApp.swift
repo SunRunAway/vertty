@@ -53,7 +53,9 @@ final class AppModel: ObservableObject {
         }
         self.store = store
         store.client.connect()
-        store.askForNotifications()
+        // Not under the debug driver: the system's alert would sit over the
+        // app and take the focus a scripted test gives the terminal.
+        if ProcessInfo.processInfo.environment["VHOSTTY_DEBUG"] != "1" { store.askForNotifications() }
         return true
     }
 

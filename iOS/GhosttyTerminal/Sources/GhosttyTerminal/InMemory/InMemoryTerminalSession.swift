@@ -41,7 +41,6 @@ public final class InMemoryTerminalSession: @unchecked Sendable {
         self.suppressesPixelOnlyResizes = suppressesPixelOnlyResizes
         surfaceAccess = InMemoryTerminalSurfaceAccess(
             write: Self.writeToSurface,
-            processExit: Self.reportProcessExit,
             tick: Self.tickApp,
         )
     }
@@ -53,8 +52,6 @@ public final class InMemoryTerminalSession: @unchecked Sendable {
         resize: @escaping @Sendable (InMemoryTerminalViewport) -> Void,
         suppressesPixelOnlyResizes: Bool = false,
         surfaceWrite: @escaping InMemoryTerminalSurfaceAccess.Write,
-        processExit: @escaping InMemoryTerminalSurfaceAccess.ProcessExit =
-            InMemoryTerminalSession.reportProcessExit,
         tick: @escaping InMemoryTerminalSurfaceAccess.Tick = { _ in },
     ) {
         writeHandler = write
@@ -62,7 +59,6 @@ public final class InMemoryTerminalSession: @unchecked Sendable {
         self.suppressesPixelOnlyResizes = suppressesPixelOnlyResizes
         surfaceAccess = InMemoryTerminalSurfaceAccess(
             write: surfaceWrite,
-            processExit: processExit,
             tick: tick,
         )
     }
@@ -228,29 +224,10 @@ public final class InMemoryTerminalSession: @unchecked Sendable {
         writeHandler(data)
     }
 
-    // MARK: - Process Exit
-
-    /// Enqueue a host-managed process exit after all previously received data.
-    /// Like that data, an exit that arrives before a surface attaches waits
-    /// for the next one, in the same order relative to the buffered bytes.
-    public func finish(exitCode: UInt32, runtimeMilliseconds: UInt64) {
-        surfaceAccess.enqueueProcessExit(
-            exitCode: exitCode,
-            runtimeMilliseconds: runtimeMilliseconds,
-        )
-        TerminalDebugLog.log(
-            .lifecycle,
-            "process exit exitCode=\(exitCode) runtimeMs=\(runtimeMilliseconds)",
-        )
-    }
-
     // MARK: - C Callbacks
 
-    static let receiveBufferCallback: ghostty_surface_receive_buffer_cb = { userdata, ptr, len in
-        guard let userdata, let ptr else { return }
-        let session = Unmanaged<InMemoryTerminalSession>
-            .fromOpaque(userdata)
-            .takeUnretainedValue()
+    static let receiveBufferCallback: ghostty_surface_host_write_cb = { userdata, ptr, len in
+        guard let userdata, let ptr, let session = session(userdata) else { return }
         let data = Data(bytes: ptr, count: len)
         TerminalDebugLog.log(
             .input,
@@ -259,11 +236,8 @@ public final class InMemoryTerminalSession: @unchecked Sendable {
         session.writeHandler(data)
     }
 
-    static let receiveResizeCallback: ghostty_surface_receive_resize_cb = { userdata, cols, rows, widthPx, heightPx in
-        guard let userdata else { return }
-        let session = Unmanaged<InMemoryTerminalSession>
-            .fromOpaque(userdata)
-            .takeUnretainedValue()
+    static let receiveResizeCallback: ghostty_surface_host_resize_cb = { userdata, cols, rows, widthPx, heightPx in
+        guard let userdata, let session = session(userdata) else { return }
         TerminalDebugLog.log(
             .metrics,
             "receive resize cols=\(cols) rows=\(rows) pixels=\(widthPx)x\(heightPx)",
@@ -274,6 +248,11 @@ public final class InMemoryTerminalSession: @unchecked Sendable {
             widthPixels: widthPx,
             heightPixels: heightPx,
         ))
+    }
+
+    /// The surface's userdata is its callback bridge.
+    private static func session(_ userdata: UnsafeMutableRawPointer) -> InMemoryTerminalSession? {
+        Unmanaged<TerminalCallbackBridge>.fromOpaque(userdata).takeUnretainedValue().inMemorySession
     }
 
     private func dispatchResize(_ resize: InMemoryTerminalViewport) {
@@ -367,16 +346,10 @@ public final class InMemoryTerminalSession: @unchecked Sendable {
             guard let ptr = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 return
             }
-            ghostty_surface_write_buffer_replay(surface, ptr, UInt(buffer.count))
+            // A host-managed surface never answers what it parses (the
+            // computer's terminal does), so this is a replay as it stands.
+            ghostty_surface_write_buffer(surface, ptr, UInt(buffer.count))
         }
-    }
-
-    private static func reportProcessExit(
-        _ surface: ghostty_surface_t,
-        _ exitCode: UInt32,
-        _ runtimeMilliseconds: UInt64,
-    ) {
-        ghostty_surface_process_exit(surface, exitCode, runtimeMilliseconds)
     }
 
     private static func tickApp(_ surface: ghostty_surface_t) {

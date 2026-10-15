@@ -4,7 +4,6 @@ import GhosttyKit
 /// Serializes host output while keeping the raw surface alive for each C call.
 final class InMemoryTerminalSurfaceAccess: @unchecked Sendable {
     typealias Write = @Sendable (ghostty_surface_t, Data) -> Void
-    typealias ProcessExit = @Sendable (ghostty_surface_t, UInt32, UInt64) -> Void
     typealias Tick = @Sendable (ghostty_surface_t) -> Void
 
     private let condition = NSCondition()
@@ -13,7 +12,6 @@ final class InMemoryTerminalSurfaceAccess: @unchecked Sendable {
         qos: .userInitiated,
     )
     private let write: Write
-    private let processExit: ProcessExit
     private let tick: Tick
 
     private var surface: ghostty_surface_t?
@@ -62,11 +60,9 @@ final class InMemoryTerminalSurfaceAccess: @unchecked Sendable {
 
     init(
         write: @escaping Write,
-        processExit: @escaping ProcessExit,
         tick: @escaping Tick,
     ) {
         self.write = write
-        self.processExit = processExit
         self.tick = tick
     }
 
@@ -143,21 +139,6 @@ final class InMemoryTerminalSurfaceAccess: @unchecked Sendable {
         let backlogChange = takeBacklogChange()
         condition.unlock()
         backlogChange?()
-    }
-
-    func enqueueProcessExit(
-        exitCode: UInt32,
-        runtimeMilliseconds: UInt64,
-    ) {
-        condition.lock()
-        defer { condition.unlock() }
-        operations.append(.processExit(
-            exitCode: exitCode,
-            runtimeMilliseconds: runtimeMilliseconds,
-        ))
-        if surface != nil {
-            scheduleDrain()
-        }
     }
 
     func withCurrentSurface<Result>(
@@ -265,8 +246,6 @@ final class InMemoryTerminalSurfaceAccess: @unchecked Sendable {
         switch operation {
         case let .write(data):
             write(surface, data)
-        case let .processExit(exitCode, runtimeMilliseconds):
-            processExit(surface, exitCode, runtimeMilliseconds)
         }
         return true
     }

@@ -8,3 +8,4 @@
 /iOS/GhosttyTerminal/.build/
 /iOS/GhosttyTerminal/.swiftpm/
 xcuserdata/
+/iOS/GhosttyTerminal/GhosttyKit.xcframework/

@@ -68,10 +68,10 @@ hooks 事件的传递路径：`vhostty-hook`（App 里自带的一个小程序�
 
 - **协议**：一条 WebSocket，消息是 `VhosttyKit/Proto/vhostty_remote.proto` 定义的 Protobuf（每帧一条，客户端发 `ClientMessage`，服务端发 `ServerMessage`）。改了 proto 后运行 `scripts/gen-proto.sh` 重新生成 Swift 代码（protoc 和 protoc-gen-swift 编译到 `build/tools`）。协议代码和客户端 `RemoteClient`（连接、重连、请求、终端流）在 `VhosttyKit` 包的 `VhosttyRemote` 里。
 - **服务端**：`Sources/Vhostty/Remote/RemoteServer.swift` 用 Network.framework 监听，同时只留一个客户端，新连接接管旧连接；`RemoteBridge.swift` 把 `AppStore` 的项目、卡片和历史做成 State（有变化才发），执行新建、恢复、关闭等请求，并把卡片终端转给客户端。
-- **终端镜像**：补丁给 Ghostty 加了 tap（`src/termio/remote.zig`）：打开时先发一份快照（把屏幕、滚动历史和终端模式重新写成 VT 序列），之后转发程序的原始输出，网格尺寸变了就重发快照。客户端的终端用补丁里的 host-managed 后端（`src/termio/HostManaged.zig`，改自 libghostty-spm）：没有 pty，输出由 `ghostty_surface_write_buffer` 喂进去，键盘、粘贴产生的字节通过回调交给客户端发回去，终端对查询的应答一律丢掉，由电脑上的真终端回答。
+- **终端镜像**：补丁给 Ghostty 加了 tap（`src/termio/remote.zig`）：打开时发一份快照（把屏幕、滚动历史和终端模式重新写成 VT 序列；在 IO 线程上处理完之前排队的尺寸变化再拍，所以客户端带着自己的尺寸打开时只收到一份），之后转发程序的原始输出，网格尺寸变了就重发快照。客户端的终端用补丁里的 host-managed 后端（`src/termio/HostManaged.zig`，改自 libghostty-spm）：没有 pty，输出由 `ghostty_surface_write_buffer` 喂进去，键盘、粘贴产生的字节通过回调交给客户端发回去，终端对查询的应答一律丢掉，由电脑上的真终端回答。
 - **尺寸**：会话的网格跟随最后一个进入、调整视口或输入的一端。服务端用 `ghostty_surface_set_grid_override` 只改行列、不改窗口；客户端每次键盘输入或粘贴之前先发 `AlignForInput`，本机输入也会先恢复本机尺寸。Ghostty 的 IO 线程会把连续的 resize 合并 25ms，补丁在每次写入前先应用还没处理的 resize（`Thread.zig` 的 `flushResize`），保证输入按新尺寸到达程序。
-- **界面共享**：Mac 本机、Mac 远程窗口、iPhone、iPad 用同一份界面代码，在 `VhosttyKit` 包的 `VhosttyUI` 里：侧栏 `SidebarView`、卡片 `SessionCard`、窗口布局 `Workspace`（侧栏、拖动改宽度、标题条）和模型类型。侧栏读写的是 `SidebarStore` 协议：本机是 `AppStore`，远程是 `RemoteStore`（选中卡片就打开它的终端，取消选中就离开）。远程端没有的功能（管理项目、拖动排序、定时任务、默认会话类型、本机文件操作、关闭其他）由 `SidebarFeatures` 关掉，界面上直接不显示。远程界面是 `RemoteWorkspace`：Mac 和 iPad 侧栏加终端并排，iPhone（compact 宽度）侧栏占满一屏、点卡片推入终端。各端单独写的只有终端（Mac 用补丁里的 Ghostty，iOS 用 libghostty-spm）、键盘和触屏适配：右键菜单在触屏上是长按，悬停才出现的按钮在触屏上放进长按菜单；共享视图里的字号、间距和行高都经过 `Touch`（`Controls.swift`），macOS 上就是原值，iOS 上按比例放大、可点的行至少 44pt。界面文字的中文在 `VhosttyKit/Sources/VhosttyUI/Resources`，Mac app 只放自己独有的文字。改界面先改共享代码，不要给某一端另写一份。
-- **iPhone / iPad**：`iOS/Vhostty.xcodeproj`，要用 Xcode 编译。终端用 libghostty-spm 预编译的 GhosttyKit 和它的 UIKit 终端视图，源码放在 `iOS/GhosttyTerminal`，Vhostty 的改动记在其中的 `VHOSTTY.md`。它没有 grid override，所以会话尺寸比屏幕大时，把终端视图按会话的网格布局再整体缩小显示。
+- **界面共享**：Mac 本机、Mac 远程窗口、iPhone、iPad 用同一份界面代码，在 `VhosttyKit` 包的 `VhosttyUI` 里：侧栏 `SidebarView`、卡片 `SessionCard`、窗口布局 `Workspace`（侧栏、拖动改宽度、标题条）和模型类型。侧栏读写的是 `SidebarStore` 协议：本机是 `AppStore`，远程是 `RemoteStore`（选中卡片就打开它的终端，取消选中就离开）。远程端没有的功能（管理项目、拖动排序、定时任务、默认会话类型、本机文件操作、关闭其他）由 `SidebarFeatures` 关掉，界面上直接不显示。远程界面是 `RemoteWorkspace`：Mac 和 iPad 侧栏加终端并排，iPhone（compact 宽度）侧栏占满一屏、点卡片推入终端。各端单独写的只有终端（两边是同一份打了补丁的 Ghostty，Mac 用 AppKit 的终端视图，iOS 用 libghostty-spm 的 UIKit 终端视图）、键盘和触屏适配：右键菜单在触屏上是长按，悬停才出现的按钮在触屏上放进长按菜单；共享视图里的字号、间距和行高都经过 `Touch`（`Controls.swift`），macOS 上就是原值，iOS 上按比例放大、可点的行至少 44pt。界面文字的中文在 `VhosttyKit/Sources/VhosttyUI/Resources`，Mac app 只放自己独有的文字。改界面先改共享代码，不要给某一端另写一份。
+- **iPhone / iPad**：`iOS/Vhostty.xcodeproj`，要用 Xcode 编译。终端库和 Mac 是同一份 Ghostty（`vendor/ghostty` 加补丁）：先运行 `scripts/build-ghostty-ios.sh`（要 Xcode 和 zig，几分钟），它编出真机和 Apple 芯片模拟器两份，合成 `iOS/GhosttyTerminal/GhosttyKit.xcframework`（不进仓库）；改了补丁要重新运行。终端视图取自 libghostty-spm 的 UIKit 部分，源码放在 `iOS/GhosttyTerminal`，Vhostty 的改动记在其中的 `VHOSTTY.md`。会话尺寸比屏幕大时，把终端视图按会话的网格布局再整体缩小显示。
 
 ## 为了不装 Xcode 做的处理
 
@@ -81,7 +81,7 @@ Ghostty 官方的 macOS 构建依赖 Xcode。为了只用 Command Line Tools 就
 2. **在 macOS 上额外输出静态库 `libghostty.a` 和资源文件**。官方构建只产出 xcframework。
 3. **修复打包问题**：新版 `libtool` 会静默丢弃 zig 打包时没有 8 字节对齐的目标文件，改成先解包再重新打包。
 
-补丁里还有与 Xcode 无关的改动：显示器全部休眠时，终端不用 CVDisplayLink 也能创建（见上文“定时任务”）；远程控制用到的终端镜像、host-managed 后端和网格覆盖（见上文“远程控制”）。
+补丁里还有与 Xcode 无关的改动：显示器全部休眠时，终端不用 CVDisplayLink 也能创建（见上文“定时任务”）；远程控制用到的终端镜像、host-managed 后端和网格覆盖（见上文“远程控制”）；iOS 构建需要的改动：iOS 上不装 `libghostty-vt` 动态库，来自 libghostty-spm 的 iOS 渲染修正（IOSurface 图层、同步呈现、CoreText 不起释放线程、IOSurface 行宽按 64 字节对齐），libxev 升到 7e7d2f2（旧版在 iOS 上 kqueue 的 mach port 会让 IO 线程崩溃），以及 iOS 终端视图用的选区位置查询 `ghostty_surface_selection_viewport`。
 
 `scripts/build-ghostty.sh` 编译前把补丁打到 `vendor/ghostty` 的工作区里，之后一直留着。`.gitmodules` 设了 `ignore = dirty`，所以主仓库的 `git status` 不显示这些改动；要看补丁是否打上，用 `git -C vendor/ghostty status`。
 

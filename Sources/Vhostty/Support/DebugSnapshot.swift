@@ -10,6 +10,11 @@ final class DebugSnapshot {
     private weak var window: NSWindow?
     private let store: AppStore
     private var timer: Timer?
+    /// Window images are taken and PNGs encoded off the main thread: either
+    /// can take seconds on a busy machine and would stall the app it watches.
+    private let imageQueue = DispatchQueue(label: "vhostty.debug-snapshot.images")
+    private var shots: [(CGWindowID, String)] = []
+    private var shooting = false
 
     init(directory: String, window: NSWindow, store: AppStore) {
         self.directory = URL(fileURLWithPath: directory, isDirectory: true)
@@ -285,22 +290,17 @@ final class DebugSnapshot {
         let modal = window?.attachedSheet ?? NSApp.modalWindow
         let titles = modal?.contentView.map { Self.buttons(in: $0).map(\.title).joined(separator: "\n") } ?? ""
         try? titles.write(to: directory.appendingPathComponent("alert.txt"), atomically: true, encoding: .utf8)
-        if let modal, let cg = vhostty_window_image(CGWindowID(modal.windowNumber)) {
-            write(NSBitmapImageRep(cgImage: cg), "alert.png")
-        }
+        if let modal { shots.append((CGWindowID(modal.windowNumber), "alert.png")) }
+        defer { takeShots() }
         guard let window, let view = window.contentView else { return }
 
         // Window server image (includes the Metal terminal layer).
-        if let cg = vhostty_window_image(CGWindowID(window.windowNumber)) {
-            write(NSBitmapImageRep(cgImage: cg), "window.png")
-        }
-        if let sheet = window.attachedSheet, let cg = vhostty_window_image(CGWindowID(sheet.windowNumber)) {
-            write(NSBitmapImageRep(cgImage: cg), "sheet.png")
-        }
+        shots.append((CGWindowID(window.windowNumber), "window.png"))
+        if let sheet = window.attachedSheet { shots.append((CGWindowID(sheet.windowNumber), "sheet.png")) }
         // AppKit rendering (SwiftUI chrome only, no terminal pixels).
         if let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
             view.cacheDisplay(in: view.bounds, to: rep)
-            write(rep, "chrome.png")
+            writeLater(rep, "chrome.png")
         }
 
         var lines: [String] = []
@@ -370,16 +370,33 @@ final class DebugSnapshot {
                 lines.append(t.visibleText().split(separator: "\n", omittingEmptySubsequences: false)
                     .map { "    r| " + $0 }.joined(separator: "\n"))
             }
-            if let cg = vhostty_window_image(CGWindowID(remote.window.windowNumber)) {
-                write(NSBitmapImageRep(cgImage: cg), "remote.png")
-            }
+            shots.append((CGWindowID(remote.window.windowNumber), "remote.png"))
         }
         try? lines.joined(separator: "\n").write(to: directory.appendingPathComponent("state.txt"), atomically: true, encoding: .utf8)
+    }
+
+    /// Takes this tick's window images, unless the last tick's are still being taken.
+    private func takeShots() {
+        let pending = shots
+        shots = []
+        guard !shooting, !pending.isEmpty else { return }
+        shooting = true
+        imageQueue.async { [weak self] in
+            for (id, name) in pending {
+                if let cg = vhostty_window_image(id) { self?.write(NSBitmapImageRep(cgImage: cg), name) }
+            }
+            DispatchQueue.main.async { self?.shooting = false }
+        }
     }
 
     private func write(_ rep: NSBitmapImageRep, _ name: String) {
         if let data = rep.representation(using: .png, properties: [:]) {
             try? data.write(to: directory.appendingPathComponent(name))
         }
+    }
+
+    /// Encodes and writes off the main thread, which a big PNG would stall.
+    private func writeLater(_ rep: NSBitmapImageRep, _ name: String) {
+        imageQueue.async { [weak self] in self?.write(rep, name) }
     }
 }

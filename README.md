@@ -94,7 +94,7 @@ make                      # the first build compiles libghostty, about 5 minutes
 make install              # copies to /Applications/Vhostty.app
 ```
 
-The iOS app (iPhone and iPad) is in `iOS/Vhostty.xcodeproj` and does need Xcode: open it, pick your team under Signing, and run it on your device.
+The iOS app (iPhone and iPad) is in `iOS/Vhostty.xcodeproj` and does need Xcode. Build its terminal library first with `scripts/build-ghostty-ios.sh` (the same Ghostty as the Mac app, a few minutes), then open the project, pick your team under Signing, and run it on your device.
 
 ## Development
 

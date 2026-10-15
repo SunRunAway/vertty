@@ -413,6 +413,19 @@ typedef struct {
   bool rectangle;
 } ghostty_selection_s;
 
+// Vhostty (from libghostty-spm): ghostty_surface_selection_viewport
+typedef struct {
+  uint32_t top_left_x;
+  uint32_t top_left_y;
+  uint32_t bottom_right_x;
+  uint32_t bottom_right_y;
+  uint32_t columns;
+  uint32_t rows;
+  bool rectangle;
+  bool top_left_clipped;
+  bool bottom_right_clipped;
+} ghostty_selection_viewport_s;
+
 typedef struct {
   const char* key;
   const char* value;
@@ -1140,6 +1153,8 @@ void ghostty_surface_complete_clipboard_request(ghostty_surface_t,
                                                 bool);
 bool ghostty_surface_has_selection(ghostty_surface_t);
 bool ghostty_surface_read_selection(ghostty_surface_t, ghostty_text_s*);
+bool ghostty_surface_selection_viewport(ghostty_surface_t,
+                                       ghostty_selection_viewport_s*);
 bool ghostty_surface_read_text(ghostty_surface_t,
                                ghostty_selection_s,
                                ghostty_text_s*);

@@ -18,6 +18,8 @@ final class TerminalCallbackBridge {
     weak var delegate: (any TerminalSurfaceViewDelegate)?
     /// Raw surface pointer for use in C callbacks (e.g. clipboard).
     nonisolated(unsafe) var rawSurface: ghostty_surface_t?
+    /// Vhostty: the session of a host-managed surface, for its callbacks.
+    nonisolated(unsafe) weak var inMemorySession: InMemoryTerminalSession?
     var scrollbar: TerminalScrollbar?
     var onCellSizeChange: ((UInt32, UInt32) -> Void)?
     var onRenderRequest: (() -> Void)?
@@ -357,21 +359,12 @@ final class TerminalCallbackBridge {
             return
         }
 
-        guard allowed else {
-            ghostty_surface_deny_clipboard_request(surface, statePtr)
-            TerminalDebugLog.log(.input, "clipboard confirm denied")
-            return
-        }
-
-        withClipboardCompletePayload(
-            contents: contents,
-            available: available,
-            confirmed: true,
-            remember: false,
-        ) { complete in
-            ghostty_surface_complete_clipboard_request(surface, complete, statePtr)
-        }
-        TerminalDebugLog.log(.input, "clipboard confirm allowed")
+        // Denied: answered with nothing, as Ghostty's own app does.
+        let text = allowed
+            ? contents.first.map { String(decoding: $0.data, as: UTF8.self) } ?? ""
+            : ""
+        text.withCString { ghostty_surface_complete_clipboard_request(surface, $0, statePtr, true) }
+        TerminalDebugLog.log(.input, allowed ? "clipboard confirm allowed" : "clipboard confirm denied")
     }
 }
 

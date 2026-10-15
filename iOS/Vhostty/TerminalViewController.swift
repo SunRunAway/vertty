@@ -6,10 +6,9 @@ import VhosttyRemote
 import VhosttyUI
 
 /// The iOS terminal of a card (RemoteStore does the rest, as on the Mac):
-/// libghostty-spm's terminal view, fed by the connection. The session runs
-/// on the computer at one grid size at a time; libghostty-spm can't set a
-/// grid, so the view is laid out at the session's grid and scaled down when
-/// it doesn't fit.
+/// the vendored libghostty-spm terminal view, fed by the connection. The
+/// session runs on the computer at one grid size at a time; the view is
+/// laid out at the session's grid and scaled down when it doesn't fit.
 final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeDelegate, RemoteTerminalDisplay {
     /// Ghostty's window padding, in points (see the controller's config).
     static let padding: CGFloat = 4
@@ -157,15 +156,11 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
         }
     }
 
+    /// The terminal has this grid now (Ghostty reports it once resized, so
+    /// output fed from here on lands at it).
     private func terminalResized(_ viewport: InMemoryTerminalViewport) {
         reported = viewport
-        // libghostty-spm reports the size just before its IO thread resizes
-        // the terminal; output fed before then would land at the old size.
-        let size = Remote.TerminalSize(columns: Int(viewport.columns), rows: Int(viewport.rows))
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-            guard let self, self.reported.map({ Int($0.columns) == size.columns && Int($0.rows) == size.rows }) == true else { return }
-            self.store.terminalGridApplied(size)
-        }
+        store.terminalGridApplied(Remote.TerminalSize(columns: Int(viewport.columns), rows: Int(viewport.rows)))
     }
 
     // MARK: - Debug
@@ -174,7 +169,7 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
         let r = reported.map { "\($0.columns)x\($0.rows)" } ?? "-"
         let g = sessionGrid.map { "\($0.columns)x\($0.rows)" } ?? "-"
         let o = ownSize.map { "\($0.columns)x\($0.rows)" } ?? "-"
-        return "terminal reported=\(r) session=\(g) own=\(o) scale=\(String(format: "%.2f", terminal.transform.a)) keyboard=\(terminal.isFirstResponder)"
+        return "terminal reported=\(r) session=\(g) own=\(o) scale=\(String(format: "%.2f", terminal.transform.a)) keyboard=\(terminal.isFirstResponder) config=\(Self.controller.lastConfigurationIssue == nil ? "ok" : "error")"
     }
 
     var visibleText: String { mirror.readViewportText() ?? "" }

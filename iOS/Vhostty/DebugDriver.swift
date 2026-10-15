@@ -24,6 +24,12 @@
             let dir = docs.appendingPathComponent("debug")
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             directory = dir
+            // The terminal layer's sizes and lifecycle, to terminal.log.
+            let log = dir.appendingPathComponent("terminal.log")
+            FileManager.default.createFile(atPath: log.path, contents: nil)
+            let handle = try? FileHandle(forWritingTo: log)
+            TerminalDebugLog.sink = { line in handle?.write(Data((line + "\n").utf8)) }
+            TerminalDebugLog.enable([.lifecycle, .metrics])
             timer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in self?.tick() }
         }
 
