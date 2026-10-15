@@ -121,15 +121,15 @@ try:
     (case / 'authorization-result').write_text('cancel')
     button(['Allow', '允许'])
     time.sleep(2); stop()
-    assert not (case / 'sleep-declined').exists()
+    assert not (case / 'sleep-asked').exists()
     start(); prompt()
     print('PASS authorization cancellation reprompts on restart', flush=True)
     button(['Don’t Allow', '不允许']); stop()
-    assert (case / 'sleep-declined').exists()
+    assert (case / 'sleep-asked').exists()
     start(); time.sleep(2)
     assert read(case / 'alert.txt') == ''
     stop(); print('PASS explicit refusal persists', flush=True)
-    (case / 'sleep-declined').unlink()
+    (case / 'sleep-asked').unlink()
     start(); prompt()
     (case / 'authorization-result').write_text('fail')
     button(['Allow', '允许'])
@@ -143,13 +143,14 @@ try:
     wait(lambda: (case / 'authorized').exists(), 'authorization did not succeed')
     stop()
     assert (case / 'authorized').exists()
-    assert not (case / 'sleep-declined').exists()
+    assert (case / 'sleep-asked').exists()
     start(); time.sleep(2)
     assert read(case / 'alert.txt') == ''
     stop()
     (case / 'authorized').unlink()
-    start(); prompt()
-    print('PASS permission-based startup / revoked permission reprompts; no enabled flag', flush=True)
+    start(); time.sleep(2)
+    assert read(case / 'alert.txt') == ''
+    print('PASS permission-based startup / no prompt once decided, even after the rule is removed', flush=True)
 finally:
     stop(); log.close()
 

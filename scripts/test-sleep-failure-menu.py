@@ -47,9 +47,16 @@ let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
 controller.menuItem = item
 let named = String(localized: "Closed-Lid Sleep Protection While Tasks Run")
 let unauthorized = String(localized: "Closed-Lid Sleep Protection While Tasks Run: Not Authorized…")
-let declined = dir.appendingPathComponent("sleep-declined")
+let asked = dir.appendingPathComponent("sleep-asked")
+let off = dir.appendingPathComponent("sleep-off")
+func exists(_ url: URL) -> Bool { FileManager.default.fileExists(atPath: url.path) }
 func settle(_ seconds: TimeInterval = 1) { RunLoop.current.run(until: Date().addingTimeInterval(seconds)) }
 func value() -> String? { try? String(contentsOf: dir.appendingPathComponent("value"), encoding: .utf8) }
+/// A fresh launch; it would block on a modal alert if it asked.
+func relaunch() -> (SleepProtection, NSMenuItem) {
+    let c = SleepProtection(store: store), i = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    c.menuItem = i; c.start(); return (c, i)
+}
 precondition(item.title == unauthorized && item.state == .off)
 write("value", "0")
 for outcome in ["fail", "cancel"] {
@@ -57,37 +64,46 @@ for outcome in ["fail", "cancel"] {
     controller.authorize()
     settle()
     precondition(item.title == unauthorized && item.state == .off && !controller.authorized, outcome)
-    precondition(!FileManager.default.fileExists(atPath: declined.path))
+    precondition(!exists(asked), "a failed or cancelled authorization counted as a decision")
 }
-print("PASS failed or cancelled authorization stays unauthorized, writes no refusal")
+print("PASS failed or cancelled authorization stays unauthorized and records nothing")
 write("authorization-result", "success")
 controller.authorize()
 wait("authorization did not turn it on") { item.title == named && item.state == .on && controller.on }
-print("PASS authorization turns it on and checks the item")
+precondition(exists(asked))
+print("PASS authorization turns it on, checks the item and counts as decided")
 store.workingAgentCount = 1
 wait("busy period did not apply protection") { value() == "1" }
 store.workingAgentCount = 0
 wait("idle did not restore sleep") { value() == "0" }
 print("PASS busy period applies and restores")
-// Turned off from the menu: no protection, remembered, no prompt at the next launch.
 controller.toggle()
-precondition(item.title == named && item.state == .off && !controller.on && FileManager.default.fileExists(atPath: declined.path))
+precondition(item.title == named && item.state == .off && !controller.on && exists(off))
 store.workingAgentCount = 1
 settle(2)
 precondition(value() == "0", "turned off but still protecting")
-let relaunched = SleepProtection(store: store)
-let relaunchedItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-relaunched.menuItem = relaunchedItem
-relaunched.start() // Would block on a modal alert if it asked.
-precondition(relaunchedItem.title == named && relaunchedItem.state == .off && !relaunched.on)
+var (later, laterItem) = relaunch()
+precondition(laterItem.title == named && laterItem.state == .off && !later.on)
 print("PASS turning off stops protection and stays off after relaunch without asking")
-// Turned back on while authorized: no prompt.
 controller.toggle()
-precondition(item.state == .on && controller.on && !FileManager.default.fileExists(atPath: declined.path))
+precondition(item.state == .on && controller.on && !exists(off))
 wait("turning on during a task did not apply protection") { value() == "1" }
 store.workingAgentCount = 0
 wait("idle did not restore sleep") { value() == "0" }
 print("PASS turning on with authorization applies protection without asking")
+// Rule deleted after authorizing once: launch doesn't ask, even after a cancelled retry.
+try! FileManager.default.removeItem(at: dir.appendingPathComponent("authorized"))
+(later, laterItem) = relaunch()
+precondition(laterItem.title == unauthorized && !later.on)
+write("authorization-result", "cancel")
+later.authorize()
+settle()
+(later, laterItem) = relaunch()
+precondition(laterItem.title == unauthorized && !later.on)
+print("PASS once decided, launch never asks again")
+write("authorization-result", "success")
+controller.authorize()
+wait("re-authorization did not turn it on") { controller.on }
 write("fail")
 store.workingAgentCount = 1
 settle(2)

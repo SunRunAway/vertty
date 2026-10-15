@@ -1,8 +1,8 @@
 import AppKit
 import CoreServices
 
-/// A menu toggle. Off by the user's choice (Don't Allow, or turned off from the menu)
-/// is persisted; authorization is checked on every launch.
+/// A menu toggle. Launch asks only until the user has decided once (Don't Allow, or a
+/// successful authorization); authorization itself is checked on every launch.
 final class SleepProtection {
     weak var menuItem: NSMenuItem? { didSet { updateMenu() } }
     weak var window: NSWindow?
@@ -17,8 +17,10 @@ final class SleepProtection {
     private var active = false
     private var checking = false
     private let queue = DispatchQueue(label: "vhostty.sleep")
-    /// The user turned it off (Don't Allow, or from the menu): don't ask at launch.
-    private var declined: URL { AppPaths.support.appendingPathComponent("sleep-declined") }
+    /// The user has decided once: never ask at launch again.
+    private var asked: URL { AppPaths.support.appendingPathComponent("sleep-asked") }
+    /// Turned off from the menu.
+    private var off: URL { AppPaths.support.appendingPathComponent("sleep-off") }
     private var isTest: Bool { ProcessInfo.processInfo.environment["VHOSTTY_DEBUG_SNAPSHOT"] != nil }
     private var fixture: URL? {
         guard isTest, ProcessInfo.processInfo.environment["VHOSTTY_SUPPORT_DIR"] != nil,
@@ -31,17 +33,21 @@ final class SleepProtection {
         // Ordinary debug instances must never touch real power settings or authorization.
         guard !isTest || fixture != nil else { return }
         authorized = hasPermission()
-        guard !FileManager.default.fileExists(atPath: declined.path) else { return }
-        if authorized { enable() } else { configure() }
+        if authorized {
+            try? Data().write(to: asked, options: .atomic)
+            if !FileManager.default.fileExists(atPath: off.path) { enable() }
+        } else if !FileManager.default.fileExists(atPath: asked.path) {
+            configure()
+        }
     }
     /// The menu item: turn off, turn on, or ask for authorization first.
     func toggle() {
         guard !checking, !isTest || fixture != nil else { return }
         if on {
-            try? Data().write(to: declined, options: .atomic)
+            try? Data().write(to: off, options: .atomic)
             stop()
         } else if authorized {
-            try? FileManager.default.removeItem(at: declined)
+            try? FileManager.default.removeItem(at: off)
             enable()
         } else {
             configure()
@@ -56,10 +62,8 @@ final class SleepProtection {
         let handle = { [self] (answer: NSApplication.ModalResponse) in
             checking = false
             if answer == .alertSecondButtonReturn {
-                try? Data().write(to: declined, options: .atomic)
+                try? Data().write(to: asked, options: .atomic)
             } else if answer == .alertFirstButtonReturn {
-                // A previous refusal no longer applies, including when authorization is cancelled.
-                try? FileManager.default.removeItem(at: declined)
                 authorize()
             }
         }
@@ -113,7 +117,12 @@ final class SleepProtection {
             let ok = success
             DispatchQueue.main.async {
                 self.checking = false
-                if ok { self.enable() }
+                // A cancelled or failed authorization records nothing.
+                if ok {
+                    try? Data().write(to: self.asked, options: .atomic)
+                    try? FileManager.default.removeItem(at: self.off)
+                    self.enable()
+                }
             }
         }
     }
