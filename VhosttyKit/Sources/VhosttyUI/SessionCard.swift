@@ -180,6 +180,11 @@ public struct StatusIndicator: View {
                     .frame(width: Touch.size(7), height: Touch.size(7))
             case .starting:
                 Circle().fill(Color.gray.opacity(0.7)).frame(width: Touch.size(7), height: Touch.size(7))
+            case .dormant where attention:
+                // Unread from before a restart.
+                Circle()
+                    .fill(Color(red: 0.35, green: 0.62, blue: 1.0))
+                    .frame(width: Touch.size(7), height: Touch.size(7))
             case .dormant, .exited:
                 Circle().strokeBorder(Color.gray.opacity(0.8), lineWidth: 1.2).frame(width: Touch.size(7), height: Touch.size(7))
             }
@@ -194,7 +199,7 @@ public struct StatusIndicator: View {
         case .needsInput: return String(localized: "\(kind.name) needs your input", bundle: .module)
         case .idle: return attention ? String(localized: "\(kind.name) is done (unread)", bundle: .module) : String(localized: "Waiting for input", bundle: .module)
         case .starting: return String(localized: "Starting", bundle: .module)
-        case .dormant: return String(localized: "Not started (click to resume)", bundle: .module)
+        case .dormant: return attention ? String(localized: "Unread (click to resume)", bundle: .module) : String(localized: "Not started (click to resume)", bundle: .module)
         case .exited: return String(localized: "\(kind.name) exited", bundle: .module)
         }
     }

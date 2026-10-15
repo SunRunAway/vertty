@@ -64,7 +64,8 @@ final class TabSession: ObservableObject, Identifiable {
     var record: TabRecord {
         TabRecord(id: id, projectID: projectID, kind: kind, sessionID: sessionID, title: title, cwd: cwd,
                   branch: branch, worktree: worktree, prNumber: prNumber, prURL: prURL, prState: prState,
-                  shellOpen: shellVisible, shellCwd: shellCwd, scheduleTaskID: scheduleTaskID)
+                  shellOpen: shellVisible, shellCwd: shellCwd, scheduleTaskID: scheduleTaskID,
+                  unread: attention ? true : nil)
     }
 
     convenience init(record r: TabRecord) {
@@ -77,6 +78,9 @@ final class TabSession: ObservableObject, Identifiable {
         shellVisible = r.shellOpen ?? false
         shellCwd = r.shellCwd
         scheduleTaskID = r.scheduleTaskID
+        // Unread survives a restart; a question it was waiting on doesn't (the
+        // process ended), so it comes back as unread, not as needing input.
+        attention = r.unread ?? false
     }
 }
 
@@ -95,6 +99,8 @@ struct TabRecord: Codable {
     var shellOpen: Bool?
     var shellCwd: String?
     var scheduleTaskID: UUID?
+    /// The unread marker (TabSession.attention).
+    var unread: Bool?
 }
 
 struct PersistedState: Codable {

@@ -93,6 +93,7 @@ final class AppStore: ObservableObject {
             if let f = state.shellFraction { shellFraction = CGFloat(f) }
         }
         if selectedTabID != nil, selectedTab == nil { selectedTabID = tabs.first?.id }
+        updateDockBadge()
 
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 4, repeats: true) { [weak self] _ in
             self?.refreshAllInfo()
@@ -1048,8 +1049,12 @@ final class AppStore: ObservableObject {
 
     func updateDockBadge() {
         let unread = Set(tabs.filter(\.attention).map(\.id))
-        // Published so the sidebar's per-project unread counts redraw.
-        if unread != unreadTabIDs { unreadTabIDs = unread }
+        // Published so the sidebar's per-project unread counts redraw; saved
+        // so they survive a restart.
+        if unread != unreadTabIDs {
+            unreadTabIDs = unread
+            scheduleSave()
+        }
         NSApp.dockTile.badgeLabel = unread.isEmpty ? nil : "\(unread.count)"
     }
 

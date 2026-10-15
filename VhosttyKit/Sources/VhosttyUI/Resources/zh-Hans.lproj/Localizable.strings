@@ -40,6 +40,7 @@
 "Waiting for input" = "等待输入";
 "Starting" = "正在启动";
 "Not started (click to resume)" = "未启动（点击后恢复会话）";
+"Unread (click to resume)" = "未查看（点击后恢复会话）";
 "%@ exited" = "%@ 已退出";
 "now" = "刚刚";
 "%lldm" = "%lld分钟";
