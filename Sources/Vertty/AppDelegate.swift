@@ -22,7 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     /// See updateRemoteInfoItems.
     private let remoteInfoItems: [NSMenuItem] = (0..<3).map { _ in
         let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        item.indentationLevel = 1
+        item.indentationLevel = 2
         item.isEnabled = false
         item.isHidden = true
         return item
@@ -31,7 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     private lazy var tailscaleAccountItem: NSMenuItem = {
         let item = NSMenuItem(title: "", action: #selector(tailscaleAccount), keyEquivalent: "")
         item.target = self
-        item.indentationLevel = 1
+        item.indentationLevel = 2
         item.isHidden = true
         return item
     }()
@@ -228,11 +228,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         sleepProtection.menuItem = sleepItem
         appMenu.addItem(sleepItem)
         appMenu.addItem(item("Don’t Let the Display Turn Off", #selector(toggleDisplayAwake), ""))
-        appMenu.addItem(.sectionHeader(title: String(localized: "Allow Remote Connections")))
+        // A heading in the menu's own text color (a section header or a
+        // disabled item would be gray), with its two ways indented under it.
+        let remoteHeading = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        remoteHeading.attributedTitle = NSAttributedString(string: String(localized: "Allow Remote Connections"),
+                                                           attributes: [.font: NSFont.menuFont(ofSize: 0), .foregroundColor: NSColor.labelColor])
+        remoteHeading.isEnabled = false
+        appMenu.addItem(remoteHeading)
         let modes: [(String.LocalizationValue, RemoteServer.Mode)] = [("Via Tailscale", .tailscale), ("Own Network", .direct)]
         remoteModeItems = modes.map { title, mode in
             let choice = item(title, #selector(chooseRemoteMode(_:)), "")
             choice.representedObject = mode.rawValue
+            choice.indentationLevel = 1
             return choice
         }
         for choice in remoteModeItems { appMenu.addItem(choice) }
