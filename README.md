@@ -2,11 +2,11 @@
 
 <h1 align="center">Vertty</h1>
 
-<p align="center"><b>A vertical-tab terminal built for Claude Code and Codex, organized by project</b></p>
+<p align="center"><b>A vertical-tab terminal built for agents, organized by project</b></p>
 
 <p align="center">English · <a href="README.zh-CN.md">简体中文</a></p>
 
-Vertty is a native macOS terminal supporting Claude Code and Codex, built on libghostty. It organizes active and historical sessions by project.
+Vertty is a native macOS terminal for agents, built on libghostty. It organizes active and historical sessions by project.
 
 <p align="center"><img src="docs/screenshot.png" alt="Vertty with two projects: Claude Code and Codex session cards showing status, branch, worktree and PR, with a freshly started Claude Code session on the right"></p>
 
@@ -18,6 +18,10 @@ Vertty is a native macOS terminal supporting Claude Code and Codex, built on lib
 - **Sleep prevention**: prevent sleep with the lid closed and keep the display on while tasks run.
 - **Bottom shell**: open a shell below each session that follows its current directory.
 - **Ghostty configuration**: reuse your existing fonts, theme and keybindings.
+
+## Supported agents
+
+Currently supports Claude Code and Codex.
 
 ## Installing
 
