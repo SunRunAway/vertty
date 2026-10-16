@@ -80,13 +80,12 @@
 //   A session has one size (columns x rows), shared by everyone showing
 //   it; the most recent change wins:
 //   - The remote client asks for its own size, the cells its display area
-//     holds, when it opens a terminal (OpenTerminal); when that area changes
-//     while the app is in the foreground, when the iPhone app comes back to
-//     the foreground, and when the user clicks, taps or scrolls anywhere in
-//     the window or screen showing the terminal (TerminalViewport); and
-//     right before every keyboard input or paste (AlignForInput). The area
-//     changing as the app goes to the background (the keyboard put away
-//     when the iPhone locks) sends nothing.
+//     holds, when it opens a terminal (OpenTerminal); when that area
+//     changes, when the iPhone app comes back from the background (not the
+//     moment of active iOS passes through while locking), and when the user
+//     clicks, taps or scrolls anywhere in the window or screen showing the
+//     terminal (TerminalViewport); and right before every keyboard input or
+//     paste (AlignForInput).
 //   - The server's local window takes the session back to its own size when
 //     the window is resized, the user types or pastes there, or the user
 //     clicks or scrolls anywhere in the window while it shows the session.

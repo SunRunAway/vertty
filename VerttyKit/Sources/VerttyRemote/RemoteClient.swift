@@ -108,6 +108,7 @@ public final class RemoteClient: ObservableObject {
     }
 
     private func start() {
+        RemoteLog.note("client: connecting")
         stop()
         let gen = generation
         // The endpoint may have to find the computer first (Tailscale).
@@ -194,6 +195,7 @@ public final class RemoteClient: ObservableObject {
     /// endpoint couldn't find the computer (`reason`).
     private func dropped(_ gen: Int, reason: String? = nil) {
         guard gen == generation else { return }
+        RemoteLog.note("client: connection dropped (\(status)), reconnects=\(reconnectsAutomatically)")
         let wasConnecting = status == .connecting
         stop()
         if wasConnecting {
@@ -225,6 +227,7 @@ public final class RemoteClient: ObservableObject {
     // MARK: - Incoming
 
     private func handle(_ msg: Remote.ServerMessage) {
+        if case .snapshot(let snap) = msg.body { RemoteLog.note("client: snapshot \(snap.size.text)") }
         switch msg.body {
         case .welcome(let welcome):
             welcomed = true
@@ -232,6 +235,7 @@ public final class RemoteClient: ObservableObject {
             serverName = welcome.serverName
             status = .connected
             retryDelay = 1
+            RemoteLog.note("client: welcome, reopening=\(openCard?.size.text ?? "-")")
             if let open = openCard { sendOpen(open.id, open.size) }
         case .state(let state):
             self.state = state
@@ -344,6 +348,7 @@ public final class RemoteClient: ObservableObject {
     }
 
     private func sendOpen(_ cardID: String, _ size: Remote.TerminalSize) {
+        RemoteLog.note("client: open \(size.text)")
         var msg = Remote.ClientMessage()
         msg.openTerminal.cardID = cardID
         msg.openTerminal.size = size
@@ -353,6 +358,7 @@ public final class RemoteClient: ObservableObject {
     public func leaveTerminal() {
         guard let open = openCard else { return }
         openCard = nil
+        RemoteLog.note("client: leave")
         var msg = Remote.ClientMessage()
         msg.leaveTerminal.cardID = open.id
         send(msg)
@@ -362,6 +368,7 @@ public final class RemoteClient: ObservableObject {
     public func viewportChanged(_ size: Remote.TerminalSize) {
         guard let open = openCard else { return }
         openCard = (open.id, size)
+        RemoteLog.note("client: viewport \(size.text)")
         var msg = Remote.ClientMessage()
         msg.viewport.cardID = open.id
         msg.viewport.size = size
@@ -371,6 +378,7 @@ public final class RemoteClient: ObservableObject {
     /// Call when the user types or pastes, before the terminal encodes it.
     public func alignForInput(_ size: Remote.TerminalSize) {
         guard let open = openCard else { return }
+        if open.size != size { RemoteLog.note("client: align \(size.text)") }
         openCard = (open.id, size)
         var msg = Remote.ClientMessage()
         msg.alignForInput.cardID = open.id

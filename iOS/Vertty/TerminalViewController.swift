@@ -184,9 +184,8 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
 
     private func containerResized() {
         layoutTerminal()
-        // Not while the app goes away: locking puts the keyboard away, which
-        // isn't the user changing the size. Coming back sends it anyway.
-        if UIApplication.shared.applicationState == .active { store.viewportChanged() }
+        RemoteLog.note("terminal: area \(Int(container.bounds.width))x\(Int(container.bounds.height)) keyboard=\(keyboardIsUp)")
+        store.viewportChanged()
     }
 
     /// Lays the terminal out at the session's grid, scaled down to fit.

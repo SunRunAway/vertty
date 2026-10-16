@@ -404,6 +404,7 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
     /// foreground: the session takes this end's size.
     public func viewportChanged(force: Bool = false) {
         guard client.openCardID != nil, let own = display?.ownSize, force || own != sentSize else { return }
+        RemoteLog.note("store: display area \(own.text)\(force ? " (foreground)" : "")")
         sentSize = own
         sessionSize = own
         client.viewportChanged(own)
@@ -413,6 +414,7 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
     /// end's size, unless it has it already.
     public func willInteract() {
         guard client.openCardID != nil, let own = display?.ownSize, own != sessionSize else { return }
+        RemoteLog.note("store: click/tap/scroll")
         sentSize = own
         sessionSize = own
         client.viewportChanged(own)

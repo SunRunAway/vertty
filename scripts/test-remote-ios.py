@@ -364,8 +364,8 @@ try:
     wait(lambda: last_size() == local and terminal("session") == local, "a click on the computer didn't take its size back")
     print("PASS a tap on the iPhone and a click on the computer each take the session to their size", flush=True)
 
-    # Going to the background doesn't change the session's size, even when
-    # it puts the keyboard away (locking an iPhone does). Coming back does.
+    # Going to the background doesn't change the session's size; coming
+    # back does.
     simctl("launch", udid, "com.apple.Preferences")
     time.sleep(3)
     assert last_size() == local, read(agent_log)

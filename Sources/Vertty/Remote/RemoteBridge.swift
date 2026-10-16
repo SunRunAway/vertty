@@ -30,6 +30,7 @@ final class RemoteBridge {
     }
 
     func clientConnected(_ connection: RemoteConnection) {
+        RemoteLog.note("server: client connected")
         self.connection = connection
         lastState = nil
         sendStateIfChanged()
@@ -40,6 +41,7 @@ final class RemoteBridge {
 
     func clientDisconnected(_ connection: RemoteConnection) {
         guard connection === self.connection else { return }
+        RemoteLog.note("server: client disconnected")
         detach()
         stateTimer?.invalidate()
         stateTimer = nil
@@ -164,11 +166,20 @@ final class RemoteBridge {
         case .closeSession(let r): closeSession(r, id)
         case .listHistory(let r): listHistory(r, id)
         case .searchHistory(let r): searchHistory(r, id)
-        case .openTerminal(let r): openTerminal(r.cardID, r.size)
+        case .openTerminal(let r):
+            RemoteLog.note("server: open \(r.size.text)")
+            openTerminal(r.cardID, r.size)
         case .leaveTerminal(let r):
+            RemoteLog.note("server: leave")
             if attached?.tab.id.uuidString == r.cardID { detach() }
-        case .viewport(let r): resize(r.cardID, r.size)
-        case .alignForInput(let r): resize(r.cardID, r.size)
+        case .viewport(let r):
+            RemoteLog.note("server: viewport \(r.size.text)")
+            resize(r.cardID, r.size)
+        case .alignForInput(let r):
+            if let a = attached, a.surface.remoteGrid.map({ $0.columns != Int(r.size.columns) || $0.rows != Int(r.size.rows) }) ?? true {
+                RemoteLog.note("server: align \(r.size.text)")
+            }
+            resize(r.cardID, r.size)
         case .input(let r):
             guard let a = attached, a.tab.id.uuidString == r.cardID else { return }
             a.surface.writePTY(r.data)
@@ -360,7 +371,7 @@ final class RemoteBridge {
         guard let a = attached else { return }
         attached = nil
         a.surface.stopTap()
-        a.surface.useLocalGrid()
+        a.surface.useLocalGrid(because: "client left")
     }
 
     /// The latest size change wins (see TERMINAL SIZE AND INPUT).

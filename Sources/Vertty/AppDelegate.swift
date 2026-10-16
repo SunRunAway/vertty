@@ -166,7 +166,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
                 remote.store.willInteract()
             } else {
                 for tab in self.store.tabs where tab.surface?.window === window {
-                    tab.surface?.useLocalGrid()
+                    tab.surface?.useLocalGrid(because: "click or scroll")
                 }
             }
             return event

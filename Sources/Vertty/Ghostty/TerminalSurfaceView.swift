@@ -217,7 +217,7 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
     /// The user types or pastes: a local session takes this view's size
     /// again; a remote one tells its client (see RemoteHooks).
     private func willInput() {
-        if let remoteHooks { remoteHooks.willInput() } else { useLocalGrid() }
+        if let remoteHooks { remoteHooks.willInput() } else { useLocalGrid(because: "typing") }
     }
 
     /// Feeds a remote session's output to the terminal. Off the main thread,
@@ -238,8 +238,9 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
     }
 
     /// Back to the size that fits this view.
-    func useLocalGrid() {
+    func useLocalGrid(because reason: String) {
         guard let surface, remoteGrid != nil else { return }
+        RemoteLog.note("server: local size (\(reason))")
         remoteGrid = nil
         ghostty_surface_set_grid_override(surface, 0, 0)
     }
@@ -352,7 +353,7 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
         // a change.
         if window != nil {
             if let hosted = hostedSize, hosted != size {
-                if let remoteHooks { remoteHooks.displayResized() } else { useLocalGrid() }
+                if let remoteHooks { remoteHooks.displayResized() } else { useLocalGrid(because: "resized") }
             }
             hostedSize = size
         }

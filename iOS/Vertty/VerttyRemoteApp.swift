@@ -10,6 +10,9 @@ struct VerttyRemoteApp: App {
     @UIApplicationDelegateAdaptor private var delegate: AppDelegate
     @StateObject private var app = AppModel.shared
     @Environment(\.scenePhase) private var phase
+    /// Went to the background since last active. Locking the iPhone passes
+    /// through active for a moment on its way there; that isn't coming back.
+    @State private var backgrounded = false
 
     var body: some Scene {
         WindowGroup {
@@ -17,14 +20,19 @@ struct VerttyRemoteApp: App {
                 .preferredColorScheme(.dark)
         }
         .onChange(of: phase) { _, phase in
+            RemoteLog.note("app: \(phase)")
             guard let store = app.store else { return }
             switch phase {
             case .active:
                 // Back in the foreground: reconnect after an ordinary drop, and
                 // the open terminal takes the iPhone's size again.
                 store.client.reconnectsAutomatically = true
-                store.viewportChanged(force: true)
+                if backgrounded {
+                    backgrounded = false
+                    store.viewportChanged(force: true)
+                }
             case .background:
+                backgrounded = true
                 store.client.reconnectsAutomatically = false
             default:
                 break
@@ -135,10 +143,31 @@ struct RootView: View {
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        keepRemoteLog()
         #if DEBUG
             DebugDriver.shared.start()
         #endif
         return true
+    }
+
+    /// RemoteLog's lines in Documents/remote-size.log, started over past 1 MB.
+    private func keepRemoteLog() {
+        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("remote-size.log")
+        if let size = try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int, size > 1 << 20 {
+            try? FileManager.default.removeItem(at: url)
+        }
+        if !FileManager.default.fileExists(atPath: url.path) { FileManager.default.createFile(atPath: url.path, contents: nil) }
+        guard let handle = try? FileHandle(forWritingTo: url) else { return }
+        handle.seekToEndOfFile()
+        let queue = DispatchQueue(label: "vertty.remote-log")
+        let format = ISO8601DateFormatter()
+        format.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        RemoteLog.sink = { line in
+            let stamped = "\(format.string(from: Date())) \(line)\n"
+            queue.async { handle.write(Data(stamped.utf8)) }
+        }
+        RemoteLog.note("app: started")
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
