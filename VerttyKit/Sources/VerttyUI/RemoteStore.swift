@@ -106,6 +106,9 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
     private var awaitingTimeout: DispatchWorkItem?
     /// The size last sent for the open terminal.
     private var sentSize: Remote.TerminalSize?
+    /// The open session's size, from its last snapshot or this end's last
+    /// request since.
+    private var sessionSize: Remote.TerminalSize?
 
     public init(endpoint: RemoteEndpoint, platform: Remote.ClientPlatform, deviceName: String) {
         client = RemoteClient(endpoint: endpoint, platform: platform, deviceName: deviceName)
@@ -387,6 +390,7 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
         guard again || client.openCardID != id.uuidString else { return }
         resetStream()
         sentSize = own
+        sessionSize = own
         client.openTerminal(cardID: id.uuidString, size: own)
     }
 
@@ -401,6 +405,16 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
     public func viewportChanged(force: Bool = false) {
         guard client.openCardID != nil, let own = display?.ownSize, force || own != sentSize else { return }
         sentSize = own
+        sessionSize = own
+        client.viewportChanged(own)
+    }
+
+    /// The user clicked, tapped or scrolled here: the session takes this
+    /// end's size, unless it has it already.
+    public func willInteract() {
+        guard client.openCardID != nil, let own = display?.ownSize, own != sessionSize else { return }
+        sentSize = own
+        sessionSize = own
         client.viewportChanged(own)
     }
 
@@ -408,6 +422,7 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
     public func willInput() {
         guard let own = display?.ownSize else { return }
         sentSize = own
+        sessionSize = own
         client.alignForInput(own)
     }
 
@@ -426,6 +441,7 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
         guard cardID == selectedCardID?.uuidString, let display else { return }
         // The terminal shows the session at its size: take it, then replay.
         let grid = Remote.TerminalSize(columns: columns, rows: rows)
+        sessionSize = grid
         awaiting = grid
         queued = [data]
         display.showGrid(grid)

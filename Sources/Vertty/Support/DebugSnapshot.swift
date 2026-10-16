@@ -34,7 +34,8 @@ final class DebugSnapshot {
     /// is selected", so a test can't type into a real session by accident.
     ///   to <uuid> / toshell <uuid> · text <s> · enter · down · up · esc ·
     ///   select <uuid> · new · notify · toggleshell · focus claude|shell ·
-    ///   post <ctrl|cmd|none> <char> · schedules · schedule <task uuid> ·
+    ///   post <ctrl|cmd|none> <char> · postclick|postscroll <x> <y> ·
+    ///   remotepostclick|remotepostscroll <x> <y> · schedules · schedule <task uuid> ·
     ///   runschedule <task uuid> · tickschedules · newschedule · closepanel ·
     ///   panelsave · panelcancel ·
     ///   sheetkey return|escape (the open sheet or alert)
@@ -42,6 +43,32 @@ final class DebugSnapshot {
     private static var remoteMenu: NSMenu? {
         NSApp.mainMenu?.items.first?.submenu?.items.compactMap(\.submenu).first {
             $0.items.contains { $0.action == NSSelectorFromString("toggleRemoteMode:") }
+        }
+    }
+
+    /// postclick|postscroll <x> <y>, in window-local points from the top left.
+    private static func postMouse(_ line: String, in window: NSWindow) {
+        let parts = line.split(separator: " ")
+        guard parts.count == 3, let x = Double(parts[1]), let y = Double(parts[2]),
+              let view = window.contentView else { return }
+        let local = NSPoint(x: x, y: view.isFlipped ? y : view.bounds.height - y)
+        guard view.bounds.contains(local) else { return }
+        let point = view.convert(local, to: nil)
+        if parts[0] == "postscroll" {
+            guard let cg = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: -10, wheel2: 0, wheel3: 0) else { return }
+            let screen = window.convertPoint(toScreen: point)
+            cg.location = CGPoint(x: screen.x, y: (NSScreen.screens.first?.frame.height ?? 0) - screen.y)
+            // Field 51 is the event's window number (NSEvent.windowNumber).
+            cg.setIntegerValueField(CGEventField(rawValue: 51)!, value: Int64(window.windowNumber))
+            if let event = NSEvent(cgEvent: cg) { NSApp.postEvent(event, atStart: false) }
+            return
+        }
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            if let event = NSEvent.mouseEvent(
+                with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1) {
+                NSApp.postEvent(event, atStart: false)
+            }
         }
     }
 
@@ -76,6 +103,17 @@ final class DebugSnapshot {
                         }
                     }
                 }
+                continue
+            }
+            // postclick|postscroll <x> <y>: queue a real click or scroll at a
+            // window-local point, dispatched by AppKit like hardware input.
+            if line.hasPrefix("postclick ") || line.hasPrefix("postscroll "), let window {
+                Self.postMouse(line, in: window)
+                continue
+            }
+            if line.hasPrefix("remotepostclick ") || line.hasPrefix("remotepostscroll "),
+               let remote = RemoteWindowController.all.last {
+                Self.postMouse(String(line.dropFirst(6)), in: remote.window)
                 continue
             }
             if line.hasPrefix("alertbutton "), let index = Int(line.dropFirst(12)),

@@ -70,19 +70,24 @@
 //   A session has one size (columns x rows), shared by everyone showing
 //   it; the most recent change wins:
 //   - The remote client asks for its own size, the cells its display area
-//     holds, when it opens a terminal (OpenTerminal), when that area changes
-//     or the iPhone app comes back to the foreground (TerminalViewport),
-//     and right before every keyboard input or paste (AlignForInput).
+//     holds, when it opens a terminal (OpenTerminal); when that area changes
+//     while the app is in the foreground, when the iPhone app comes back to
+//     the foreground, and when the user clicks, taps or scrolls anywhere in
+//     the window or screen showing the terminal (TerminalViewport); and
+//     right before every keyboard input or paste (AlignForInput). The area
+//     changing as the app goes to the background (the keyboard put away
+//     when the iPhone locks) sends nothing.
 //   - The server's local window takes the session back to its own size when
-//     the window is resized or the user types or pastes there.
+//     the window is resized, the user types or pastes there, or the user
+//     clicks or scrolls anywhere in the window while it shows the session.
 //   - When the client leaves the terminal (LeaveTerminal) or disconnects,
 //     the session goes back to the local size.
 //   AlignForInput is sent when the user types (system keyboard or the key
 //   bar) or pastes, before the bytes of that input (TerminalInput). The
 //   server changes the size only if it differs, then writes the bytes, so
-//   input always lands at the sender's size. Scrolling, clicking and
-//   selecting text never send AlignForInput, even when they reach the
-//   program as mouse events (TerminalInput without AlignForInput). Changing
+//   input always lands at the sender's size. Mouse events the program gets
+//   (TerminalInput without AlignForInput) follow the TerminalViewport the
+//   click or scroll sent, and never change the size themselves. Changing
 //   the size changes the session's columns and rows only; no window on
 //   either side is resized.
 //   Whatever the size, the client shows the session at the size it
@@ -383,8 +388,9 @@ message LeaveTerminal {
   string card_id = 1;
 }
 
-// The client's display area changed size, or the iPhone app came back to
-// the foreground. The session takes `size`.
+// The client's display area changed size, the iPhone app came back to the
+// foreground, or the user clicked, tapped or scrolled there. The session
+// takes `size`.
 message TerminalViewport {
   string card_id = 1;
   TerminalSize size = 2;

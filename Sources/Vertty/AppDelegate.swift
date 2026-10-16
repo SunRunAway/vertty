@@ -74,6 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         store.load()
         buildMenu()
         createWindow()
+        watchInteraction()
         sleepProtection.window = window
         store.window = window
         store.activateSelection()
@@ -151,6 +152,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         window.setFrameAutosaveName("VerttyMainWindow")
         if ProcessInfo.processInfo.environment["VERTTY_DEBUG_SNAPSHOT"] == nil {
             window.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    /// A click or scroll anywhere in a window is a sign of who's using a
+    /// session shared with a remote client: in a remote window it takes the
+    /// session to that window's size; in the main window the session shown
+    /// there takes this Mac's size back.
+    private func watchInteraction() {
+        NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel]) { [weak self] event in
+            guard let self, let window = event.window else { return event }
+            if let remote = RemoteWindowController.all.first(where: { $0.window === window }) {
+                remote.store.willInteract()
+            } else {
+                for tab in self.store.tabs where tab.surface?.window === window {
+                    tab.surface?.useLocalGrid()
+                }
+            }
+            return event
         }
     }
 

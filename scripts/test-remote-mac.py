@@ -5,8 +5,9 @@ Starts two scratch instances of build/Vertty.app: a server with a project, a
 card and a fake agent (logs its terminal size and input), and a client with
 no projects that opens a remote window to the server through the debug
 driver. Checks that the remote window lists the card, shows its terminal at
-the window's size, types into it, lists and searches past sessions, and
-starts a new one. Build first with make app.
+the window's size, types into it, follows clicks and scrolls in either
+window to that window's size, lists and searches past sessions, and starts
+a new one. Build first with make app.
 """
 import json
 import os
@@ -178,6 +179,25 @@ try:
     assert input_size("6869") == own, read(agent_log)
     wait(lambda: "GOT 6869" in read(client_snap / "state.txt"), "echo didn't show in the remote terminal")
     print("PASS typing reaches the session and its output shows", flush=True)
+
+    def drive_server(*lines):
+        target = server_snap / "input.txt"
+        wait(lambda: not target.exists(), "server didn't take its last command")
+        target.write_text("\n".join(lines) + "\n")
+
+    # A click or scroll anywhere in a window takes the session to that
+    # window's size: the server's main window (showing the card) or the
+    # remote window.
+    drive_server("postclick 900 400")
+    wait(lambda: last_size() not in (None, own), "a click in the server's window kept the remote size")
+    local = last_size()
+    drive("remotepostclick 800 400")
+    wait(lambda: last_size() == own and remote_line("grid") == own, "a click in the remote window kept the server's size")
+    drive_server("postscroll 900 400")
+    wait(lambda: last_size() == local, "a scroll in the server's window kept the remote size")
+    drive("remotepostscroll 800 400")
+    wait(lambda: last_size() == own, "a scroll in the remote window kept the server's size")
+    print(f"PASS clicks and scrolls take the session to their window's size ({local} / {own})", flush=True)
 
     def history_line():
         for line in read(client_snap / "state.txt").splitlines():

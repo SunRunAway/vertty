@@ -352,6 +352,29 @@ try:
     wait(lambda: terminal("session") == local and terminal("reported") == local,
          f"the iPhone didn't show the computer's size {local}")
     simctl("io", udid, "screenshot", str(root / "computer-size.png"))
+
+    # A tap on the iPhone takes the session to its size before its click; a
+    # click in the computer's window takes it back.
+    count = len(inputs())
+    drive("tap")
+    wait(lambda: last_size() == own and terminal("session") == own, "a tap didn't take the session to the iPhone's size")
+    wait(lambda: any(h.startswith("1b5b3c30") for h, _ in inputs()[count:]), "the tap's click didn't reach the agent")
+    assert all(size == own for _, size in inputs()[count:]), read(agent_log)
+    server_drive("postclick 900 400")
+    wait(lambda: last_size() == local and terminal("session") == local, "a click on the computer didn't take its size back")
+    print("PASS a tap on the iPhone and a click on the computer each take the session to their size", flush=True)
+
+    # Going to the background doesn't change the session's size, even when
+    # it puts the keyboard away (locking an iPhone does). Coming back does.
+    simctl("launch", udid, "com.apple.Preferences")
+    time.sleep(3)
+    assert last_size() == local, read(agent_log)
+    simctl("launch", udid, BUNDLE)
+    own = settled_size("coming back to the foreground didn't take the iPhone's size")
+    server_drive(f"to {card_id}", "text z")
+    wait(lambda: input_size("7a") == local, "typing on the computer didn't take its size back")
+    print("PASS going to the background keeps the size; coming back takes it", flush=True)
+
     drive("type y", "send")
     wait(lambda: input_size("79") is not None, "typing after the computer's input didn't reach the agent")
     assert input_size("79") == own, read(agent_log)

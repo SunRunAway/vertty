@@ -3,6 +3,7 @@ import GhosttyKit
 import GhosttyTerminal
 import SwiftUI
 import UIKit
+import UIKit.UIGestureRecognizerSubclass
 import VerttyRemote
 import VerttyUI
 
@@ -94,6 +95,9 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
         drag.cancelsTouchesInView = false
         drag.delegate = self
         container.addGestureRecognizer(drag)
+        // Any touch on this screen, a tap, a scroll or a key on the bar,
+        // takes the session to the iPhone's size.
+        view.addGestureRecognizer(TouchWatcher { [weak self] in self?.store.willInteract() })
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -180,7 +184,9 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
 
     private func containerResized() {
         layoutTerminal()
-        store.viewportChanged()
+        // Not while the app goes away: locking puts the keyboard away, which
+        // isn't the user changing the size. Coming back sends it anyway.
+        if UIApplication.shared.applicationState == .active { store.viewportChanged() }
     }
 
     /// Lays the terminal out at the session's grid, scaled down to fit.
@@ -244,9 +250,10 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
     func debugSend() { bar.send() }
     /// A key on the bar, by its label.
     func debugPress(_ label: String) { bar.debugPress(label) }
-    /// A tap in the middle of the terminal without a hardware keyboard: only
-    /// its click.
+    /// A tap in the middle of the terminal without a hardware keyboard: the
+    /// iPhone's size, then only its click.
     func debugTap() {
+        store.willInteract()
         terminal.sendMousePos(x: terminal.bounds.midX, y: terminal.bounds.midY)
         terminal.sendMouseButton(state: GHOSTTY_MOUSE_PRESS, button: GHOSTTY_MOUSE_LEFT)
         terminal.sendMouseButton(state: GHOSTTY_MOUSE_RELEASE, button: GHOSTTY_MOUSE_LEFT)
@@ -275,6 +282,24 @@ private final class RemoteTerminalView: UITerminalView {
 
     override func toggleSoftwareKeyboard() {
         if onTap?() != true { super.toggleSoftwareKeyboard() }
+    }
+}
+
+/// Reports each touch that starts in its view, and never recognizes, so
+/// the touch goes on as usual.
+private final class TouchWatcher: UIGestureRecognizer {
+    private let touched: () -> Void
+
+    init(_ touched: @escaping () -> Void) {
+        self.touched = touched
+        super.init(target: nil, action: nil)
+        cancelsTouchesInView = false
+        delaysTouchesEnded = false
+    }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        touched()
+        state = .failed
     }
 }
 
