@@ -64,7 +64,8 @@ def report(*_):
     os.write(1, f"\\r\\nSIZE {{c}}x{{r}}\\r\\n".encode())
 signal.signal(signal.SIGWINCH, report)
 report()
-os.write(1, b"\\x1b[1;32mgreen prompt\\x1b[0m > ")
+# Tracks the mouse (SGR reports), as Claude Code does.
+os.write(1, b"\\x1b[?1000h\\x1b[?1006h\\x1b[1;32mgreen prompt\\x1b[0m > ")
 tty.setraw(0)
 while True:
     b = os.read(0, 1024)
@@ -259,11 +260,29 @@ try:
     simctl("io", udid, "screenshot", str(root / "terminal.png"))
     print(f"PASS opening shows the terminal at the device's size ({own}), without the keyboard", flush=True)
 
+    # A tap clicks, then brings up the keyboard: the program gets the click
+    # at the size it was tapped at, before the keyboard resizes the session.
+    count = len(inputs())
+    drive("tap")
+    wait(lambda: terminal("keyboard") == "true", "a tap didn't bring up the keyboard")
+    wait(lambda: any(h.startswith("1b5b3c30") for h, _ in inputs()[count:]), "the tap's click didn't reach the agent")
+    clicks = [(h, size) for h, size in inputs()[count:] if h.startswith("1b5b3c30")]
+    assert all(size == own for _, size in clicks), (own, clicks)
+    drive("hidekeyboard")
+    wait(lambda: terminal("keyboard") == "false", "the keyboard didn't go away")
+    print("PASS a tap's click reaches the program before the keyboard resizes it", flush=True)
+
     drive("focus")
     wait(lambda: terminal("keyboard") == "true", "tapping the terminal didn't bring up the keyboard")
     assert terminal("bar") == "keys", phone()
     own = settled_size("session not at the size with the keyboard up")
     simctl("io", udid, "screenshot", str(root / "keyboard-keys.png"))
+    # With the keyboard up, a tap only clicks: the keyboard stays.
+    count = len(inputs())
+    drive("tap")
+    wait(lambda: any(h.startswith("1b5b3c30") for h, _ in inputs()[count:]), "a tap with the keyboard up didn't click")
+    time.sleep(0.5)
+    assert terminal("keyboard") == "true", phone()
     # With nothing typed, Return and Backspace are the terminal's, as are
     # the bar's keys and sliding on the space bar (Left presses).
     for command, sent, what in (("enter", "0d", "Return"), ("backspace", "7f", "Backspace"),

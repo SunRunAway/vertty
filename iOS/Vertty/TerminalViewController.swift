@@ -1,4 +1,5 @@
 import GameController
+import GhosttyKit
 import GhosttyTerminal
 import SwiftUI
 import UIKit
@@ -81,7 +82,7 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
         // The keys are on the bar, so the keyboard carries none of its own.
         terminal.inputAccessoryItems = []
         terminal.onWillInput = { [weak self] in self?.store.willInput() }
-        terminal.toggleKeyboard = { [weak self] in self?.toggleKeyboard() ?? false }
+        terminal.onTap = { [weak self] in self?.terminalTapped() ?? false }
         container.addSubview(terminal)
 
         bar.keyboardIsUp = { [weak self] in self?.keyboardIsUp ?? false }
@@ -123,11 +124,17 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
         if terminal.isFirstResponder, !Self.hasHardwareKeyboard { terminal.resignFirstResponder() }
     }
 
-    /// A tap on the terminal; false leaves it to the terminal.
-    private func toggleKeyboard() -> Bool {
+    /// A tap on the terminal, after its click, brings up the keyboard; it
+    /// never puts it away (a swipe does), so tapping something in the
+    /// program leaves typing alone. False leaves it to the terminal.
+    private func terminalTapped() -> Bool {
         guard !Self.hasHardwareKeyboard else { return false }
-        if keyboardIsUp { hideKeyboard() } else { bar.focus() }
+        showKeyboard()
         return true
+    }
+
+    private func showKeyboard() {
+        if !keyboardIsUp { bar.focus() }
     }
 
     @objc private func dragged(_ drag: UIPanGestureRecognizer) {
@@ -245,6 +252,14 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
     /// What a tap on the terminal does to the keyboard without a hardware
     /// keyboard (the simulator has the Mac's).
     func debugFocus() { bar.focus() }
+    /// A tap in the middle of the terminal: its click, then the keyboard
+    /// as without a hardware keyboard.
+    func debugTap() {
+        terminal.sendMousePos(x: terminal.bounds.midX, y: terminal.bounds.midY)
+        terminal.sendMouseButton(state: GHOSTTY_MOUSE_PRESS, button: GHOSTTY_MOUSE_LEFT)
+        terminal.sendMouseButton(state: GHOSTTY_MOUSE_RELEASE, button: GHOSTTY_MOUSE_LEFT)
+        showKeyboard()
+    }
     /// What a swipe down onto the bar does, as above; it also puts away the
     /// terminal's focus a hardware keyboard gave it.
     func debugHideKeyboard() {
@@ -261,13 +276,13 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
     }
 }
 
-/// The terminal, with a tap's keyboard toggle up to its owner.
+/// The terminal, with what a tap does to the keyboard up to its owner.
 private final class RemoteTerminalView: UITerminalView {
-    /// Shows or hides the keyboard; false leaves it to the terminal.
-    var toggleKeyboard: (() -> Bool)?
+    /// After a tap's click; false leaves the keyboard to the terminal.
+    var onTap: (() -> Bool)?
 
     override func toggleSoftwareKeyboard() {
-        if toggleKeyboard?() != true { super.toggleSoftwareKeyboard() }
+        if onTap?() != true { super.toggleSoftwareKeyboard() }
     }
 }
 

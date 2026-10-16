@@ -78,6 +78,8 @@
                 store.newSession(in: project, kind: nil)
             case "focus":
                 terminal?.debugFocus()
+            case "tap":
+                terminal?.debugTap()
             case "hidekeyboard":
                 terminal?.debugHideKeyboard()
             case "slide":
