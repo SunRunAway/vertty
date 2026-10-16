@@ -20,7 +20,7 @@ def wait_for(check, description, timeout=20):
     raise AssertionError(description)
 
 
-root = Path(tempfile.mkdtemp(dir="/private/tmp", prefix="vhostty-history-"))
+root = Path(tempfile.mkdtemp(dir="/private/tmp", prefix="vertty-history-"))
 print(f"Scratch artifacts: {root}", flush=True)
 home = root / "codex"
 project = root / "project"
@@ -82,8 +82,8 @@ def refresh():
     wait_for(lambda: not (snapshot / "input.txt").exists(), "debug command not consumed")
 
 
-env = dict(os.environ, CODEX_HOME=str(home), VHOSTTY_SUPPORT_DIR=str(support),
-           VHOSTTY_DEBUG_SNAPSHOT=str(snapshot))
+env = dict(os.environ, CODEX_HOME=str(home), VERTTY_SUPPORT_DIR=str(support),
+           VERTTY_DEBUG_SNAPSHOT=str(snapshot))
 with log_path.open("w") as log:
     app = testapp.launch(env, log)
     blocker = None

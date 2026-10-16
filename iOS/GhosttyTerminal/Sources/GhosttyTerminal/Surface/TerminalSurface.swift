@@ -22,7 +22,7 @@ public final class TerminalSurface {
     /// hardware keyboard, a host's `sendKey`. Ghostty cannot report the
     /// resulting size, so the coordinator keeps it (`TerminalFontSize`).
     var onFontSizeAction: ((TerminalFontSizeAction) -> Void)?
-    /// Vhostty: called before a key press or a paste goes in.
+    /// Vertty: called before a key press or a paste goes in.
     var onWillInput: (() -> Void)?
 
     init(_ surface: ghostty_surface_t) {

@@ -1,8 +1,8 @@
 // swift-tools-version: 6.2
 import PackageDescription
 
-// Vendored from libghostty-spm (MIT, see LICENSE and VHOSTTY.md): its UIKit
-// terminal view, with the changes the Vhostty iOS client needs, on a
+// Vendored from libghostty-spm (MIT, see LICENSE and VERTTY.md): its UIKit
+// terminal view, with the changes the Vertty iOS client needs, on a
 // GhosttyKit built from the same Ghostty as the Mac app.
 let swiftSettings: [SwiftSetting] = [
     .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
@@ -40,7 +40,7 @@ let package = Package(
             ],
             swiftSettings: swiftSettings
         ),
-        // Built from vendor/ghostty and Vhostty's patch, like the Mac app's
+        // Built from vendor/ghostty and Vertty's patch, like the Mac app's
         // libghostty: scripts/build-ghostty-ios.sh.
         .binaryTarget(name: "libghostty", path: "GhosttyKit.xcframework"),
     ],

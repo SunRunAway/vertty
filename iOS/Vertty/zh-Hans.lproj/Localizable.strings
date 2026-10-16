@@ -1,0 +1,8 @@
+/* Simplified Chinese. Keys are the English source strings. The shared
+   sidebar's strings are in VerttyKit (VerttyUI). */
+"Computer" = "电脑";
+"Your computer's address, with the port shown under Allow Remote Connections in its Vertty menu. The connection's security is up to you (for example a VPN)." = "填写电脑的地址，加上电脑上 Vertty 菜单“允许远程连接”下显示的端口。连接的安全由你自己负责（例如使用 VPN）。";
+"Connect" = "连接";
+"That isn't an address Vertty can connect to." = "Vertty 无法连接这个地址。";
+"Enter a host and port, such as 192.168.1.5:58563 or mac.local:58563." = "请输入主机和端口，例如 192.168.1.5:58563 或 mac.local:58563。";
+"OK" = "好";

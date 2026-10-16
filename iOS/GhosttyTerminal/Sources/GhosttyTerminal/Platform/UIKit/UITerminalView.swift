@@ -68,7 +68,7 @@
                 }
             }
 
-            /// Vhostty: a key pinned to the bar's trailing edge, outside the
+            /// Vertty: a key pinned to the bar's trailing edge, outside the
             /// scrolling keys, that hides the software keyboard (the iPhone's
             /// keyboard has no key of its own for it).
             open var inputAccessoryShowsDismissKey = false {
@@ -152,7 +152,7 @@
             set { core.delegate = newValue }
         }
 
-        /// Vhostty: called before a key press or a paste reaches the
+        /// Vertty: called before a key press or a paste reaches the
         /// terminal.
         public var onWillInput: (() -> Void)? {
             get { core.onWillInput }

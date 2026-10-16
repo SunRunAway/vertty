@@ -1,6 +1,6 @@
 //
 //  UITerminalView+FloatingCursor.swift
-//  Vhostty
+//  Vertty
 //
 
 #if canImport(UIKit) && !targetEnvironment(macCatalyst)
@@ -12,7 +12,7 @@
         var steps = 0
     }
 
-    /// Vhostty: holding the space bar and sliding moves the cursor. The text
+    /// Vertty: holding the space bar and sliding moves the cursor. The text
     /// UIKit sees here is only the composition, so its own caret has nowhere
     /// to go; instead each cell of horizontal travel presses Left or Right,
     /// which is how the program in the terminal moves its cursor.

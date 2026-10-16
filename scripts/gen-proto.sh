@@ -1,5 +1,5 @@
 #!/bin/bash
-# Regenerate VhosttyKit/Sources/VhosttyRemote/Generated from the .proto file.
+# Regenerate VerttyKit/Sources/VerttyRemote/Generated from the .proto file.
 # Downloads protoc and builds protoc-gen-swift (the version the package pins)
 # into build/tools the first time.
 set -euo pipefail
@@ -26,8 +26,8 @@ if [ ! -x "$PLUGIN" ]; then
   (cd "$TOOLS/swift-protobuf-$SWIFT_PROTOBUF_VERSION" && swift build -c release --product protoc-gen-swift)
 fi
 
-OUT="$ROOT/VhosttyKit/Sources/VhosttyRemote/Generated"
+OUT="$ROOT/VerttyKit/Sources/VerttyRemote/Generated"
 "$PROTOC" --plugin=protoc-gen-swift="$PLUGIN" \
   --swift_out="$OUT" --swift_opt=Visibility=Public \
-  -I "$ROOT/VhosttyKit/Proto" "$ROOT/VhosttyKit/Proto/vhostty_remote.proto"
-echo "Generated $OUT/vhostty_remote.pb.swift"
+  -I "$ROOT/VerttyKit/Proto" "$ROOT/VerttyKit/Proto/vertty_remote.proto"
+echo "Generated $OUT/vertty_remote.pb.swift"

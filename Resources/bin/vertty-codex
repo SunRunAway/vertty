@@ -1,0 +1,25 @@
+#!/bin/sh
+# Started by Vertty in each Codex tab. --no-daemon: the card runs its own app
+# server instead of Codex's shared background one, so the session stays local
+# (worktrees work) and ends with the card. Vertty's scheduled-task tools come in
+# as an MCP server for this session only.
+sub=
+if [ "$1" = "resume" ]; then
+  sub=resume
+  shift
+fi
+if [ -n "$VERTTY_SCHEDULE_CLI" ] && [ -x "$VERTTY_SCHEDULE_CLI" ]; then
+  set -- \
+    -c "mcp_servers.vertty.command=\"$VERTTY_SCHEDULE_CLI\"" \
+    -c 'mcp_servers.vertty.args=["mcp"]' \
+    -c "mcp_servers.vertty.env.VERTTY_TAB_ID=\"$VERTTY_TAB_ID\"" \
+    -c "mcp_servers.vertty.env.VERTTY_SOCK=\"$VERTTY_SOCK\"" \
+    "$@"
+fi
+codex $sub --no-daemon "$@"
+status=$?
+# Tell Vertty it quit, through the same helper Claude Code's hooks use.
+if [ -n "$VERTTY_HOOK" ] && [ -x "$VERTTY_HOOK" ]; then
+  printf '{"hook_event_name":"SessionEnd"}' | "$VERTTY_HOOK"
+fi
+exit $status

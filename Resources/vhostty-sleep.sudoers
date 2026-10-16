@@ -1,2 +1,0 @@
-# Vhostty closed-display sleep protection
-%admin ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a disablesleep 0

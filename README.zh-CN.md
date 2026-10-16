@@ -1,14 +1,14 @@
-<p align="center"><img src="docs/icon.png" width="128" alt="Vhostty icon"></p>
+<p align="center"><img src="docs/icon.png" width="128" alt="Vertty icon"></p>
 
-<h1 align="center">Vhostty</h1>
+<h1 align="center">Vertty</h1>
 
 <p align="center"><b>为 Claude Code 和 Codex 打造的垂直标签终端</b></p>
 
 <p align="center"><a href="README.md">English</a> · 简体中文</p>
 
-Vhostty 是一个支持 Claude Code 和 Codex 的 macOS 原生终端（基于 libghostty），按项目组织活跃和历史会话。
+Vertty 是一个支持 Claude Code 和 Codex 的 macOS 原生终端（基于 libghostty），按项目组织活跃和历史会话。
 
-<p align="center"><img src="docs/screenshot.png" alt="Vhostty 截图：两个项目，Claude Code 和 Codex 的会话卡片上显示状态、分支、worktree 和 PR，右边是一个刚打开的新 Claude Code 会话"></p>
+<p align="center"><img src="docs/screenshot.png" alt="Vertty 截图：两个项目，Claude Code 和 Codex 的会话卡片上显示状态、分支、worktree 和 PR，右边是一个刚打开的新 Claude Code 会话"></p>
 
 ## 功能
 
@@ -27,10 +27,10 @@ Vhostty 是一个支持 Claude Code 和 Codex 的 macOS 原生终端（基于 li
 
 ```bash
 brew tap SunRunAway/tap
-brew install --cask SunRunAway/tap/vhostty
+brew install --cask SunRunAway/tap/vertty
 ```
 
-它会通过我们的 [Homebrew tap](https://github.com/SunRunAway/homebrew-tap) 将 Vhostty 安装到 `/Applications`。更新请运行 `brew update && brew upgrade --cask vhostty`。
+它会通过我们的 [Homebrew tap](https://github.com/SunRunAway/homebrew-tap) 将 Vertty 安装到 `/Applications`。更新请运行 `brew update && brew upgrade --cask vertty`。
 
 不使用 Homebrew 的安装方式见[手动安装](docs/manual-installation.zh-CN.md)。
 

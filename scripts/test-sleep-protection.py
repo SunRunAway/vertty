@@ -10,9 +10,9 @@ import tempfile
 import time
 import testapp
 
-root = Path(tempfile.mkdtemp(prefix='vhostty-sleep-', dir='/private/tmp'))
+root = Path(tempfile.mkdtemp(prefix='vertty-sleep-', dir='/private/tmp'))
 print(f'Artifacts: {root}', flush=True)
-binary = Path('build/Vhostty.app/Contents/MacOS').resolve()
+binary = Path('build/Vertty.app/Contents/MacOS').resolve()
 
 def wait(check, message, timeout=25):
     until = time.monotonic() + timeout
@@ -28,7 +28,7 @@ case = root / 'watchdog'
 case.mkdir()
 (case / 'value').write_text('0')
 def helper(*extra):
-    return subprocess.Popen([str(binary / 'vhostty-sleep'), *extra, '--test-dir', str(case)],
+    return subprocess.Popen([str(binary / 'vertty-sleep'), *extra, '--test-dir', str(case)],
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 def end(p):
     p.stdin.close(); return p.wait(timeout=10)
@@ -89,8 +89,8 @@ case = root / 'app'
 case.mkdir()
 (case / 'value').write_text('0')
 (case / 'state.json').write_text('{"projects":[],"tabs":[]}')
-env = dict(os.environ, VHOSTTY_SUPPORT_DIR=str(case), VHOSTTY_DEBUG_SNAPSHOT=str(case),
-           VHOSTTY_SLEEP_TEST_DIR=str(case))
+env = dict(os.environ, VERTTY_SUPPORT_DIR=str(case), VERTTY_DEBUG_SNAPSHOT=str(case),
+           VERTTY_SLEEP_TEST_DIR=str(case))
 log = (case / 'app.log').open('w')
 app = None
 
@@ -186,8 +186,8 @@ for name in ['claude', 'gh']:
 (case / 'value').write_text('0'); (case / 'authorized').touch()
 (case / 'state.json').write_text(json.dumps({'projects': [{'id': str(uuid.uuid4()), 'name': 'Sleep fixture', 'path': str(project), 'expanded': True}], 'tabs': []}))
 env = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home), ZDOTDIR=str(home),
-           CODEX_HOME=str(home / '.codex'), VHOSTTY_SUPPORT_DIR=str(case),
-           VHOSTTY_DEBUG_SNAPSHOT=str(case), VHOSTTY_SLEEP_TEST_DIR=str(case))
+           CODEX_HOME=str(home / '.codex'), VERTTY_SUPPORT_DIR=str(case),
+           VERTTY_DEBUG_SNAPSHOT=str(case), VERTTY_SLEEP_TEST_DIR=str(case))
 log = (case / 'app.log').open('w')
 def drive(command):
     (case / 'input.txt').write_text(command + '\n')

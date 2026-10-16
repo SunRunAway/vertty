@@ -10,15 +10,15 @@ import time
 
 import testapp
 
-archive = Path(sys.argv[1] if len(sys.argv) > 1 else "build/Vhostty.zip").resolve()
-with tempfile.TemporaryDirectory(prefix="vhostty-release-test-") as scratch:
+archive = Path(sys.argv[1] if len(sys.argv) > 1 else "build/Vertty.zip").resolve()
+with tempfile.TemporaryDirectory(prefix="vertty-release-test-") as scratch:
     root = Path(scratch)
     subprocess.run(["ditto", "-x", "-k", str(archive), scratch], check=True)
-    testapp.APP = root / "Vhostty.app"
+    testapp.APP = root / "Vertty.app"
     subprocess.run(["codesign", "--verify", "--deep", "--strict", str(testapp.APP)], check=True)
     state = root / "state"
     state.mkdir()
-    env = dict(os.environ, VHOSTTY_SUPPORT_DIR=str(state), VHOSTTY_DEBUG_SNAPSHOT=str(state))
+    env = dict(os.environ, VERTTY_SUPPORT_DIR=str(state), VERTTY_DEBUG_SNAPSHOT=str(state))
     app = None
     # launch() accepts a file object; its .name preserves the full log path.
     with (root / "app.log").open("w+") as log:

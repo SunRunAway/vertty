@@ -35,22 +35,22 @@ jobs:
         if: steps.ghostty-cache.outputs.cache-hit != 'true'
         run: scripts/build-ghostty.sh
 
-      - name: Build Vhostty.app
+      - name: Build Vertty.app
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then export VHOSTTY_VERSION="${GITHUB_REF_NAME#v}"; fi
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then export VERTTY_VERSION="${GITHUB_REF_NAME#v}"; fi
           scripts/bundle.sh
-          ditto -c -k --keepParent build/Vhostty.app build/Vhostty.zip
+          ditto -c -k --keepParent build/Vertty.app build/Vertty.zip
 
       - name: Verify packaged app startup
-        run: python3 scripts/test-release-startup.py build/Vhostty.zip
+        run: python3 scripts/test-release-startup.py build/Vertty.zip
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Vhostty
-          path: build/Vhostty.zip
+          name: Vertty
+          path: build/Vertty.zip
 
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" build/Vhostty.zip --title "$GITHUB_REF_NAME" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" build/Vertty.zip --title "$GITHUB_REF_NAME" --generate-notes

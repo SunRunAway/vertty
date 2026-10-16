@@ -18,7 +18,7 @@ final class TerminalCallbackBridge {
     weak var delegate: (any TerminalSurfaceViewDelegate)?
     /// Raw surface pointer for use in C callbacks (e.g. clipboard).
     nonisolated(unsafe) var rawSurface: ghostty_surface_t?
-    /// Vhostty: the session of a host-managed surface, for its callbacks.
+    /// Vertty: the session of a host-managed surface, for its callbacks.
     nonisolated(unsafe) weak var inMemorySession: InMemoryTerminalSession?
     var scrollbar: TerminalScrollbar?
     var onCellSizeChange: ((UInt32, UInt32) -> Void)?

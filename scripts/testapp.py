@@ -1,9 +1,9 @@
-"""Starts a test instance of build/Vhostty.app in the background.
+"""Starts a test instance of build/Vertty.app in the background.
 
-Every test that runs Vhostty starts it through `launch`, never by running
+Every test that runs Vertty starts it through `launch`, never by running
 the binary directly: run that way, macOS brings the new app to the front, in
 front of whatever the user is working in. `open -g` starts it without
-activating it, and the app's test mode (VHOSTTY_DEBUG_SNAPSHOT) keeps its
+activating it, and the app's test mode (VERTTY_DEBUG_SNAPSHOT) keeps its
 window behind other windows, where window images still work.
 
     app = testapp.launch(env, log)   # env: the full environment for the app
@@ -20,7 +20,7 @@ import subprocess
 import time
 import uuid
 
-APP = Path(__file__).resolve().parent.parent / "build/Vhostty.app"
+APP = Path(__file__).resolve().parent.parent / "build/Vertty.app"
 
 
 class App:
@@ -56,7 +56,7 @@ class App:
 
 
 def launch(env, log=None):
-    """Starts Vhostty with the environment `env`, as subprocess.Popen would,
+    """Starts Vertty with the environment `env`, as subprocess.Popen would,
     and its output in `log` (a path or an open file); returns it once it's
     running."""
     marker = uuid.uuid4().hex
@@ -68,8 +68,8 @@ def launch(env, log=None):
         path = str(getattr(log, "name", log))
         cmd += ["--stdout", path, "--stderr", path]
     # A marker in its arguments tells this instance's pid apart from any
-    # other Vhostty, the user's included.
-    cmd += [str(APP), "--args", "--vhostty-test", marker]
+    # other Vertty, the user's included.
+    cmd += [str(APP), "--args", "--vertty-test", marker]
     subprocess.run(cmd, check=True)
     deadline = time.monotonic() + 20
     while time.monotonic() < deadline:
@@ -78,4 +78,4 @@ def launch(env, log=None):
             if marker in line:
                 return App(int(line.split()[0]))
         time.sleep(0.1)
-    raise RuntimeError("the test instance of Vhostty didn't start")
+    raise RuntimeError("the test instance of Vertty didn't start")

@@ -23,7 +23,7 @@
             )
             private let scrollView = UIScrollView()
             private let stackView = UIStackView()
-            /// Vhostty: see `UITerminalView.inputAccessoryShowsDismissKey`.
+            /// Vertty: see `UITerminalView.inputAccessoryShowsDismissKey`.
             private lazy var dismissButton = AccessoryButton(size: buttonSize) { [weak terminalView] in
                 terminalView?.resignFirstResponder()
             }

@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 
 repo = Path(__file__).resolve().parent.parent
-with tempfile.TemporaryDirectory(prefix='vhostty-schedule-state-') as directory:
+with tempfile.TemporaryDirectory(prefix='vertty-schedule-state-') as directory:
     root = Path(directory)
     source = '''import Foundation
 import Combine
@@ -13,7 +13,7 @@ enum AgentKind: String, Codable { case codex }
 enum AppPaths { static let support = URL(fileURLWithPath: CommandLine.arguments[1]) }
 '''
     for name in ['ScheduleModels.swift', 'ScheduleStore.swift']:
-        source += (repo / 'Sources/Vhostty/Schedule' / name).read_text()
+        source += (repo / 'Sources/Vertty/Schedule' / name).read_text()
     source += '''
 let store = ScheduleStore()
 var task = ScheduleTask(name: "Fixture", projectID: UUID(), kind: .codex, prompt: "hello",

@@ -6,10 +6,10 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 "$ROOT/scripts/make-zig-sdk.sh"
-export VHOSTTY_ZIG_SDK="$ROOT/build/sdk/MacOSX.sdk"
+export VERTTY_ZIG_SDK="$ROOT/build/sdk/MacOSX.sdk"
 export PATH="$ROOT/scripts/zig-shim:$PATH"
 cd "$ROOT/vendor/ghostty"
-PATCH="$ROOT/patches/ghostty-vhostty.patch"
+PATCH="$ROOT/patches/ghostty-vertty.patch"
 if git apply --reverse --check "$PATCH" 2>/dev/null; then
   :
 else

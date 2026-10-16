@@ -62,12 +62,12 @@ def toggle(tid, task, wait, state, snap):
 
 
 def run(name, setup, text, click, ours):
-    root = Path(tempfile.mkdtemp(dir='/private/tmp', prefix='vhostty-links-'))
+    root = Path(tempfile.mkdtemp(dir='/private/tmp', prefix='vertty-links-'))
     home, project, support, snap, bins = [root / p for p in ('home', 'project', 'support', 'snap', 'bin')]
     for p in (home, project, support, snap, bins, home / '.codex'):
         p.mkdir(parents=True, exist_ok=True)
     pid, tid, task = [str(uuid.uuid4()).upper() for _ in range(3)]
-    url = 'vhostty://schedule/' + task
+    url = 'vertty://schedule/' + task
     (home / '.zshenv').write_text(f'export PATH="{bins}:/usr/bin:/bin:/usr/sbin:/sbin"\nunsetopt GLOBAL_RCS\n')
     agent = bins / 'codex'
     # The terminal echoes what it sends the agent, so a reported click shows on screen.
@@ -95,8 +95,8 @@ def run(name, setup, text, click, ours):
         raise AssertionError(state())
 
     env = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home), ZDOTDIR=str(home),
-               CODEX_HOME=str(home / '.codex'), VHOSTTY_SUPPORT_DIR=str(support),
-               VHOSTTY_DEBUG_SNAPSHOT=str(snap))
+               CODEX_HOME=str(home / '.codex'), VERTTY_SUPPORT_DIR=str(support),
+               VERTTY_DEBUG_SNAPSHOT=str(snap))
     print('Scratch artifacts:', root, flush=True)
     app = testapp.launch(env, str(root / 'app.log'))
     try:

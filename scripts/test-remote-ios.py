@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Exercise the iOS client in the iOS simulator against a scratch server.
 
-Starts a scratch instance of build/Vhostty.app with a project, a card and a
+Starts a scratch instance of build/Vertty.app with a project, a card and a
 fake agent (logs its terminal size and input), launches the iOS app in a
 simulator with its debug driver (Documents/debug/input.txt and state.txt),
 and checks connecting, the terminal, sizes, input, new sessions, connecting
 again when started, and being replaced by another client. Build first:
 
-make app && (cd VhosttyKit && swift build --product remote-probe)
+make app && (cd VerttyKit && swift build --product remote-probe)
 scripts/build-ghostty-ios.sh   # once, and after changing the Ghostty patch
-xcodebuild -project iOS/Vhostty.xcodeproj -scheme Vhostty \\
+xcodebuild -project iOS/Vertty.xcodeproj -scheme Vertty \\
     -destination 'platform=iOS Simulator,name=iPhone 17' \\
     -derivedDataPath build/ios-dd build
 
@@ -31,9 +31,9 @@ import testapp
 import uuid
 
 ROOT = Path(__file__).resolve().parent.parent
-APP = ROOT / "build/ios-dd/Build/Products/Debug-iphonesimulator/Vhostty.app"
-PROBE = ROOT / "VhosttyKit/.build/debug/remote-probe"
-BUNDLE = "dev.vhostty.remote"
+APP = ROOT / "build/ios-dd/Build/Products/Debug-iphonesimulator/Vertty.app"
+PROBE = ROOT / "VerttyKit/.build/debug/remote-probe"
+BUNDLE = "dev.vertty.remote"
 DEVICE = os.environ.get("SIM_DEVICE", "iPhone 17")
 
 
@@ -47,7 +47,7 @@ def simctl(*args, check=True):
     return subprocess.run(["xcrun", "simctl", *args], capture_output=True, text=True, check=check).stdout
 
 
-root = Path(tempfile.mkdtemp(dir="/private/tmp", prefix="vhostty-remote-ios-"))
+root = Path(tempfile.mkdtemp(dir="/private/tmp", prefix="vertty-remote-ios-"))
 print(f"Scratch artifacts: {root}", flush=True)
 home, project, bin_dir = root / "home", root / "project", root / "bin"
 server_state, server_snap = root / "server-state", root / "server-snap"
@@ -184,7 +184,7 @@ def input_size(hex_input):
     return None
 
 
-for path, what in ((APP, "the iPhone app"), (PROBE, "remote-probe"), (ROOT / "build/Vhostty.app", "Vhostty.app")):
+for path, what in ((APP, "the iPhone app"), (PROBE, "remote-probe"), (ROOT / "build/Vertty.app", "Vertty.app")):
     if not path.exists():
         sys.exit(f"Build {what} first (see the top of this script): {path} is missing")
 
@@ -202,8 +202,8 @@ probe = None
 try:
     with (root / "server.log").open("w") as log:
         server = testapp.launch(
-            dict(base, VHOSTTY_SUPPORT_DIR=str(server_state), VHOSTTY_DEBUG_SNAPSHOT=str(server_snap),
-                 VHOSTTY_REMOTE_PORT=str(port)), log)
+            dict(base, VERTTY_SUPPORT_DIR=str(server_state), VERTTY_DEBUG_SNAPSHOT=str(server_snap),
+                 VERTTY_REMOTE_PORT=str(port)), log)
 
     if booted_here:
         simctl("boot", udid)
@@ -211,7 +211,7 @@ try:
     simctl("install", udid, str(APP))
     def launch():
         subprocess.run(["xcrun", "simctl", "launch", "--terminate-running-process", udid, BUNDLE],
-                       env=dict(os.environ, SIMCTL_CHILD_VHOSTTY_DEBUG="1"), check=True, capture_output=True)
+                       env=dict(os.environ, SIMCTL_CHILD_VERTTY_DEBUG="1"), check=True, capture_output=True)
     container = Path(simctl("get_app_container", udid, BUNDLE, "data").strip())
     debug_dir = container / "Documents" / "debug"
     # A state.txt left by an earlier run would pass for this one's.

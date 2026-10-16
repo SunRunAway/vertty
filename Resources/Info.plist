@@ -10,17 +10,17 @@
         <string>zh-Hans</string>
     </array>
     <key>CFBundleDisplayName</key>
-    <string>Vhostty</string>
+    <string>Vertty</string>
     <key>CFBundleExecutable</key>
-    <string>Vhostty</string>
+    <string>Vertty</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
-    <string>dev.vhostty.Vhostty</string>
+    <string>dev.vertty.Vertty</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>Vhostty</string>
+    <string>Vertty</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -29,9 +29,9 @@
     <array>
         <dict>
             <key>CFBundleURLName</key>
-            <string>dev.vhostty.schedule</string>
+            <string>dev.vertty.schedule</string>
             <key>CFBundleURLSchemes</key>
-            <array><string>vhostty</string></array>
+            <array><string>vertty</string></array>
         </dict>
     </array>
     <key>CFBundleVersion</key>
@@ -45,7 +45,7 @@
     <key>NSAppleEventsUsageDescription</key>
     <string>Read Amphetamine’s status to avoid accidentally turning off its closed-lid sleep protection.</string>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>Connect to Vhostty on your other computers, and let your iPhone connect to this one.</string>
+    <string>Connect to Vertty on your other computers, and let your iPhone connect to this one.</string>
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsArbitraryLoads</key>

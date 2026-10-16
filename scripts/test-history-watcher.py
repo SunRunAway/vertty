@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 import time
 
-root = Path(tempfile.mkdtemp(dir="/private/tmp", prefix="vhostty-watcher-"))
+root = Path(tempfile.mkdtemp(dir="/private/tmp", prefix="vertty-watcher-"))
 claude = root / "claude" / "projects"
 codex = root / "codex"
 codex.mkdir()
@@ -20,7 +20,7 @@ fflush(stdout)
 RunLoop.main.run()
 ''')
 binary = root / "watcher"
-subprocess.run(["swiftc", "Sources/Vhostty/Support/HistoryWatcher.swift", str(main), "-o", str(binary)], check=True)
+subprocess.run(["swiftc", "Sources/Vertty/Support/HistoryWatcher.swift", str(main), "-o", str(binary)], check=True)
 log = root / "events.txt"
 with log.open("w") as output:
     process = subprocess.Popen([str(binary), str(claude), str(codex)], stdout=output)

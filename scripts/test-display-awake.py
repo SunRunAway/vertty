@@ -7,14 +7,14 @@ import os
 import subprocess
 import tempfile
 
-root = Path(tempfile.mkdtemp(prefix='vhostty-display-', dir='/private/tmp'))
+root = Path(tempfile.mkdtemp(prefix='vertty-display-', dir='/private/tmp'))
 print(f'Artifacts: {root}', flush=True)
 (root / 'stubs.swift').write_text('''import Foundation
 final class AppStore {
     var workingAgentCount = 0
 }
 enum AppPaths {
-    static let support = URL(fileURLWithPath: ProcessInfo.processInfo.environment["VHOSTTY_SUPPORT_DIR"]!)
+    static let support = URL(fileURLWithPath: ProcessInfo.processInfo.environment["VERTTY_SUPPORT_DIR"]!)
 }
 ''')
 (root / 'main.swift').write_text('''import Foundation
@@ -25,7 +25,7 @@ func assertionListed() -> Bool {
     p.standardOutput = pipe; try! p.run()
     let text = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
     p.waitUntilExit()
-    return text.contains("pid \\(getpid())(") && text.contains("Vhostty tasks are running")
+    return text.contains("pid \\(getpid())(") && text.contains("Vertty tasks are running")
 }
 let store = AppStore()
 let display = DisplayAwake(store: store)
@@ -51,7 +51,7 @@ precondition(!display.enabled && !display.holding && !assertionListed(), "turned
 print("PASS turning off releases it and is remembered")
 ''')
 sdk = '/Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk'
-subprocess.run(['swiftc', '-sdk', sdk, 'Sources/Vhostty/Support/DisplayAwake.swift',
+subprocess.run(['swiftc', '-sdk', sdk, 'Sources/Vertty/Support/DisplayAwake.swift',
                 str(root / 'stubs.swift'), str(root / 'main.swift'), '-o', str(root / 'test')], check=True)
-env = dict(os.environ, VHOSTTY_SUPPORT_DIR=str(root))
+env = dict(os.environ, VERTTY_SUPPORT_DIR=str(root))
 subprocess.run([str(root / 'test')], env=env, check=True, timeout=60)

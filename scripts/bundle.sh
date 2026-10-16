@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build Vhostty.app into build/Vhostty.app.
+# Build Vertty.app into build/Vertty.app.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -17,28 +17,28 @@ build() {
   swift build -c release --product "$1" 2>&1 \
     | sed "\\#ld: warning: search path '/Library/Developer/CommandLineTools/Developer/#d"
 }
-build Vhostty
-build vhostty-sleep
-build vhostty-hook
-build vhostty-schedule
+build Vertty
+build vertty-sleep
+build vertty-hook
+build vertty-schedule
 BIN="$(swift build -c release --show-bin-path)"
 
-APP="$ROOT/build/Vhostty.app"
+APP="$ROOT/build/Vertty.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/bin"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 # Release builds stamp the version from the git tag (v1.2.3 -> 1.2.3).
-if [ -n "${VHOSTTY_VERSION:-}" ]; then
-  plutil -replace CFBundleShortVersionString -string "$VHOSTTY_VERSION" "$APP/Contents/Info.plist"
+if [ -n "${VERTTY_VERSION:-}" ]; then
+  plutil -replace CFBundleShortVersionString -string "$VERTTY_VERSION" "$APP/Contents/Info.plist"
 fi
-cp "$BIN/Vhostty" "$APP/Contents/MacOS/Vhostty"
-cp "$BIN/vhostty-sleep" "$APP/Contents/MacOS/vhostty-sleep"
-cp "$BIN/vhostty-hook" "$APP/Contents/MacOS/vhostty-hook"
-cp "$BIN/vhostty-schedule" "$APP/Contents/MacOS/vhostty-schedule"
-# SwiftPM resource bundles of VhosttyKit (the shared code's translations).
-cp -R "$BIN"/VhosttyKit_*.bundle "$APP/Contents/Resources/"
+cp "$BIN/Vertty" "$APP/Contents/MacOS/Vertty"
+cp "$BIN/vertty-sleep" "$APP/Contents/MacOS/vertty-sleep"
+cp "$BIN/vertty-hook" "$APP/Contents/MacOS/vertty-hook"
+cp "$BIN/vertty-schedule" "$APP/Contents/MacOS/vertty-schedule"
+# SwiftPM resource bundles of VerttyKit (the shared code's translations).
+cp -R "$BIN"/VerttyKit_*.bundle "$APP/Contents/Resources/"
 cp Resources/ghostty-defaults.conf "$APP/Contents/Resources/"
-cp Resources/vhostty-sleep.sudoers "$APP/Contents/Resources/"
+cp Resources/vertty-sleep.sudoers "$APP/Contents/Resources/"
 cp -R Resources/*.lproj "$APP/Contents/Resources/"
 cp Resources/bin/* "$APP/Contents/Resources/bin/"
 chmod +x "$APP/Contents/Resources/bin/"*

@@ -10,17 +10,17 @@ import time
 import uuid
 import testapp
 
-root = Path(tempfile.mkdtemp(dir='/private/tmp', prefix='vhostty-schedule-'))
+root = Path(tempfile.mkdtemp(dir='/private/tmp', prefix='vertty-schedule-'))
 support, snapshot, project, home = [root / p for p in ('support', 'snapshot', 'project', 'codex')]
 for p in (support, snapshot, project, home):
     p.mkdir()
 (support / 'state.json').write_text(json.dumps({'projects': [
     {'id': str(uuid.uuid4()), 'name': 'Fixture', 'path': str(project), 'expanded': True}
 ], 'tabs': []}))
-env = dict(os.environ, VHOSTTY_SUPPORT_DIR=str(support), VHOSTTY_DEBUG_SNAPSHOT=str(snapshot),
-           VHOSTTY_SOCK=str(support / 'hook.sock'), CODEX_HOME=str(home))
-env.pop('VHOSTTY_TAB_ID', None)
-cli = testapp.APP / 'Contents/MacOS/vhostty-schedule'
+env = dict(os.environ, VERTTY_SUPPORT_DIR=str(support), VERTTY_DEBUG_SNAPSHOT=str(snapshot),
+           VERTTY_SOCK=str(support / 'hook.sock'), CODEX_HOME=str(home))
+env.pop('VERTTY_TAB_ID', None)
+cli = testapp.APP / 'Contents/MacOS/vertty-schedule'
 
 
 def wait(check):
@@ -68,7 +68,7 @@ try:
                   date=str(datetime.date.today() + datetime.timedelta(days=7)), time='23:59', agent='codex')
     created = call('create', fields)
     task_id, url = created['task']['id'], created['url']
-    assert url == 'vhostty://schedule/' + task_id == created['task']['url']
+    assert url == 'vertty://schedule/' + task_id == created['task']['url']
     assert created['task']['enabled'] and created['task']['nextRun']
     assert 'panel=-' in state() and 'schedulesShown=false' in state()
     saved = lambda: json.loads((support / 'schedules.json').read_text())['tasks']
@@ -93,7 +93,7 @@ try:
     drive('openurl ' + url)
     wait(lambda: f'panel={task_id}' in state() and 'draft=While editing' in state())
     drive('closepanel')
-    drive('openurl vhostty://schedule/not-a-uuid')
+    drive('openurl vertty://schedule/not-a-uuid')
     assert 'panel=-' in state()
     print('PASS direct CRUD, durable state, no automatic panels, links including deleted tasks', flush=True)
 

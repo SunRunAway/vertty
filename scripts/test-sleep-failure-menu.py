@@ -6,16 +6,16 @@ import shutil
 import subprocess
 import tempfile
 
-root = Path(tempfile.mkdtemp(prefix='vhostty-sleep-menu-', dir='/private/tmp'))
+root = Path(tempfile.mkdtemp(prefix='vertty-sleep-menu-', dir='/private/tmp'))
 print(f'Artifacts: {root}', flush=True)
-shutil.copy('Resources/vhostty-sleep.sudoers', root / 'vhostty-sleep.sudoers')
-shutil.copy('build/Vhostty.app/Contents/MacOS/vhostty-sleep', root / 'vhostty-sleep')
+shutil.copy('Resources/vertty-sleep.sudoers', root / 'vertty-sleep.sudoers')
+shutil.copy('build/Vertty.app/Contents/MacOS/vertty-sleep', root / 'vertty-sleep')
 (root / 'stubs.swift').write_text('''import AppKit
 final class AppStore {
     var workingAgentCount = 0
 }
 enum AppPaths {
-    static let support = URL(fileURLWithPath: ProcessInfo.processInfo.environment["VHOSTTY_SUPPORT_DIR"]!)
+    static let support = URL(fileURLWithPath: ProcessInfo.processInfo.environment["VERTTY_SUPPORT_DIR"]!)
 }
 ''')
 (root / 'main.swift').write_text('''import AppKit
@@ -32,7 +32,7 @@ func wait(_ reason: String, timeout: TimeInterval = 10, _ condition: () -> Bool)
 }
 // Validate the production file checker without touching /etc or opening an alert.
 precondition(SleepProtection.authorizationRule.contains("%admin ALL=(root) NOPASSWD:"))
-let ownRule = dir.appendingPathComponent("vhostty_sleep")
+let ownRule = dir.appendingPathComponent("vertty_sleep")
 write("amphetamine_PowerProtect", SleepProtection.authorizationRule)
 precondition(!SleepProtection.hasInstalledRule(at: ownRule))
 try! SleepProtection.authorizationRule.write(to: ownRule, atomically: true, encoding: .utf8)
@@ -120,7 +120,7 @@ print("PASS runtime error after authorization is gone shows unauthorized")
 controller.stop()
 ''')
 sdk = '/Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk'
-subprocess.run(['swiftc', '-sdk', sdk, 'Sources/Vhostty/Support/SleepProtection.swift',
+subprocess.run(['swiftc', '-sdk', sdk, 'Sources/Vertty/Support/SleepProtection.swift',
                 str(root / 'stubs.swift'), str(root / 'main.swift'), '-o', str(root / 'test')], check=True)
-env = dict(os.environ, VHOSTTY_SUPPORT_DIR=str(root), VHOSTTY_DEBUG_SNAPSHOT=str(root), VHOSTTY_SLEEP_TEST_DIR=str(root))
+env = dict(os.environ, VERTTY_SUPPORT_DIR=str(root), VERTTY_DEBUG_SNAPSHOT=str(root), VERTTY_SLEEP_TEST_DIR=str(root))
 subprocess.run([str(root / 'test')], env=env, check=True, timeout=120)

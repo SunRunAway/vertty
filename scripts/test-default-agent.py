@@ -8,7 +8,7 @@ import time
 import uuid
 import testapp
 
-root = Path(tempfile.mkdtemp(prefix='vhostty-default-agent-', dir='/private/tmp'))
+root = Path(tempfile.mkdtemp(prefix='vertty-default-agent-', dir='/private/tmp'))
 print(f'Scratch artifacts: {root}', flush=True)
 for name in ('legacy', 'explicit', 'new-codex', 'new-claude'):
     (root / name).mkdir()
@@ -17,8 +17,8 @@ projects = [dict(id=str(uuid.uuid4()), name=name, path=str(root / name), expande
             for name in ('legacy', 'explicit')]
 state_path = root / 'state.json'
 state_path.write_text(json.dumps(dict(projects=projects, tabs=[], detectedKind='claude')))
-env = dict(os.environ, VHOSTTY_SUPPORT_DIR=str(root), VHOSTTY_DEBUG_SNAPSHOT=str(root),
-           VHOSTTY_DEFAULT_AGENT='codex')  # Removed setting must have no effect.
+env = dict(os.environ, VERTTY_SUPPORT_DIR=str(root), VERTTY_DEBUG_SNAPSHOT=str(root),
+           VERTTY_DEFAULT_AGENT='codex')  # Removed setting must have no effect.
 
 
 def wait_for(check):

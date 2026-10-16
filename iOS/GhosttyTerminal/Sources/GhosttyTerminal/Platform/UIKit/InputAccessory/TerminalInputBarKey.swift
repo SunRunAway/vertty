@@ -13,7 +13,7 @@
             case alt
             case command
             case tab
-            /// Vhostty: Shift+Tab and Ctrl+C as keys of their own.
+            /// Vertty: Shift+Tab and Ctrl+C as keys of their own.
             case shiftTab
             case ctrlC
             case arrowLeft
@@ -78,7 +78,7 @@
                 case let .symbol(symbol): .text(symbol)
                 case let .presentedSymbol(symbol, .text(label)) where label.isEmpty: .text(symbol)
                 case let .presentedSymbol(_, presentation): presentation
-                // Vhostty: Esc as text, like ⇧Tab and ^C beside it.
+                // Vertty: Esc as text, like ⇧Tab and ^C beside it.
                 case .esc: .text("Esc")
                 case .shiftTab: .text("⇧Tab")
                 case .ctrlC: .text("^C")

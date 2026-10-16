@@ -9,6 +9,6 @@ for a in "$@"; do
   prev="$a"
 done
 for a in "$@"; do
-  if [ "$a" = "--show-sdk-path" ] && [ "$sdk" = macosx ]; then echo "${VHOSTTY_ZIG_SDK:?}"; exit 0; fi
+  if [ "$a" = "--show-sdk-path" ] && [ "$sdk" = macosx ]; then echo "${VERTTY_ZIG_SDK:?}"; exit 0; fi
 done
 exec /usr/bin/xcrun "$@"

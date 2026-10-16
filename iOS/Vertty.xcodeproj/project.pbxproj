@@ -1,0 +1,285 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1B3C13BA0A83B74F819FC0E4 /* GhosttyTerminal in Frameworks */ = {isa = PBXBuildFile; productRef = A668E0AC2C3069037800C1C0 /* GhosttyTerminal */; };
+		8976290E6BC2A5F76B09862E /* VerttyRemote in Frameworks */ = {isa = PBXBuildFile; productRef = 1B4C1C18DCB0CF531B1C0E53 /* VerttyRemote */; };
+		F3E9B88D2C51C218B55ED57B /* VerttyUI in Frameworks */ = {isa = PBXBuildFile; productRef = BFE4BA8977B544267B18FF23 /* VerttyUI */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		D2A57DC1D883FD21FB995169 /* Vertty.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Vertty.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		AB8D408CB1881C666AAC0831 /* Vertty */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Vertty;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A6E8E7DF88D31078DBF4E18B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8976290E6BC2A5F76B09862E /* VerttyRemote in Frameworks */,
+				F3E9B88D2C51C218B55ED57B /* VerttyUI in Frameworks */,
+				1B3C13BA0A83B74F819FC0E4 /* GhosttyTerminal in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		30772F61AC9BDC8631745269 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				D2A57DC1D883FD21FB995169 /* Vertty.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		450B220DE8EEB27904FC3DC4 = {
+			isa = PBXGroup;
+			children = (
+				AB8D408CB1881C666AAC0831 /* Vertty */,
+				30772F61AC9BDC8631745269 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		42AEFBAE01D2DFD981F7DA7D /* Vertty */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8E4708D4CFF2398BAD54D31A /* Build configuration list for PBXNativeTarget "Vertty" */;
+			buildPhases = (
+				65FA6119905E087A5E53253D /* Sources */,
+				A6E8E7DF88D31078DBF4E18B /* Frameworks */,
+				7997A58CB6F97DD5FFDE7900 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AB8D408CB1881C666AAC0831 /* Vertty */,
+			);
+			name = Vertty;
+			packageProductDependencies = (
+				1B4C1C18DCB0CF531B1C0E53 /* VerttyRemote */,
+				BFE4BA8977B544267B18FF23 /* VerttyUI */,
+				A668E0AC2C3069037800C1C0 /* GhosttyTerminal */,
+			);
+			productName = Vertty;
+			productReference = D2A57DC1D883FD21FB995169 /* Vertty.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		46F86FAA6BBF9AC94A7E4595 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2700;
+				LastUpgradeCheck = 2700;
+			};
+			buildConfigurationList = 160D7BDE7FCAF150A9CB9199 /* Build configuration list for PBXProject "Vertty" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				"zh-Hans",
+				Base,
+			);
+			mainGroup = 450B220DE8EEB27904FC3DC4;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				C03762468975B8516504D4E9 /* XCLocalSwiftPackageReference "../VerttyKit" */,
+				3A831E66D26BE3CA930E2721 /* XCLocalSwiftPackageReference "GhosttyTerminal" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 30772F61AC9BDC8631745269 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				42AEFBAE01D2DFD981F7DA7D /* Vertty */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		7997A58CB6F97DD5FFDE7900 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		65FA6119905E087A5E53253D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		27E11571CA43EE3083A396FA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = NO;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		B3FAE6EB2D2BD75E38AFB4DE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8375SRL7LU;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Vertty;
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Connects to Vertty on computers in your local network.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.vertty.remote;
+				PRODUCT_NAME = Vertty;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		D8650DA16330AA70C79AB68B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8375SRL7LU;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Vertty;
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Connects to Vertty on computers in your local network.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.vertty.remote;
+				PRODUCT_NAME = Vertty;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E1EB0FA87C08D8385389F2C4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = NO;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		160D7BDE7FCAF150A9CB9199 /* Build configuration list for PBXProject "Vertty" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1EB0FA87C08D8385389F2C4 /* Debug */,
+				27E11571CA43EE3083A396FA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8E4708D4CFF2398BAD54D31A /* Build configuration list for PBXNativeTarget "Vertty" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D8650DA16330AA70C79AB68B /* Debug */,
+				B3FAE6EB2D2BD75E38AFB4DE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		3A831E66D26BE3CA930E2721 /* XCLocalSwiftPackageReference "GhosttyTerminal" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = GhosttyTerminal;
+		};
+		C03762468975B8516504D4E9 /* XCLocalSwiftPackageReference "../VerttyKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../VerttyKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		1B4C1C18DCB0CF531B1C0E53 /* VerttyRemote */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VerttyRemote;
+		};
+		A668E0AC2C3069037800C1C0 /* GhosttyTerminal */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = GhosttyTerminal;
+		};
+		BFE4BA8977B544267B18FF23 /* VerttyUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VerttyUI;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 46F86FAA6BBF9AC94A7E4595 /* Project object */;
+}

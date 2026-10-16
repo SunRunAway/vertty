@@ -3,8 +3,8 @@
 /.swiftpm/
 .DS_Store
 /.claude/worktrees/
-/VhosttyKit/.build/
-/VhosttyKit/.swiftpm/
+/VerttyKit/.build/
+/VerttyKit/.swiftpm/
 /iOS/GhosttyTerminal/.build/
 /iOS/GhosttyTerminal/.swiftpm/
 xcuserdata/

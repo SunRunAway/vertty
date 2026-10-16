@@ -10,11 +10,11 @@ SRC="${1:-/Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk}"
 # Without that SDK (e.g. CI machines with only Xcode), use the default one.
 [ -d "$SRC" ] || SRC="$(/usr/bin/xcrun --sdk macosx --show-sdk-path)"
 DST="$ROOT/build/sdk/MacOSX.sdk"
-if [ -f "$DST/.vhostty-patched" ]; then exit 0; fi
+if [ -f "$DST/.vertty-patched" ]; then exit 0; fi
 rm -rf "$DST"; mkdir -p "$(dirname "$DST")"
 SRC="$(cd "$SRC" && pwd -P)"
 cp -Rc "$SRC" "$DST" 2>/dev/null || cp -R "$SRC" "$DST"
 find "$DST" -name '*.tbd' -type f -print0 | xargs -0 perl -0pi -e '
   s{\[([^\]]*)\]}{ my $x=$1; $x =~ s/(?<![\w.-])arm64e-macos/arm64-macos, arm64e-macos/g; "[$x]" }ge'
-touch "$DST/.vhostty-patched"
+touch "$DST/.vertty-patched"
 echo "SDK ready: $DST"

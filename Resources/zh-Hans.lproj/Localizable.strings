@@ -1,13 +1,13 @@
 /* Simplified Chinese. Keys are the English source strings. */
 
 /* Menus */
-"About Vhostty" = "关于 Vhostty";
+"About Vertty" = "关于 Vertty";
 "Open Ghostty Config" = "打开 Ghostty 配置文件";
 "Reload Config" = "重新加载配置";
-"Hide Vhostty" = "隐藏 Vhostty";
+"Hide Vertty" = "隐藏 Vertty";
 "Hide Others" = "隐藏其他";
 "Show All" = "全部显示";
-"Quit Vhostty" = "退出 Vhostty";
+"Quit Vertty" = "退出 Vertty";
 "File" = "文件";
 "New Claude Session" = "新建 Claude 会话";
 "New Codex Session" = "新建 Codex 会话";
@@ -46,7 +46,7 @@
 
 /* Alerts and panels */
 "Failed to start the terminal engine" = "终端引擎初始化失败";
-"Quit Vhostty?" = "退出 Vhostty？";
+"Quit Vertty?" = "退出 Vertty？";
 "%lld agents are working. Quitting will interrupt their current tasks." = "有 %lld 个 Agent 正在执行任务，退出会中断当前任务。";
 "Quit" = "退出";
 "Cancel" = "取消";
@@ -63,7 +63,7 @@
 "Choose a project directory. Sessions will start there." = "选择一个项目目录，会话将在这里启动";
 "Rename Project" = "重命名项目";
 "Remove project “%@”?" = "移除项目「%@」？";
-"It is only removed from Vhostty. No files are deleted." = "只会从 Vhostty 中移除，不会删除任何文件。";
+"It is only removed from Vertty. No files are deleted." = "只会从 Vertty 中移除，不会删除任何文件。";
 "Its %lld open sessions will be closed (their history is kept and can be resumed later). No files are deleted." = "它的 %lld 个会话会被关闭（会话记录仍保留，可以之后恢复）。不会删除任何文件。";
 "Close %lld other running sessions?" = "关闭其他 %lld 个正在运行的会话？";
 "Their history is kept and can be resumed from the sidebar later." = "会话记录会保留，之后可以从侧栏恢复。";
@@ -160,12 +160,12 @@
 "Choose at least one day." = "请至少选择一天。";
 "Choose a time in the future." = "请选择未来的时间。";
 "The previous run hasn't finished." = "同一任务上次运行尚未结束。";
-"The task's project is no longer in Vhostty." = "任务所属项目已不在 Vhostty 中。";
+"The task's project is no longer in Vertty." = "任务所属项目已不在 Vertty 中。";
 "The project directory doesn't exist: %@" = "项目目录不存在：%@";
 "The task's session record can't be found." = "找不到任务的会话记录。";
 "The session is running as a background job (claude attach). It wasn't touched." = "该会话正作为后台任务运行（claude attach），未做任何操作。";
 "The session's directory doesn't exist: %@" = "会话的执行目录不存在：%@";
-"The session is open outside this Vhostty window. It wasn't touched." = "该会话正在 Vhostty 之外打开，未做任何操作。";
+"The session is open outside this Vertty window. It wasn't touched." = "该会话正在 Vertty 之外打开，未做任何操作。";
 "The session's earlier instance couldn't be confirmed stopped, so it wasn't resumed." = "无法确认会话的旧实例已停止，因此没有恢复执行。";
 "Claude exited before the turn finished." = "Claude 在本轮结束前退出。";
 "%@ exited before the turn finished." = "%@ 在本轮结束前退出。";
@@ -183,7 +183,7 @@
 "The turn stopped without an answer or a recorded status." = "本轮停止了，但没有最终回复，也没有记录状态。";
 "Codex's session records couldn't be read." = "无法读取 Codex 的会话记录。";
 
-"Vhostty quit during the run." = "运行期间 Vhostty 退出了。";
+"Vertty quit during the run." = "运行期间 Vertty 退出了。";
 
 "Closed-Lid Sleep Protection While Tasks Run" = "任务运行时防合盖睡眠";
 "Don’t Let the Display Turn Off" = "不允许屏幕关闭";
@@ -206,9 +206,9 @@
 "Allow Remote Connections" = "允许远程连接";
 "Connect to Remote Computer…" = "连接远程电脑…";
 "Connect to Remote Computer" = "连接远程电脑";
-"The other computer's address, with the port shown under Allow Remote Connections in its Vhostty menu. The connection's security is up to you (for example a VPN)." = "填写另一台电脑的地址，加上它 Vhostty 菜单“允许远程连接”下显示的端口。连接的安全由你自己负责（例如使用 VPN）。";
+"The other computer's address, with the port shown under Allow Remote Connections in its Vertty menu. The connection's security is up to you (for example a VPN)." = "填写另一台电脑的地址，加上它 Vertty 菜单“允许远程连接”下显示的端口。连接的安全由你自己负责（例如使用 VPN）。";
 "Connect" = "连接";
-"That isn't an address Vhostty can connect to." = "Vhostty 无法连接这个地址。";
+"That isn't an address Vertty can connect to." = "Vertty 无法连接这个地址。";
 "Enter a host and port, such as 192.168.1.5:58563 or mac.local:58563." = "请输入主机和端口，例如 192.168.1.5:58563 或 mac.local:58563。";
 "Remote" = "远程";
 "Not connected" = "未连接";
@@ -216,7 +216,7 @@
 "Remote client: %@" = "远程客户端：%@";
 "%@, connected since %@" = "%1$@，连接于 %2$@";
 "Failed to start: %@" = "启动失败：%@";
-"VHOSTTY_REMOTE_PORT is “%@”, not a port number (1–65535)." = "VHOSTTY_REMOTE_PORT 的值“%@”不是有效端口号（1–65535）。";
+"VERTTY_REMOTE_PORT is “%@”, not a port number (1–65535)." = "VERTTY_REMOTE_PORT 的值“%@”不是有效端口号（1–65535）。";
 "The port is already in use by another program." = "端口已被其他程序占用。";
 
 "Default Agent for New Projects" = "新项目默认 Agent";

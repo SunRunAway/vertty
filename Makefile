@@ -9,12 +9,12 @@ app:
 	scripts/bundle.sh
 
 run: app
-	open build/Vhostty.app
+	open build/Vertty.app
 
 install: app
-	rm -rf /Applications/Vhostty.app
-	cp -R build/Vhostty.app /Applications/Vhostty.app
-	@echo "Installed to /Applications/Vhostty.app"
+	rm -rf /Applications/Vertty.app
+	cp -R build/Vertty.app /Applications/Vertty.app
+	@echo "Installed to /Applications/Vertty.app"
 
 clean:
-	rm -rf .build build/Vhostty.app
+	rm -rf .build build/Vertty.app

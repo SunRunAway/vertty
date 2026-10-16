@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Exercise the remote service of a scratch app with a scripted client.
 
-Starts build/Vhostty.app on a scratch state dir, HOME and project, with fake
+Starts build/Vertty.app on a scratch state dir, HOME and project, with fake
 agents (a program that reports its terminal size and echoes its input), and
-drives it with VhosttyKit's remote-probe over 127.0.0.1. Build first:
-make app && (cd VhosttyKit && swift build --product remote-probe)
+drives it with VerttyKit's remote-probe over 127.0.0.1. Build first:
+make app && (cd VerttyKit && swift build --product remote-probe)
 """
 import json
 import os
@@ -21,7 +21,7 @@ import testapp
 import uuid
 
 ROOT = Path(__file__).resolve().parent.parent
-PROBE = ROOT / "VhosttyKit/.build/debug/remote-probe"
+PROBE = ROOT / "VerttyKit/.build/debug/remote-probe"
 
 
 def free_port():
@@ -30,7 +30,7 @@ def free_port():
         return s.getsockname()[1]
 
 
-root = Path(tempfile.mkdtemp(dir="/private/tmp", prefix="vhostty-remote-"))
+root = Path(tempfile.mkdtemp(dir="/private/tmp", prefix="vertty-remote-"))
 print(f"Scratch artifacts: {root}", flush=True)
 home, project, support, snapshot, bin_dir = [root / n for n in ("home", "project", "state", "snap", "bin")]
 for d in (home, project, support, snapshot, bin_dir, home / ".codex"):
@@ -214,8 +214,8 @@ def wait(check, what, timeout=15):
 
 
 env = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home), ZDOTDIR=str(home),
-           CODEX_HOME=str(home / ".codex"), VHOSTTY_SUPPORT_DIR=str(support),
-           VHOSTTY_DEBUG_SNAPSHOT=str(snapshot), VHOSTTY_REMOTE_PORT=str(port))
+           CODEX_HOME=str(home / ".codex"), VERTTY_SUPPORT_DIR=str(support),
+           VERTTY_DEBUG_SNAPSHOT=str(snapshot), VERTTY_REMOTE_PORT=str(port))
 probes = []
 with (root / "app.log").open("w") as log:
     app = testapp.launch(env, log)

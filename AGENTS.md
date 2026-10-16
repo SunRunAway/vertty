@@ -21,11 +21,11 @@
 ## Testing
 
 - Test against a scratch state dir and the debug driver only (see DEVELOPER.md):
-  `VHOSTTY_SUPPORT_DIR=<scratch> VHOSTTY_DEBUG_SNAPSHOT=<scratch>`. Send input
+  `VERTTY_SUPPORT_DIR=<scratch> VERTTY_DEBUG_SNAPSHOT=<scratch>`. Send input
   only with `to <uuid>` to tabs the test created. Never open, type into, or
   start sessions in the user's real projects.
-- The user works in the installed copy (`/Applications/Vhostty.app`). Start a
-  test instance of `build/Vhostty.app` only with `launch()` in
+- The user works in the installed copy (`/Applications/Vertty.app`). Start a
+  test instance of `build/Vertty.app` only with `launch()` in
   `scripts/testapp.py`, in tests and by hand alike: it starts the app in the
   background, so it never comes in front of the user's windows. Running the
   binary directly brings it to the front. Stop the instance by the pid
@@ -48,7 +48,7 @@
 - Claude Code only: a Claude session can be sent to the background (a job you
   reattach with `claude attach`). Running `/clear` in such a job starts a new
   session with a new id, but Claude Code writes the job's old name as the first
-  `ai-title` of the new transcript. Vhostty takes card titles from `ai-title`,
+  `ai-title` of the new transcript. Vertty takes card titles from `ai-title`,
   so the card keeps the old title instead of looking like a new session. This
   is expected: leave it, and don't override Claude Code's naming.
 - Claude Code only: don't follow the `continued-in` records Claude Code writes
@@ -58,7 +58,7 @@
   `git log -S` for whether it was removed on purpose.
 - The default session kind (Claude / Codex) is a per-project setting, not a
   global one.
-- After ⌘Q the Dock can keep showing Vhostty as running in the background while
+- After ⌘Q the Dock can keep showing Vertty as running in the background while
   processes it spawned (e.g. shell plugin helpers) are still alive. That isn't a
-  Vhostty bug, and it would happen the same in any terminal. Don't kill
+  Vertty bug, and it would happen the same in any terminal. Don't kill
   processes on quit to hide it.

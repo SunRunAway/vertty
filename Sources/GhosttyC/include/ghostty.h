@@ -413,7 +413,7 @@ typedef struct {
   bool rectangle;
 } ghostty_selection_s;
 
-// Vhostty (from libghostty-spm): ghostty_surface_selection_viewport
+// Vertty (from libghostty-spm): ghostty_surface_selection_viewport
 typedef struct {
   uint32_t top_left_x;
   uint32_t top_left_y;
@@ -450,7 +450,7 @@ typedef enum {
   GHOSTTY_SURFACE_CONTEXT_SPLIT = 2,
 } ghostty_surface_context_e;
 
-// Vhostty: host-managed IO and remote mirroring.
+// Vertty: host-managed IO and remote mirroring.
 typedef void (*ghostty_surface_host_write_cb)(void*, const uint8_t*, size_t);
 typedef void (*ghostty_surface_host_resize_cb)(void*, uint16_t, uint16_t, uint32_t, uint32_t);
 typedef void (*ghostty_surface_tap_cb)(void*, uint32_t, uint16_t, uint16_t, const uint8_t*, size_t);
@@ -468,7 +468,7 @@ typedef struct {
   const char* initial_input;
   bool wait_after_command;
   ghostty_surface_context_e context;
-  // Vhostty: host-managed IO (no command; see ghostty_surface_write_buffer).
+  // Vertty: host-managed IO (no command; see ghostty_surface_write_buffer).
   ghostty_surface_host_write_cb host_write;
   ghostty_surface_host_resize_cb host_resize;
 } ghostty_surface_config_s;

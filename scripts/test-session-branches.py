@@ -21,7 +21,7 @@ def wait_for(check, description, timeout=25):
     raise AssertionError(description + "\n" + state())
 
 
-root = Path(tempfile.mkdtemp(dir="/private/tmp", prefix="vhostty-branches-"))
+root = Path(tempfile.mkdtemp(dir="/private/tmp", prefix="vertty-branches-"))
 print(f"Scratch artifacts: {root}", flush=True)
 home, project, support, snapshot, bin_dir = [root / n for n in ("home", "repo", "state", "snap", "bin")]
 for directory in (home, project, support, snapshot, bin_dir, home / ".codex"):
@@ -116,8 +116,8 @@ def stable(check, description):
 
 
 env = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home), ZDOTDIR=str(home),
-           CODEX_HOME=str(home / ".codex"), VHOSTTY_SUPPORT_DIR=str(support),
-           VHOSTTY_DEBUG_SNAPSHOT=str(snapshot))
+           CODEX_HOME=str(home / ".codex"), VERTTY_SUPPORT_DIR=str(support),
+           VERTTY_DEBUG_SNAPSHOT=str(snapshot))
 with (root / "app.log").open("w") as log:
     app = testapp.launch(env, log)
     try:

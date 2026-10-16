@@ -1,14 +1,14 @@
-<p align="center"><img src="docs/icon.png" width="128" alt="Vhostty icon"></p>
+<p align="center"><img src="docs/icon.png" width="128" alt="Vertty icon"></p>
 
-<h1 align="center">Vhostty</h1>
+<h1 align="center">Vertty</h1>
 
 <p align="center"><b>A vertical-tab terminal built for Claude Code and Codex, organized by project</b></p>
 
 <p align="center">English · <a href="README.zh-CN.md">简体中文</a></p>
 
-Vhostty is a native macOS terminal supporting Claude Code and Codex, built on libghostty. It organizes active and historical sessions by project.
+Vertty is a native macOS terminal supporting Claude Code and Codex, built on libghostty. It organizes active and historical sessions by project.
 
-<p align="center"><img src="docs/screenshot.png" alt="Vhostty with two projects: Claude Code and Codex session cards showing status, branch, worktree and PR, with a freshly started Claude Code session on the right"></p>
+<p align="center"><img src="docs/screenshot.png" alt="Vertty with two projects: Claude Code and Codex session cards showing status, branch, worktree and PR, with a freshly started Claude Code session on the right"></p>
 
 The interface follows your system language (English or Simplified Chinese).
 
@@ -29,10 +29,10 @@ Apple Silicon Macs, macOS 14 or later:
 
 ```bash
 brew tap SunRunAway/tap
-brew install --cask SunRunAway/tap/vhostty
+brew install --cask SunRunAway/tap/vertty
 ```
 
-This installs Vhostty into `/Applications` using our [Homebrew tap](https://github.com/SunRunAway/homebrew-tap). Update with `brew update && brew upgrade --cask vhostty`.
+This installs Vertty into `/Applications` using our [Homebrew tap](https://github.com/SunRunAway/homebrew-tap). Update with `brew update && brew upgrade --cask vertty`.
 
 For installation without Homebrew, see [manual installation](docs/manual-installation.md).
 

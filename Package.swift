@@ -2,10 +2,10 @@
 import PackageDescription
 
 let package = Package(
-    name: "Vhostty",
+    name: "Vertty",
     platforms: [.macOS(.v14)],
     dependencies: [
-        .package(path: "VhosttyKit"),
+        .package(path: "VerttyKit"),
     ],
     targets: [
         .target(
@@ -13,13 +13,13 @@ let package = Package(
             path: "Sources/GhosttyC"
         ),
         .executableTarget(
-            name: "Vhostty",
+            name: "Vertty",
             dependencies: [
                 "GhosttyC",
-                .product(name: "VhosttyRemote", package: "VhosttyKit"),
-                .product(name: "VhosttyUI", package: "VhosttyKit"),
+                .product(name: "VerttyRemote", package: "VerttyKit"),
+                .product(name: "VerttyUI", package: "VerttyKit"),
             ],
-            path: "Sources/Vhostty",
+            path: "Sources/Vertty",
             linkerSettings: [
                 .unsafeFlags(["-L", "build/ghostty/lib"]),
                 .linkedLibrary("ghostty"),
@@ -35,14 +35,14 @@ let package = Package(
                 .linkedFramework("UserNotifications"),
             ]
         ),
-        .executableTarget(name: "vhostty-sleep", path: "Sources/VhosttySleep"),
+        .executableTarget(name: "vertty-sleep", path: "Sources/VerttySleep"),
         .executableTarget(
-            name: "vhostty-hook",
-            path: "Sources/VhosttyHook"
+            name: "vertty-hook",
+            path: "Sources/VerttyHook"
         ),
         .executableTarget(
-            name: "vhostty-schedule",
-            path: "Sources/VhosttySchedule"
+            name: "vertty-schedule",
+            path: "Sources/VerttySchedule"
         ),
     ]
 )

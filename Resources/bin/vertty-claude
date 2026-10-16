@@ -1,0 +1,30 @@
+#!/bin/sh
+# Started by Vertty in each tab: runs Claude Code with Vertty's extra hook
+# settings (merged with your own ~/.claude settings, which stay untouched).
+# A session still running in the background (←) can't be resumed; open it with
+# `claude attach` instead. Its job lives in ~/.claude/jobs/<first 8 of the id>.
+if [ "$1" = "--resume" ] && [ -n "$2" ]; then
+  job=$(printf '%s' "$2" | cut -c1-8)
+  file="$HOME/.claude/jobs/$job/state.json"
+  if [ -f "$file" ] && grep -q "^  \"sessionId\": \"$2\"" "$file" &&
+     ! grep -q '^  "state": "\(done\|stopped\)"' "$file"; then
+    # A scheduled run brings a prompt, which attach can't take: don't run it.
+    if [ -n "$VERTTY_SCHEDULE_RUN" ]; then
+      echo "Vertty: this session is running in the background; the scheduled run was not started." >&2
+      exit 75
+    fi
+    exec claude attach "$job"
+  fi
+fi
+# Vertty's scheduled-task tools come in as an MCP server for this session only
+# (the same one Codex cards get). Unlike a skill listing, an MCP server's
+# instructions are sent again after the conversation is compacted.
+if [ -n "$VERTTY_SCHEDULE_CLI" ] && [ -x "$VERTTY_SCHEDULE_CLI" ]; then
+  mcp=$(printf '{"mcpServers":{"vertty":{"command":"%s","args":["mcp"],"env":{"VERTTY_TAB_ID":"%s","VERTTY_SOCK":"%s"}}}}' \
+    "$VERTTY_SCHEDULE_CLI" "$VERTTY_TAB_ID" "$VERTTY_SOCK")
+  set -- --mcp-config "$mcp" "$@"
+fi
+if [ -n "$VERTTY_CLAUDE_SETTINGS" ] && [ -f "$VERTTY_CLAUDE_SETTINGS" ]; then
+  exec claude --settings "$VERTTY_CLAUDE_SETTINGS" "$@"
+fi
+exec claude "$@"

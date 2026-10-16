@@ -2,7 +2,7 @@
 """Regenerates docs/screenshot.png, the screenshot in the READMEs.
 
 Builds two demo projects from scratch (starboard, 小账本) with git worktrees,
-starts build/Vhostty.app against a scratch state dir and the debug driver
+starts build/Vertty.app against a scratch state dir and the debug driver
 (see DEVELOPER.md), and captures the window with a brand-new Claude Code
 session, which hasn't been given anything to do yet, in the selected card:
 
@@ -22,7 +22,7 @@ Usage (run `make app` first; run it outside any sandbox):
   python3 scripts/readme-screenshot.py [--out docs/screenshot.png]
 
 Claude transcripts of the
-demo projects (~/.claude/projects/-private-tmp-vhostty-readme-demo-*) are
+demo projects (~/.claude/projects/-private-tmp-vertty-readme-demo-*) are
 removed before and after the run so they never show up as history.
 """
 
@@ -39,14 +39,14 @@ import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DEMO = Path("/private/tmp/vhostty-readme-demo")
+DEMO = Path("/private/tmp/vertty-readme-demo")
 SUPPORT = DEMO / "support"
 SNAP = DEMO / "snap"
 STARBOARD = DEMO / "starboard"
 ZHANGBEN = DEMO / "xiaozhangben"
 
-DEFAULTS_DOMAIN = "dev.vhostty.Vhostty"
-FRAME_KEY = "NSWindow Frame VhosttyMainWindow"
+DEFAULTS_DOMAIN = "dev.vertty.Vertty"
+FRAME_KEY = "NSWindow Frame VerttyMainWindow"
 WINDOW_FRAME = "120 120 1100 840"   # points; the PNG comes out at 2x
 SIDEBAR_WIDTH = 275
 
@@ -198,7 +198,7 @@ def card(project_id, project_path, kind, title, branch, worktree=None, pr=None, 
 
 def write_state():
     """Returns the id of the card for the background session. It comes first and
-    is selected, because Vhostty starts the selected card at launch; with no
+    is selected, because Vertty starts the selected card at launch; with no
     transcript yet, it starts as a new Claude session."""
     background = {"id": str(uuid.uuid4()).upper(), "projectID": STARBOARD_ID, "kind": "claude",
                   "sessionID": str(uuid.uuid4()), "title": "New Session", "cwd": str(STARBOARD)}
@@ -345,7 +345,7 @@ def restore_default(key, value):
 
 def stop_children():
     """Stops what the demo's tabs started (they carry this support dir's socket)."""
-    sock = f"VHOSTTY_SOCK={SUPPORT / 'hook.sock'}"
+    sock = f"VERTTY_SOCK={SUPPORT / 'hook.sock'}"
     out = subprocess.run(["ps", "-wwE", "-axo", "pid=,command="], capture_output=True, text=True).stdout
     for line in out.splitlines():
         pid, _, rest = line.strip().partition(" ")
@@ -358,11 +358,11 @@ def stop_children():
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--app", default=str(ROOT / "build/Vhostty.app"))
+    ap.add_argument("--app", default=str(ROOT / "build/Vertty.app"))
     ap.add_argument("--out", default=str(ROOT / "docs/screenshot.png"))
     args = ap.parse_args()
 
-    binary = Path(args.app) / "Contents/MacOS/Vhostty"
+    binary = Path(args.app) / "Contents/MacOS/Vertty"
     if not binary.exists():
         sys.exit(f"{binary} not found; run `make app` first")
 
@@ -376,7 +376,7 @@ def main():
     # The window frame autosaves into the app's defaults, shared with the
     # installed copy: pass ours on the command line, put the user's back after.
     saved_frame = read_default(FRAME_KEY)
-    env = dict(os.environ, VHOSTTY_SUPPORT_DIR=str(SUPPORT), VHOSTTY_DEBUG_SNAPSHOT=str(SNAP))
+    env = dict(os.environ, VERTTY_SUPPORT_DIR=str(SUPPORT), VERTTY_DEBUG_SNAPSHOT=str(SNAP))
     app = subprocess.Popen([str(binary), "-AppleLanguages", "(en)", "-AppleLocale", "en_US", f"-{FRAME_KEY}", WINDOW_FRAME],
                            env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:

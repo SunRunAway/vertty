@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Exercise the desktop remote client against a scratch server.
 
-Starts two scratch instances of build/Vhostty.app: a server with a project, a
+Starts two scratch instances of build/Vertty.app: a server with a project, a
 card and a fake agent (logs its terminal size and input), and a client with
 no projects that opens a remote window to the server through the debug
 driver. Checks that the remote window lists the card, shows its terminal at
@@ -29,7 +29,7 @@ def free_port():
         return s.getsockname()[1]
 
 
-root = Path(tempfile.mkdtemp(dir="/private/tmp", prefix="vhostty-remote-mac-"))
+root = Path(tempfile.mkdtemp(dir="/private/tmp", prefix="vertty-remote-mac-"))
 print(f"Scratch artifacts: {root}", flush=True)
 home, project, bin_dir = root / "home", root / "project", root / "bin"
 server_state, server_snap = root / "server-state", root / "server-snap"
@@ -144,12 +144,12 @@ apps = []
 try:
     with (root / "server.log").open("w") as log:
         apps.append(testapp.launch(
-            dict(base, VHOSTTY_SUPPORT_DIR=str(server_state), VHOSTTY_DEBUG_SNAPSHOT=str(server_snap),
-                 VHOSTTY_REMOTE_PORT=str(port)), log))
+            dict(base, VERTTY_SUPPORT_DIR=str(server_state), VERTTY_DEBUG_SNAPSHOT=str(server_snap),
+                 VERTTY_REMOTE_PORT=str(port)), log))
     with (root / "client.log").open("w") as log:
         apps.append(testapp.launch(
-            dict(base, VHOSTTY_SUPPORT_DIR=str(client_state), VHOSTTY_DEBUG_SNAPSHOT=str(client_snap),
-                 VHOSTTY_REMOTE_PORT=str(free_port())), log))
+            dict(base, VERTTY_SUPPORT_DIR=str(client_state), VERTTY_DEBUG_SNAPSHOT=str(client_snap),
+                 VERTTY_REMOTE_PORT=str(free_port())), log))
 
     def listening():
         try:

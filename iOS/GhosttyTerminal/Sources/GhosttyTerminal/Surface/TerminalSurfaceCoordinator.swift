@@ -35,7 +35,7 @@ final class TerminalSurfaceCoordinator {
     }
 
     var surface: TerminalSurface?
-    /// Vhostty: see TerminalSurface.onWillInput.
+    /// Vertty: see TerminalSurface.onWillInput.
     var onWillInput: (() -> Void)?
     /// The in-memory session `surface` was handed to at build time. Teardown
     /// must clear that session, not whichever one `configuration` names by
@@ -120,7 +120,7 @@ final class TerminalSurfaceCoordinator {
     /// streams read as flicker on a scrolling screen. ProMotion displays may
     /// go to 120.
     ///
-    /// Vhostty: the system's CADisplayLink, in place of libghostty-spm's
+    /// Vertty: the system's CADisplayLink, in place of libghostty-spm's
     /// DisplayLink package (which also covered macOS).
     private var displayLink: CADisplayLink?
     private var idleFrameCount = 0
