@@ -2,7 +2,7 @@
 
 <h1 align="center">Vertty</h1>
 
-<p align="center"><b>为 Claude Code 和 Codex 打造的垂直标签终端</b></p>
+<p align="center"><b>为 Claude Code 和 Codex 打造、按项目组织的垂直标签终端</b></p>
 
 <p align="center"><a href="README.md">English</a> · 简体中文</p>
 
@@ -12,9 +12,7 @@ Vertty 是一个支持 Claude Code 和 Codex 的 macOS 原生终端（基于 lib
 
 ## 功能
 
-- **项目与会话管理**：按项目组织 Claude Code 和 Codex 会话，展示分支、worktree 和 PR。
-- **状态与通知**：实时显示 agent 状态，通过未读标记和系统通知提醒任务进展。
-- **历史与恢复**：搜索、恢复历史会话，并自动保存打开的会话。
+- **会话管理**：按项目组织会话、跟踪 agent 状态，并恢复历史对话。
 - **远程控制**：通过 iPhone、iPad 或另一台 Mac 访问和操作会话。
 - **定时任务**：按计划运行 Claude Code 和 Codex 任务，支持用自然语言创建和管理。
 - **防止睡眠**：任务运行时支持防合盖睡眠和保持屏幕常亮。
