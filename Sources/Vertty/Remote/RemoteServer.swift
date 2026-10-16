@@ -68,7 +68,7 @@ final class RemoteServer: ObservableObject {
             FileManager.default.createFile(atPath: Self.enabledMarker.path, contents: Data(mode.rawValue.utf8))
             start()
             if mode == .tailscale, Tailnet.shared.state != .running {
-                Tailnet.shared.login { NSWorkspace.shared.open($0) }
+                TailscaleSignIn.shared.start()
             }
         } else {
             try? FileManager.default.removeItem(at: Self.enabledMarker)

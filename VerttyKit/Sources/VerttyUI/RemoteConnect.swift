@@ -49,9 +49,8 @@ public struct RemoteConnectView: View {
     @Binding var address: String
     let connectAddress: (URL) -> Void
     let connectComputer: (Tailnet.Device) -> Void
-    @Environment(\.openURL) private var openURL
     @State private var invalid = false
-    /// The user asked to sign in; the page is open in the browser.
+    /// The user asked to sign in; the sign-in window is open.
     @State private var signingIn = false
 
     public init(tailnet: Tailnet = .shared, address: Binding<String>,
@@ -144,7 +143,7 @@ public struct RemoteConnectView: View {
                 Text(reason).foregroundStyle(.secondary)
             }
             if signingIn {
-                Text("Finish signing in in the browser.", bundle: .verttyUIResources)
+                Text("Finish signing in to Tailscale in the window that opened.", bundle: .verttyUIResources)
                     .foregroundStyle(.secondary)
                 Button(action: signIn) { Text("Open the Sign-In Page Again", bundle: .verttyUIResources) }
             } else {
@@ -156,7 +155,7 @@ public struct RemoteConnectView: View {
     private func signIn() {
         signingIn = true
         tailnet.activateClient()
-        tailnet.login { openURL($0) }
+        TailscaleSignIn.shared.start()
     }
 
     private func connectToAddress() {

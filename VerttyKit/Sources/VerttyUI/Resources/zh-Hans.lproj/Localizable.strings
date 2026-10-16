@@ -85,6 +85,6 @@
 "Signed in as %@" = "已登录：%@";
 "Sign Out" = "退出登录";
 "Starting Tailscale…" = "正在启动 Tailscale…";
-"Finish signing in in the browser." = "请在浏览器里完成登录。";
+"Finish signing in to Tailscale in the window that opened." = "请在弹出的窗口中完成 Tailscale 登录。";
 "Open the Sign-In Page Again" = "重新打开登录页";
 "Sign In with Tailscale" = "用 Tailscale 登录";

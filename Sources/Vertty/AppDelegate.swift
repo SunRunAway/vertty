@@ -106,7 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         if Tailnet.shared.state == .running {
             Tailnet.shared.logout()
         } else {
-            Tailnet.shared.login { NSWorkspace.shared.open($0) }
+            TailscaleSignIn.shared.start()
         }
     }
 

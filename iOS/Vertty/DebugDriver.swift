@@ -64,7 +64,7 @@
             case "tailnetlogin":
                 // Same as "Sign In with Tailscale": opens the sign-in page.
                 Tailnet.shared.activateClient()
-                Tailnet.shared.login { UIApplication.shared.open($0) }
+                TailscaleSignIn.shared.start()
             case "tailnetlogout":
                 Tailnet.shared.logout()
             case "disconnect":
