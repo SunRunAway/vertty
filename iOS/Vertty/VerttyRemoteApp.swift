@@ -59,6 +59,7 @@ final class AppModel: ObservableObject {
 
     private init() {
         let tailnet = Tailnet.shared
+        Tailnet.log = RemoteLog.note
         tailnet.directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("tailscale")
         tailnet.deviceName = UIDevice.current.name

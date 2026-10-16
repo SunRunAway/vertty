@@ -96,6 +96,10 @@ public final class Tailnet: ObservableObject {
     /// Bumped per login(open:), so only the latest opens its page.
     private var loginRequest = 0
 
+    /// Where the device's state changes and status errors are noted (the
+    /// remote client's log), if anywhere.
+    public static var log: ((String) -> Void)?
+
     private init() {}
 
     // MARK: - Running
@@ -127,6 +131,7 @@ public final class Tailnet: ObservableObject {
 
     private func start() {
         guard state == .stopped || isFailed, let directory else { return }
+        Self.log?("tailnet: starting")
         state = .starting
         let hostName = Self.hostName(deviceName)
         control.async {
@@ -154,6 +159,7 @@ public final class Tailnet: ObservableObject {
     }
 
     private func stop() {
+        Self.log?("tailnet: stopping")
         timer?.invalidate()
         timer = nil
         loginRequest += 1
@@ -313,6 +319,10 @@ public final class Tailnet: ObservableObject {
         let devices = status.peers.map {
             Device(id: $0.id, hostName: $0.hostName, dnsName: String($0.dnsName.prefix { $0 != "." }), os: $0.os, online: $0.online, ip: $0.ip, sameUser: $0.sameUser)
         }
+        if let error = status.error { Self.log?("tailnet: status error \(error)") }
+        if self.state != state || self.devices.count != devices.count {
+            Self.log?("tailnet: \(status.state) (\(state)), \(devices.count) devices, computers=\(Self.describe(devices.filter(\.isVerttyComputer)))")
+        }
         if self.state != state { self.state = state }
         if self.authURL != authURL { self.authURL = authURL }
         if account != (status.user ?? "") { account = status.user ?? "" }
@@ -321,6 +331,11 @@ public final class Tailnet: ObservableObject {
         if state == .running, let marker, !signedInHere {
             FileManager.default.createFile(atPath: marker.path, contents: Data())
         }
+    }
+
+    /// Devices for the log: DNS label, id and whether online.
+    public static func describe(_ devices: [Device]) -> String {
+        devices.map { "\($0.dnsName)/\($0.id)/\($0.online ? "online" : "offline")" }.joined(separator: ",")
     }
 
     /// A string the library returned, freed.

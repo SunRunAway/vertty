@@ -15,21 +15,31 @@ public extension RemoteEndpoint {
         let unreachable = String(localized: "Can't reach the computer over Tailscale. Check that it's on and that Via Tailscale is checked under Remote Connections in its Vertty menu.", bundle: .verttyUIResources)
         return RemoteEndpoint(name: name, detail: "Tailscale: \(hostName)", unreachable: unreachable) {
             let tailnet = Tailnet.shared
+            RemoteLog.note("tailnet: finding \(hostName)/\(id), state=\(tailnet.state)")
             do {
                 try await tailnet.waitUntilRunning()
             } catch Tailnet.Failure.notSignedIn, Tailnet.Failure.notStarted {
+                RemoteLog.note("tailnet: not signed in or not started, state=\(tailnet.state)")
                 throw ConnectFailure(String(localized: "Sign in to Tailscale to connect to this computer.", bundle: .verttyUIResources))
             } catch {
+                RemoteLog.note("tailnet: didn't start (\(error))")
                 throw ConnectFailure(unreachable)
             }
+            let computers = Tailnet.describe(tailnet.computers)
             guard let device = tailnet.computer(id: id, hostName: hostName) else {
+                RemoteLog.note("tailnet: \(hostName)/\(id) not found among \(tailnet.devices.count) devices, computers=\(computers)")
                 throw ConnectFailure(String(localized: "This computer is no longer on your Tailscale network.", bundle: .verttyUIResources))
             }
-            guard device.online else { throw ConnectFailure(unreachable) }
+            guard device.online else {
+                RemoteLog.note("tailnet: \(device.dnsName)/\(device.id) offline, computers=\(computers)")
+                throw ConnectFailure(unreachable)
+            }
             do {
                 let port = try await tailnet.dial(device, port: Remote.defaultPort)
+                RemoteLog.note("tailnet: dialed \(device.dnsName)/\(device.id)")
                 return URL(string: "ws://127.0.0.1:\(port)")!
             } catch {
+                RemoteLog.note("tailnet: dialing \(device.dnsName)/\(device.id) failed (\(error))")
                 throw ConnectFailure(unreachable)
             }
         }
