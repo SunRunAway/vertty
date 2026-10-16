@@ -152,7 +152,7 @@ build/Vertty.app/Contents/MacOS/Vertty
 | `remote <地址>` | 打开远程窗口连接这个地址 |
 | `remoteopen <n>` / `remotenew` | 远程窗口打开第 n 张卡片 / 新建会话 |
 | `remotetext …` / `remoteenter` | 往远程窗口的终端输入文字 / 回车 |
-| `remotemode off` / `remotemode tailscale` / `remotemode direct` | 选 Vertty 菜单“远程连接”子菜单里的“关闭” / “通过 Tailscale” / “自行组网” |
+| `remotemode tailscale` / `remotemode direct` | 点 Vertty 菜单“远程连接”子菜单里的“通过 Tailscale” / “自行组网”，打开或关闭这一项 |
 | `remotetailnet <名称>` | 打开远程窗口，连接 Tailscale 上这个名称（DNS 名的第一段）的电脑；列表里还没有它时不做任何事 |
 | `tailnetlogout` | 退出 Tailscale 登录 |
 

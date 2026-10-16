@@ -106,7 +106,7 @@ card_id = str(uuid.uuid4()).upper()
               "title": "Server card", "cwd": str(project)}],
     "selectedTabID": card_id,
 }))
-(server_state / "remote-enabled").write_text("tailscale")
+(server_state / "remote-enabled").write_text("tailscale\ndirect")
 port = free_port()
 
 
@@ -138,6 +138,13 @@ def drive(*lines):
     target = debug_dir / "input.txt"
     wait(lambda: not target.exists(), "phone didn't take its last command")
     target.write_text("\n".join(lines) + "\n")
+
+
+def composer():
+    for line in phone().splitlines():
+        if line.startswith("composer|"):
+            return line[len("composer|"):]
+    return None
 
 
 def status():
@@ -223,6 +230,15 @@ try:
     wait(lambda: tailnet_field(server_state_txt(), "signedIn") == "true", "the server didn't sign in to Tailscale", 90)
     server_name = tailnet_field(server_state_txt(), "name")
 
+    # Own Network first, by address; the address is kept after connecting
+    # through Tailscale (and started again), for the next time.
+    address = f"ws://127.0.0.1:{port}"
+    drive(f"connect {address}")
+    wait(lambda: status() == "connected" and card_id in phone(), "the app didn't connect by address")
+    drive("disconnect")
+    wait(lambda: status() == "none", "the app didn't disconnect")
+    print("PASS the app connects by address (Own Network on alongside Via Tailscale)", flush=True)
+
     # The first command starts the app's Tailscale device; once it lists the
     # computer, the second connects.
     drive(f"tailnet {server_name}")
@@ -234,9 +250,10 @@ try:
 
     drive("open 0")
     wait(lambda: "green prompt" in phone(), "the card's terminal didn't open")
-    drive("focus")
     drive("type hi")
-    wait(lambda: input_size("69") is not None, "typing didn't reach the agent")
+    wait(lambda: composer() == "hi", "typing didn't go into the field")
+    drive("send")
+    wait(lambda: input_size("69") is not None, "sending didn't reach the agent")
     wait(lambda: re.search(r"GOT (..)*69", phone()), "the echo didn't show on the iPhone")
     simctl("io", udid, "screenshot", str(root / "terminal.png"))
     print("PASS the card's terminal opens and typing round-trips over Tailscale", flush=True)
@@ -247,6 +264,11 @@ try:
     print("PASS started again, the app connects to the same computer through Tailscale", flush=True)
 
     drive("disconnect")
+    prefs = container / "Library" / "Preferences" / f"{BUNDLE}.plist"
+    saved = subprocess.run(["plutil", "-extract", "RemoteAddress", "raw", str(prefs)],
+                           capture_output=True, text=True).stdout.strip()
+    assert saved == address, f"the address isn't kept: {saved!r}"
+    print("PASS the address typed before is still there after connecting through Tailscale", flush=True)
     drive("tailnetlogout")
     wait(lambda: tailnet_field(phone(), "signedIn") == "false" and status() == "none", "the app didn't sign out")
     simctl("io", udid, "screenshot", str(root / "signed-out.png"))

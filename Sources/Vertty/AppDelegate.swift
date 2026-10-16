@@ -16,11 +16,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     private var hookServer: HookServer?
     private var debugSnapshot: DebugSnapshot?
     private var fileMenu: NSMenu?
-    /// The "Remote Connections" submenu: Off, Via Tailscale, Own Network,
-    /// then the details (see updateRemoteInfoItems).
+    /// The "Remote Connections" submenu: Via Tailscale and Own Network,
+    /// each on or off, then the details (see updateRemoteInfoItems).
     private let remoteMenu = NSMenu()
     private let remoteInfoSeparator = NSMenuItem.separator()
-    private let remoteInfoItems: [NSMenuItem] = (0..<3).map { _ in
+    private let remoteInfoItems: [NSMenuItem] = (0..<5).map { _ in
         let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         item.isEnabled = false
         item.isHidden = true
@@ -95,10 +95,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
 
     @objc private func toggleSleepProtection() { sleepProtection.toggle() }
     @objc private func toggleDisplayAwake() { displayAwake.setEnabled(!displayAwake.enabled) }
-    /// Off has no mode (an empty represented object).
-    @objc private func chooseRemoteMode(_ sender: NSMenuItem) {
-        let mode = (sender.representedObject as? String).flatMap(RemoteServer.Mode.init(rawValue:))
-        if mode != remoteServer.mode { remoteServer.setMode(mode) }
+    @objc private func toggleRemoteMode(_ sender: NSMenuItem) {
+        guard let mode = (sender.representedObject as? String).flatMap(RemoteServer.Mode.init(rawValue:)) else { return }
+        remoteServer.set(mode, enabled: !remoteServer.modes.contains(mode))
     }
 
     @objc private func tailscaleAccount() {
@@ -121,8 +120,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
             menuItem.title = store.sidebarVisible ? String(localized: "Hide Sidebar") : String(localized: "Show Sidebar")
         } else if menuItem.action == #selector(toggleDisplayAwake) {
             menuItem.state = displayAwake.enabled ? .on : .off
-        } else if menuItem.action == #selector(chooseRemoteMode(_:)) {
-            menuItem.state = (menuItem.representedObject as? String) == (remoteServer.mode?.rawValue ?? "") ? .on : .off
+        } else if menuItem.action == #selector(toggleRemoteMode(_:)) {
+            let mode = (menuItem.representedObject as? String).flatMap(RemoteServer.Mode.init(rawValue:))
+            menuItem.state = mode.map(remoteServer.modes.contains) == true ? .on : .off
         } else if menuItem.action == #selector(toggleShell) {
             menuItem.title = store.selectedTab?.shellVisible == true ? String(localized: "Hide Terminal") : String(localized: "Show Terminal")
             // Remote windows have no bottom shell.
@@ -227,10 +227,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         sleepProtection.menuItem = sleepItem
         appMenu.addItem(sleepItem)
         appMenu.addItem(item("Don’t Let the Display Turn Off", #selector(toggleDisplayAwake), ""))
-        let modes: [(String.LocalizationValue, RemoteServer.Mode?)] = [("Off", nil), ("Via Tailscale", .tailscale), ("Own Network", .direct)]
+        let modes: [(String.LocalizationValue, RemoteServer.Mode)] = [("Via Tailscale", .tailscale), ("Own Network", .direct)]
         for (title, mode) in modes {
-            let choice = item(title, #selector(chooseRemoteMode(_:)), "")
-            choice.representedObject = mode?.rawValue ?? ""
+            let choice = item(title, #selector(toggleRemoteMode(_:)), "")
+            choice.representedObject = mode.rawValue
             remoteMenu.addItem(choice)
         }
         remoteMenu.addItem(remoteInfoSeparator)
@@ -344,10 +344,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     @objc private func connectRemote() { RemoteConnectWindowController.show() }
 
     /// Gray lines at the end of the Remote Connections submenu, like the
-    /// details under the Wi-Fi network in the menu bar: the port, or the
-    /// Tailscale account and this Mac's name there, and who is connected; or
-    /// why the service couldn't start. With Tailscale, an item to sign in or
-    /// out follows.
+    /// details under the Wi-Fi network in the menu bar: for each checked way
+    /// the Tailscale account and this Mac's name there, or the port, or why
+    /// it couldn't start; then who is connected. With Tailscale, an item to
+    /// sign in or out follows.
     private func updateRemoteInfoItems() {
         var lines: [String] = []
         var account: String?
@@ -356,29 +356,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
             let name = c.deviceName.isEmpty ? Self.deviceKind(c.platform) : c.deviceName
             return String(localized: "\(name), connected since \(c.since.formatted(date: .omitted, time: .shortened))")
         } ?? String(localized: "Not connected")
-        switch remoteServer.status {
-        case .off:
+        switch remoteServer.status[.tailscale] {
+        case nil:
             break
         case .failed(let reason):
-            lines = [String(localized: "Failed to start: \(reason)")]
-        case .starting(let port), .listening(let port):
-            lines = [String(localized: "Port: \(String(port))"), String(localized: "Remote client: \(client)")]
-        case .tailnet:
+            lines.append(String(localized: "Tailscale failed to start: \(reason)"))
+        case .starting, .listening:
             switch tailnet.state {
             case .running:
-                lines = [String(localized: "Tailscale: \(tailnet.account)"),
-                         String(localized: "Name on Tailscale: \(tailnet.name)"),
-                         String(localized: "Remote client: \(client)")]
+                lines += [String(localized: "Tailscale: \(tailnet.account)"),
+                          String(localized: "Name on Tailscale: \(tailnet.name)")]
                 account = String(localized: "Sign Out of Tailscale")
             case .needsLogin:
-                lines = [String(localized: "Tailscale: Waiting for sign-in")]
+                lines.append(String(localized: "Tailscale: Waiting for sign-in"))
                 account = String(localized: "Sign In to Tailscale…")
             case .failed(let reason):
-                lines = [String(localized: "Failed to start: \(reason)")]
+                lines.append(String(localized: "Tailscale failed to start: \(reason)"))
             case .starting, .stopped:
-                lines = [String(localized: "Tailscale: Starting…")]
+                lines.append(String(localized: "Tailscale: Starting…"))
             }
         }
+        switch remoteServer.status[.direct] {
+        case nil:
+            break
+        case .failed(let reason):
+            lines.append(String(localized: "Own Network failed to start: \(reason)"))
+        case .starting:
+            if case .success(let port) = RemoteServer.configuredPort() {
+                lines.append(String(localized: "Port: \(String(port))"))
+            }
+        case .listening(let port):
+            lines.append(String(localized: "Port: \(String(port))"))
+        }
+        if !remoteServer.modes.isEmpty { lines.append(String(localized: "Remote client: \(client)")) }
         for (i, row) in remoteInfoItems.enumerated() {
             row.title = i < lines.count ? lines[i] : ""
             row.isHidden = i >= lines.count

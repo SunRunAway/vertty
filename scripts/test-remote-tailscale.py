@@ -190,7 +190,7 @@ def sign_out(snap, server=False):
     offline for up to an hour, on the user's other devices too. Signing out
     needs the device running, so the server goes back to Via Tailscale."""
     inbox = snap / "input.txt"
-    if server:
+    if server and menu_ways()[0][:1] == [False]:
         if not settle(lambda: not inbox.exists(), 5):
             return
         inbox.write_text("remotemode tailscale\n")
@@ -220,9 +220,9 @@ try:
             dict(base, VERTTY_SUPPORT_DIR=str(client_state), VERTTY_DEBUG_SNAPSHOT=str(client_snap),
                  VERTTY_REMOTE_PORT=str(free_port())), log))
 
-    # Off, Via Tailscale (checked), Own Network; then the account, the
-    # name, the client and Sign Out.
-    wait(lambda: menu_ways()[0] == [False, True, False] and len(menu_ways()[1]) == 4 and "@" in menu_ways()[1][0],
+    # Via Tailscale checked, Own Network not; then the account, the name,
+    # the client and Sign Out.
+    wait(lambda: menu_ways()[0] == [True, False] and len(menu_ways()[1]) == 4 and "@" in menu_ways()[1][0],
          "the server's menu doesn't show it signed in to Tailscale")
     server_name = tailnet_field(server_snap, "name")
     assert server_name and server_name in menu_ways()[1][1], tailnet_line(server_snap)
@@ -262,14 +262,29 @@ try:
     wait(lambda: "GOT 6869" in read(client_snap / "state.txt"), "echo didn't show in the remote terminal")
     print(f"PASS the card's terminal opens at the window's size ({own}) and typing round-trips", flush=True)
 
-    # Own Network: the server leaves the tailnet; the client loses it.
+    # Own Network as well: the port opens on every interface; the client
+    # stays connected over Tailscale.
     (server_snap / "input.txt").write_text("remotemode direct\n")
-    wait(lambda: menu_ways()[0] == [False, False, True] and str(port) in menu_ways()[1][0],
-         "the server didn't switch to Own Network")
+    wait(lambda: menu_ways()[0] == [True, True] and any(str(port) in l for l in menu_ways()[1]),
+         "the server didn't add Own Network")
+    wait(lambda: f"*:{port}" in tcp_listeners(apps[0].pid), "Own Network's port isn't open")
+    try:
+        socket.create_connection(("127.0.0.1", port), timeout=2).close()
+    except OSError as e:
+        raise AssertionError(f"Own Network's port refused a connection: {e}")
+    assert remote_line("status") == "connected" and tailnet_field(server_snap, "state") == "running", \
+        tailnet_line(server_snap) + "\n" + read(client_snap / "state.txt")
+    print(f"PASS Own Network opens alongside Via Tailscale ({', '.join(tcp_listeners(apps[0].pid))}); the client stays", flush=True)
+
+    # Via Tailscale off: the server leaves the tailnet and the client loses
+    # it; Own Network stays.
+    (server_snap / "input.txt").write_text("remotemode tailscale\n")
+    wait(lambda: menu_ways()[0] == [False, True], "the server didn't turn Via Tailscale off")
     wait(lambda: tailnet_field(server_snap, "state") == "stopped", "the server's Tailscale device kept running")
     # The client notices when its pings go unanswered.
     wait(lambda: remote_line("status") != "connected", "the client stayed connected", timeout=90)
-    print("PASS Own Network stops the server's Tailscale device and drops the client", flush=True)
+    assert f"*:{port}" in tcp_listeners(apps[0].pid), tcp_listeners(apps[0].pid)
+    print("PASS turning Via Tailscale off stops the device and drops its client; Own Network stays", flush=True)
 
     drive("tailnetlogout")
     wait(lambda: tailnet_field(client_snap, "signedIn") == "false", "the client didn't sign out")

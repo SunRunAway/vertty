@@ -204,7 +204,8 @@
 
 /* Remote connections */
 "Remote Connections" = "远程连接";
-"Off" = "关闭";
+"Tailscale failed to start: %@" = "Tailscale 启动失败：%@";
+"Own Network failed to start: %@" = "自行组网启动失败：%@";
 "Via Tailscale" = "通过 Tailscale";
 "Own Network" = "自行组网";
 "Tailscale: %@" = "Tailscale：%@";
@@ -220,7 +221,6 @@
 "Port: %@" = "端口：%@";
 "Remote client: %@" = "远程客户端：%@";
 "%@, connected since %@" = "%1$@，连接于 %2$@";
-"Failed to start: %@" = "启动失败：%@";
 "VERTTY_REMOTE_PORT is “%@”, not a port number (1–65535)." = "VERTTY_REMOTE_PORT 的值“%@”不是有效端口号（1–65535）。";
 "The port is already in use by another program." = "端口已被其他程序占用。";
 

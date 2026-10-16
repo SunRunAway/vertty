@@ -41,7 +41,7 @@ final class DebugSnapshot {
     /// The app menu's Remote Connections submenu.
     private static var remoteMenu: NSMenu? {
         NSApp.mainMenu?.items.first?.submenu?.items.compactMap(\.submenu).first {
-            $0.items.contains { $0.action == NSSelectorFromString("chooseRemoteMode:") }
+            $0.items.contains { $0.action == NSSelectorFromString("toggleRemoteMode:") }
         }
     }
 
@@ -258,13 +258,12 @@ final class DebugSnapshot {
                 Tailnet.shared.logout()
                 continue
             }
-            // Same as choosing off, tailscale or direct in the Remote
-            // Connections submenu.
+            // Same as clicking Via Tailscale (tailscale) or Own Network
+            // (direct) in the Remote Connections submenu: turns it on or off.
             if line.hasPrefix("remotemode "), let menu = Self.remoteMenu,
                let index = menu.items.firstIndex(where: {
-                   let mode = String(line.dropFirst(11))
-                   return $0.action == NSSelectorFromString("chooseRemoteMode:")
-                       && ($0.representedObject as? String) == (mode == "off" ? "" : mode)
+                   $0.action == NSSelectorFromString("toggleRemoteMode:")
+                       && ($0.representedObject as? String) == String(line.dropFirst(11))
                }) {
                 menu.performActionForItem(at: index)
                 continue
@@ -350,7 +349,7 @@ final class DebugSnapshot {
             menu.delegate?.menuNeedsUpdate?(menu)
             menu.update()
             let lines = menu.items.filter { !$0.isHidden && !$0.isSeparatorItem }.map { item in
-                item.action == NSSelectorFromString("chooseRemoteMode:")
+                item.action == NSSelectorFromString("toggleRemoteMode:")
                     ? item.title + (item.state == .on ? " [on]" : " [off]") : "  " + item.title
             }
             try? lines.joined(separator: "\n").write(to: directory.appendingPathComponent("remote-menu.txt"), atomically: true, encoding: .utf8)
