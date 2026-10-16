@@ -88,7 +88,7 @@ hooks 事件的传递路径：`vertty-hook`（App 里自带的一个小程序）
 
 产品规则见 [docs/spec/remote-client-product.md](docs/spec/remote-client-product.md)。
 
-`VERTTY_REMOTE_PORT` 设置「允许远程连接」选「自行组网」时的监听端口，默认 `58563`。在登录 shell 的配置文件（如 `~/.zshrc`）中设置后重启 Vertty；端口无效或无法使用时，菜单项下方会显示「启动失败」及原因。
+`VERTTY_REMOTE_PORT` 设置「远程连接」选「自行组网」时的监听端口，默认 `58563`。在登录 shell 的配置文件（如 `~/.zshrc`）中设置后重启 Vertty；端口无效或无法使用时，「远程连接」子菜单里会显示「启动失败」及原因。
 
 - **协议**：一条 WebSocket，消息是 `VerttyKit/Proto/vertty_remote.proto` 定义的 Protobuf（每帧一条，客户端发 `ClientMessage`，服务端发 `ServerMessage`）。改了 proto 后运行 `scripts/gen-proto.sh` 重新生成 Swift 代码（protoc 和 protoc-gen-swift 编译到 `build/tools`）。协议代码和客户端 `RemoteClient`（连接、重连、请求、终端流）在 `VerttyKit` 包的 `VerttyRemote` 里。
 - **服务端**：`Sources/Vertty/Remote/RemoteServer.swift` 用 Network.framework 监听，同时只留一个客户端，新连接接管旧连接；`RemoteBridge.swift` 把 `AppStore` 的项目、卡片和历史做成 State（有变化才发），执行新建、恢复、关闭等请求，并把卡片终端转给客户端。
@@ -152,7 +152,7 @@ build/Vertty.app/Contents/MacOS/Vertty
 | `remote <地址>` | 打开远程窗口连接这个地址 |
 | `remoteopen <n>` / `remotenew` | 远程窗口打开第 n 张卡片 / 新建会话 |
 | `remotetext …` / `remoteenter` | 往远程窗口的终端输入文字 / 回车 |
-| `remotemode tailscale` / `remotemode direct` | 点 Vertty 菜单“允许远程连接”下的“通过 Tailscale” / “自行组网”（点已勾的一项即关闭） |
+| `remotemode off` / `remotemode tailscale` / `remotemode direct` | 选 Vertty 菜单“远程连接”子菜单里的“关闭” / “通过 Tailscale” / “自行组网” |
 | `remotetailnet <名称>` | 打开远程窗口，连接 Tailscale 上这个名称（DNS 名的第一段）的电脑；列表里还没有它时不做任何事 |
 | `tailnetlogout` | 退出 Tailscale 登录 |
 

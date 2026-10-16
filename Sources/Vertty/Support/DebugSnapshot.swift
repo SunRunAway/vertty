@@ -38,6 +38,13 @@ final class DebugSnapshot {
     ///   runschedule <task uuid> · tickschedules · newschedule · closepanel ·
     ///   panelsave · panelcancel ·
     ///   sheetkey return|escape (the open sheet or alert)
+    /// The app menu's Remote Connections submenu.
+    private static var remoteMenu: NSMenu? {
+        NSApp.mainMenu?.items.first?.submenu?.items.compactMap(\.submenu).first {
+            $0.items.contains { $0.action == NSSelectorFromString("chooseRemoteMode:") }
+        }
+    }
+
     private func drive() {
         let url = directory.appendingPathComponent("input.txt")
         guard let content = try? String(contentsOf: url, encoding: .utf8) else { return }
@@ -251,10 +258,13 @@ final class DebugSnapshot {
                 Tailnet.shared.logout()
                 continue
             }
-            // Same as the menu's ways under Allow Remote Connections.
-            if line.hasPrefix("remotemode "), let menu = NSApp.mainMenu?.items.first?.submenu,
+            // Same as choosing off, tailscale or direct in the Remote
+            // Connections submenu.
+            if line.hasPrefix("remotemode "), let menu = Self.remoteMenu,
                let index = menu.items.firstIndex(where: {
-                   $0.action == NSSelectorFromString("chooseRemoteMode:") && ($0.representedObject as? String) == String(line.dropFirst(11))
+                   let mode = String(line.dropFirst(11))
+                   return $0.action == NSSelectorFromString("chooseRemoteMode:")
+                       && ($0.representedObject as? String) == (mode == "off" ? "" : mode)
                }) {
                 menu.performActionForItem(at: index)
                 continue
@@ -335,19 +345,13 @@ final class DebugSnapshot {
            let item = menu.items.first(where: { $0.action == NSSelectorFromString("toggleSleepProtection") }) {
             try? item.title.write(to: directory.appendingPathComponent("sleep-menu.txt"), atomically: true, encoding: .utf8)
         }
-        // The ways under "Allow Remote Connections" and the visible lines
-        // under the checked one.
-        if let menu = NSApp.mainMenu?.items.first?.submenu,
-           menu.items.contains(where: { $0.action == NSSelectorFromString("chooseRemoteMode:") }) {
+        // The Remote Connections submenu: its ways, then the visible details.
+        if let menu = Self.remoteMenu {
             menu.delegate?.menuNeedsUpdate?(menu)
             menu.update()
-            var lines: [String] = []
-            for item in menu.items where !item.isHidden {
-                if item.action == NSSelectorFromString("chooseRemoteMode:") {
-                    lines.append(item.title + (item.state == .on ? " [on]" : " [off]"))
-                } else if item.indentationLevel > 0, !lines.isEmpty {
-                    lines.append("  " + item.title)
-                }
+            let lines = menu.items.filter { !$0.isHidden && !$0.isSeparatorItem }.map { item in
+                item.action == NSSelectorFromString("chooseRemoteMode:")
+                    ? item.title + (item.state == .on ? " [on]" : " [off]") : "  " + item.title
             }
             try? lines.joined(separator: "\n").write(to: directory.appendingPathComponent("remote-menu.txt"), atomically: true, encoding: .utf8)
         }

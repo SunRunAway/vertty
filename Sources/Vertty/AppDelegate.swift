@@ -16,22 +16,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     private var hookServer: HookServer?
     private var debugSnapshot: DebugSnapshot?
     private var fileMenu: NSMenu?
-    private var appMenu: NSMenu?
-    /// "Via Tailscale" and "Own Network" under "Allow Remote Connections".
-    private var remoteModeItems: [NSMenuItem] = []
-    /// See updateRemoteInfoItems.
+    /// The "Remote Connections" submenu: Off, Via Tailscale, Own Network,
+    /// then the details (see updateRemoteInfoItems).
+    private let remoteMenu = NSMenu()
+    private let remoteInfoSeparator = NSMenuItem.separator()
     private let remoteInfoItems: [NSMenuItem] = (0..<3).map { _ in
         let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        item.indentationLevel = 2
         item.isEnabled = false
         item.isHidden = true
         return item
     }
-    /// Signs in to or out of Tailscale, under the info lines.
+    /// Signs in to or out of Tailscale, under the details.
     private lazy var tailscaleAccountItem: NSMenuItem = {
         let item = NSMenuItem(title: "", action: #selector(tailscaleAccount), keyEquivalent: "")
         item.target = self
-        item.indentationLevel = 2
         item.isHidden = true
         return item
     }()
@@ -97,9 +95,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
 
     @objc private func toggleSleepProtection() { sleepProtection.toggle() }
     @objc private func toggleDisplayAwake() { displayAwake.setEnabled(!displayAwake.enabled) }
+    /// Off has no mode (an empty represented object).
     @objc private func chooseRemoteMode(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String, let mode = RemoteServer.Mode(rawValue: raw) else { return }
-        remoteServer.setMode(remoteServer.mode == mode ? nil : mode)
+        let mode = (sender.representedObject as? String).flatMap(RemoteServer.Mode.init(rawValue:))
+        if mode != remoteServer.mode { remoteServer.setMode(mode) }
     }
 
     @objc private func tailscaleAccount() {
@@ -123,7 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         } else if menuItem.action == #selector(toggleDisplayAwake) {
             menuItem.state = displayAwake.enabled ? .on : .off
         } else if menuItem.action == #selector(chooseRemoteMode(_:)) {
-            menuItem.state = (menuItem.representedObject as? String) == remoteServer.mode?.rawValue ? .on : .off
+            menuItem.state = (menuItem.representedObject as? String) == (remoteServer.mode?.rawValue ?? "") ? .on : .off
         } else if menuItem.action == #selector(toggleShell) {
             menuItem.title = store.selectedTab?.shellVisible == true ? String(localized: "Hide Terminal") : String(localized: "Show Terminal")
             // Remote windows have no bottom shell.
@@ -228,26 +227,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         sleepProtection.menuItem = sleepItem
         appMenu.addItem(sleepItem)
         appMenu.addItem(item("Don’t Let the Display Turn Off", #selector(toggleDisplayAwake), ""))
-        // A heading in the menu's own text color (a section header or a
-        // disabled item would be gray), with its two ways indented under it.
-        let remoteHeading = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        remoteHeading.attributedTitle = NSAttributedString(string: String(localized: "Allow Remote Connections"),
-                                                           attributes: [.font: NSFont.menuFont(ofSize: 0), .foregroundColor: NSColor.labelColor])
-        remoteHeading.isEnabled = false
-        appMenu.addItem(remoteHeading)
-        let modes: [(String.LocalizationValue, RemoteServer.Mode)] = [("Via Tailscale", .tailscale), ("Own Network", .direct)]
-        remoteModeItems = modes.map { title, mode in
+        let modes: [(String.LocalizationValue, RemoteServer.Mode?)] = [("Off", nil), ("Via Tailscale", .tailscale), ("Own Network", .direct)]
+        for (title, mode) in modes {
             let choice = item(title, #selector(chooseRemoteMode(_:)), "")
-            choice.representedObject = mode.rawValue
-            choice.indentationLevel = 1
-            return choice
+            choice.representedObject = mode?.rawValue ?? ""
+            remoteMenu.addItem(choice)
         }
-        for choice in remoteModeItems { appMenu.addItem(choice) }
-        // Placed under the checked way by updateRemoteInfoItems.
-        for info in remoteInfoItems + [tailscaleAccountItem] { appMenu.addItem(info) }
-        appMenu.addItem(.separator())
-        appMenu.delegate = self
-        self.appMenu = appMenu
+        remoteMenu.addItem(remoteInfoSeparator)
+        for info in remoteInfoItems + [tailscaleAccountItem] { remoteMenu.addItem(info) }
+        remoteMenu.delegate = self
+        addSubmenu(appMenu, "Remote Connections", remoteMenu)
         appMenu.addItem(item("Open Ghostty Config", #selector(openGhosttyConfig), ""))
         appMenu.addItem(item("Reload Config", #selector(reloadConfig), "r", [.command, .shift]))
         appMenu.addItem(.separator())
@@ -354,13 +343,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     }
     @objc private func connectRemote() { RemoteConnectWindowController.show() }
 
-    /// Gray lines under the checked way of "Allow Remote Connections", like
-    /// the details under the Wi-Fi network in the menu bar: the port, or the
+    /// Gray lines at the end of the Remote Connections submenu, like the
+    /// details under the Wi-Fi network in the menu bar: the port, or the
     /// Tailscale account and this Mac's name there, and who is connected; or
     /// why the service couldn't start. With Tailscale, an item to sign in or
     /// out follows.
     private func updateRemoteInfoItems() {
-        guard let appMenu else { return }
         var lines: [String] = []
         var account: String?
         let tailnet = Tailnet.shared
@@ -391,21 +379,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
                 lines = [String(localized: "Tailscale: Starting…")]
             }
         }
-        // Under the checked way.
-        let rows = remoteInfoItems + [tailscaleAccountItem]
-        for row in rows where row.menu != nil { appMenu.removeItem(row) }
-        let checked = remoteModeItems.first { ($0.representedObject as? String) == remoteServer.mode?.rawValue } ?? remoteModeItems.last!
-        var index = appMenu.index(of: checked) + 1
-        for row in rows {
-            appMenu.insertItem(row, at: index)
-            index += 1
-        }
         for (i, row) in remoteInfoItems.enumerated() {
             row.title = i < lines.count ? lines[i] : ""
             row.isHidden = i >= lines.count
         }
         tailscaleAccountItem.title = account ?? ""
         tailscaleAccountItem.isHidden = account == nil
+        remoteInfoSeparator.isHidden = lines.isEmpty
     }
 
     private static func deviceKind(_ platform: Remote.ClientPlatform) -> String {
@@ -418,7 +398,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
 
     /// The File menu's first "New … Session" (⌘T) is the current project's default kind.
     func menuNeedsUpdate(_ menu: NSMenu) {
-        if menu === appMenu { return updateRemoteInfoItems() }
+        if menu === remoteMenu { return updateRemoteInfoItems() }
         guard menu === fileMenu else { return }
         let kinds = store.currentProject.map(store.kindsDefaultFirst) ?? AgentKind.allCases
         for (item, kind) in zip(newSessionItems, kinds) {

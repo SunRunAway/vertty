@@ -5,7 +5,7 @@ import VerttyTailnet
 
 /// Serves remote clients (the iPhone app, Vertty on another Mac) over one
 /// WebSocket per client; see VerttyKit/Proto/vertty_remote.proto. Off unless
-/// one of the ways under "Allow Remote Connections" is checked:
+/// one of the ways in the "Remote Connections" submenu is chosen:
 /// - Via Tailscale: on the embedded Tailscale device (VerttyTailnet), which
 ///   forwards the same user's connections to a port on 127.0.0.1;
 /// - Own Network: on the port on every interface.

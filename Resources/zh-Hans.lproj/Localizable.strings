@@ -203,7 +203,8 @@
 "Last run failed" = "上次运行异常";
 
 /* Remote connections */
-"Allow Remote Connections" = "允许远程连接";
+"Remote Connections" = "远程连接";
+"Off" = "关闭";
 "Via Tailscale" = "通过 Tailscale";
 "Own Network" = "自行组网";
 "Tailscale: %@" = "Tailscale：%@";

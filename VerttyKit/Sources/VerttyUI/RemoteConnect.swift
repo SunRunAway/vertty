@@ -12,7 +12,7 @@ public extension RemoteEndpoint {
     /// The tailnet computer with this id, or else this host name (if it
     /// signed in again since).
     static func tailnet(id: String, hostName: String, name: String) -> RemoteEndpoint {
-        let unreachable = String(localized: "Can't reach the computer over Tailscale. Check that it's on and that Via Tailscale is checked under Allow Remote Connections in its Vertty menu.", bundle: .verttyUIResources)
+        let unreachable = String(localized: "Can't reach the computer over Tailscale. Check that it's on and that Via Tailscale is checked under Remote Connections in its Vertty menu.", bundle: .verttyUIResources)
         return RemoteEndpoint(name: name, detail: "Tailscale: \(hostName)", unreachable: unreachable) {
             let tailnet = Tailnet.shared
             do {
@@ -88,7 +88,7 @@ public struct RemoteConnectView: View {
             } header: {
                 Text("Own Network", bundle: .verttyUIResources)
             } footer: {
-                Text("Your computer's address, with the port shown under Own Network in its Vertty menu. The connection's security is up to you (for example a VPN).", bundle: .verttyUIResources)
+                Text("Your computer's address, with the port shown under Remote Connections in its Vertty menu. The connection's security is up to you (for example a VPN).", bundle: .verttyUIResources)
             }
         }
         .formStyle(.grouped)
@@ -108,7 +108,7 @@ public struct RemoteConnectView: View {
         case .running:
             let computers = tailnet.computers
             if computers.isEmpty {
-                Text("No computers found. On your computer, check Via Tailscale under Allow Remote Connections in the Vertty menu, and sign in to the same Tailscale account.", bundle: .verttyUIResources)
+                Text("No computers found. On your computer, choose Via Tailscale under Remote Connections in the Vertty menu, and sign in to the same Tailscale account.", bundle: .verttyUIResources)
                     .foregroundStyle(.secondary)
             }
             ForEach(computers) { computer in

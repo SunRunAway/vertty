@@ -168,8 +168,8 @@ def tailnet_field(snap, key):
 
 
 def menu_ways():
-    """The server menu's ways (as "[on]"/"[off]") and the lines under the
-    checked one; the texts depend on the system's language."""
+    """The Remote Connections submenu's ways (as "[on]"/"[off]") and the
+    details after them; the texts depend on the system's language."""
     lines = read(server_snap / "remote-menu.txt").splitlines()
     ways = [l for l in lines if not l.startswith("  ")]
     return [w.endswith("[on]") for w in ways], [l.strip() for l in lines if l.startswith("  ")]
@@ -194,9 +194,9 @@ try:
             dict(base, VERTTY_SUPPORT_DIR=str(client_state), VERTTY_DEBUG_SNAPSHOT=str(client_snap),
                  VERTTY_REMOTE_PORT=str(free_port())), log))
 
-    # Via Tailscale checked; under it the account, the name, the client
-    # and Sign Out.
-    wait(lambda: menu_ways()[0] == [True, False] and len(menu_ways()[1]) == 4 and "@" in menu_ways()[1][0],
+    # Off, Via Tailscale (checked), Own Network; then the account, the
+    # name, the client and Sign Out.
+    wait(lambda: menu_ways()[0] == [False, True, False] and len(menu_ways()[1]) == 4 and "@" in menu_ways()[1][0],
          "the server's menu doesn't show it signed in to Tailscale")
     server_name = tailnet_field(server_snap, "name")
     assert server_name and server_name in menu_ways()[1][1], tailnet_line(server_snap)
@@ -238,7 +238,7 @@ try:
 
     # Own Network: the server leaves the tailnet; the client loses it.
     (server_snap / "input.txt").write_text("remotemode direct\n")
-    wait(lambda: menu_ways()[0] == [False, True] and str(port) in menu_ways()[1][0],
+    wait(lambda: menu_ways()[0] == [False, False, True] and str(port) in menu_ways()[1][0],
          "the server didn't switch to Own Network")
     wait(lambda: tailnet_field(server_snap, "state") == "stopped", "the server's Tailscale device kept running")
     # The client notices when its pings go unanswered.
