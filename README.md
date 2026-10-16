@@ -10,8 +10,6 @@ Vertty is a native macOS terminal supporting Claude Code and Codex, built on lib
 
 <p align="center"><img src="docs/screenshot.png" alt="Vertty with two projects: Claude Code and Codex session cards showing status, branch, worktree and PR, with a freshly started Claude Code session on the right"></p>
 
-The interface follows your system language (English or Simplified Chinese).
-
 ## Features
 
 - **Projects and sessions**: organize Claude Code and Codex sessions by project, with branch, worktree and PR information.
