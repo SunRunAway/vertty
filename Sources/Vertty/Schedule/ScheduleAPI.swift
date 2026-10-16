@@ -84,7 +84,7 @@ extension AppStore {
     /// asking session unless given, and can't change once the task has its session.
     private func filledTask(_ existing: ScheduleTask?, _ f: [String: Any], source: TabSession?,
                            cwd: String?) -> Result<ScheduleTask, APIError> {
-        let known: Set<String> = ["name", "prompt", "repeat", "days", "date", "time", "project", "agent"]
+        let known: Set<String> = ["name", "prompt", "repeat", "days", "date", "time", "timezone", "project", "agent"]
         if let extra = f.keys.first(where: { !known.contains($0) }) { return .failure(APIError(message: "Unknown field: \(extra)")) }
         func str(_ k: String) -> String? { (f[k] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) }
 
@@ -133,6 +133,12 @@ extension AppStore {
                 return .failure(APIError(message: "repeat must be once, daily, weekdays or weekly."))
             }
             t.timing.repeatKind = r
+        }
+        if f["timezone"] != nil {
+            guard let v = str("timezone"), v == "local" || TimeZone.knownTimeZoneIdentifiers.contains(v) || v == "UTC" else {
+                return .failure(APIError(message: "timezone must be an IANA region such as America/New_York, UTC, or local (follow this Mac)."))
+            }
+            t.timing.timeZoneID = v == "local" ? nil : v
         }
         if let v = str("time") {
             let parts = v.split(separator: ":").compactMap { Int($0) }
@@ -186,6 +192,7 @@ extension AppStore {
             "id": t.id.uuidString, "url": t.link.absoluteString, "name": t.name, "agent": t.kind.rawValue, "prompt": t.prompt,
             "project": project(t.projectID).map { ["name": $0.name, "path": $0.path] } ?? NSNull(),
             "schedule": t.timing.summary, "repeat": t.timing.repeatKind.rawValue,
+            "timezone": t.timing.timeZoneID ?? "local",
             "time": String(format: "%02d:%02d", t.timing.hour, t.timing.minute),
             "enabled": t.enabled, "deleted": t.isDeleted, "state": schedules.state(of: t).rawValue,
             "nextRun": t.enabled ? (t.nextPlan.map(iso) ?? NSNull()) : NSNull(),

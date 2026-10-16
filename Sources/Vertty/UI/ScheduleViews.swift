@@ -417,13 +417,26 @@ struct SchedulePanelView: View {
                 }
                 if draft.wrappedValue.timing.repeatKind == .once {
                     PanelRow("Date") {
-                        DatePicker("", selection: onceDay, displayedComponents: .date).labelsHidden().fixedSize()
+                        DatePicker("", selection: onceDay, displayedComponents: .date)
+                            .environment(\.timeZone, draft.wrappedValue.timing.timeZone)
+                            .environment(\.calendar, draft.wrappedValue.timing.calendar)
+                            .labelsHidden().fixedSize()
                     }
                 }
-                PanelRow("Time", divider: false) {
-                    DatePicker("", selection: timeOfDay, displayedComponents: .hourAndMinute).labelsHidden().fixedSize()
+                PanelRow("Time") {
+                    DatePicker("", selection: timeOfDay, displayedComponents: .hourAndMinute)
+                        .environment(\.timeZone, Self.clockCalendar.timeZone)
+                        .environment(\.calendar, Self.clockCalendar)
+                        .labelsHidden().fixedSize()
+                }
+                PanelRow("Time Zone", divider: false) {
+                    ScheduleTimeZonePicker(selection: draft.timing.timeZoneID)
                 }
             }
+            Text("Times follow the selected zone, including daylight saving changes.")
+                .font(.system(size: 12))
+                .foregroundStyle(.tertiary)
+                .padding(.leading, 4)
             Text(nextLine)
                 .font(.system(size: 12.5))
                 .foregroundStyle(.tertiary)
@@ -436,16 +449,25 @@ struct SchedulePanelView: View {
         guard let next = t.timing.next(after: Date()) else { return String(localized: "No more plans") }
         if let task, task.endedAt != nil, !store.schedulePanelDirty { return String(localized: "No more plans") }
         if let task, !task.enabled, !store.schedulePanelDirty { return String(localized: "Paused") }
-        return String(localized: "Next: \(ScheduleFormat.dateTime(next)) · \(ScheduleText.relative(next))")
+        let date = ScheduleFormat.dateTime(next, timeZone: t.timing.timeZone)
+        let zoned = t.timing.timeZoneID.map { "\(date) · \($0)" } ?? date
+        return String(localized: "Next: \(zoned) · \(ScheduleText.relative(next))")
     }
 
-    /// The time of day, as a date (the picker shows the Mac's zone).
+    /// A time-only picker needs a neutral date: a DST gap today must not change
+    /// the stored hour, even if the task is meant to run on a different day.
+    private static var clockCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar
+    }
+
     private var timeOfDay: Binding<Date> {
         Binding(get: {
             let t = draft.wrappedValue.timing
-            return t.calendar.date(bySettingHour: t.hour, minute: t.minute, second: 0, of: Date()) ?? Date()
+            return Self.clockCalendar.date(from: DateComponents(year: 2001, month: 1, day: 15, hour: t.hour, minute: t.minute))!
         }, set: { date in
-            let c = draft.wrappedValue.timing.calendar.dateComponents([.hour, .minute], from: date)
+            let c = Self.clockCalendar.dateComponents([.hour, .minute], from: date)
             draft.wrappedValue.timing.hour = c.hour ?? 9
             draft.wrappedValue.timing.minute = c.minute ?? 0
         })
@@ -658,6 +680,68 @@ private struct PanelMenu<T: Hashable>: View {
     }
 }
 
+/// Searchable region names, with common US zones near the top.
+private struct ScheduleTimeZonePicker: View {
+    @Binding var selection: String?
+    @State private var showing = false
+    @State private var search = ""
+
+    private static let zones: [String] = {
+        let common = ["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "UTC"]
+        return common + TimeZone.knownTimeZoneIdentifiers.sorted().filter { !common.contains($0) }
+    }()
+
+    private var title: String { selection ?? String(localized: "Follow System") }
+
+    var body: some View {
+        Button { search = ""; showing.toggle() } label: {
+            (Text(title) + Text("  ") + MenuChevron.text)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .buttonStyle(.plain)
+        .help(title)
+        .popover(isPresented: $showing, arrowEdge: .leading) {
+            VStack(alignment: .leading, spacing: 8) {
+                TextField("Search time zones", text: $search)
+                    .textFieldStyle(.roundedBorder)
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        option(nil, String(localized: "Follow System") + " · " + TimeZone.current.identifier)
+                        Divider().padding(.vertical, 4)
+                        ForEach(Self.zones.filter {
+                            search.isEmpty || $0.replacingOccurrences(of: "_", with: " ")
+                                .localizedCaseInsensitiveContains(search.replacingOccurrences(of: "_", with: " "))
+                        }, id: \.self) { zone in
+                            option(zone, zone)
+                        }
+                    }
+                }
+            }
+            .padding(12)
+            .frame(width: 330, height: 310)
+        }
+    }
+
+    private func option(_ zone: String?, _ label: String) -> some View {
+        Button {
+            selection = zone
+            showing = false
+        } label: {
+            HStack {
+                Text(label).lineLimit(1)
+                Spacer(minLength: 4)
+                if selection == zone { Image(systemName: "checkmark") }
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 /// The up-down mark after a menu's value.
 private enum MenuChevron {
     static var text: Text {
@@ -791,7 +875,7 @@ extension AppStore {
             }
             if timing.repeatKind != .weekly { timing.weekdays = [] }
             return [t.name, t.prompt, t.projectID, t.kind, timing.repeatKind, timing.hour, timing.minute,
-                    timing.weekdays.sorted(), timing.year, timing.month, timing.day]
+                    timing.weekdays.sorted(), timing.year, timing.month, timing.day, timing.timeZoneID]
         }
         return settings(panel.draft) != settings(task)
     }

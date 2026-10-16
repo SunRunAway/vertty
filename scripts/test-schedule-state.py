@@ -76,6 +76,61 @@ let restored = ScheduleStore()
 restored.load()
 assert(restored.state(of: restored.task(task.id)!) == .deleted)
 print("PASS: schedule lifecycle, reruns, edits, pause/resume and deletion")
+// Existing files without a zone still follow the system.
+let legacy = Data(#"{"repeatKind":"daily","hour":9,"minute":30,"weekdays":[7]}"#.utf8)
+let decodedLegacy = try JSONDecoder().decode(ScheduleTiming.self, from: legacy)
+assert(decodedLegacy.timeZoneID == nil)
+func instant(_ text: String) -> Date { ISO8601DateFormatter().date(from: text)! }
+var ny = ScheduleTiming(repeatKind: .daily, hour: 9, minute: 30, timeZoneID: "America/New_York")
+for (after, expected) in [
+    ("2026-03-07T00:00:00Z", "2026-03-07T14:30:00Z"),
+    ("2026-03-08T00:00:00Z", "2026-03-08T13:30:00Z"),
+    ("2026-10-31T00:00:00Z", "2026-10-31T13:30:00Z"),
+    ("2026-11-01T00:00:00Z", "2026-11-01T14:30:00Z")
+] { assert(ny.next(after: instant(after)) == instant(expected), expected) }
+// Spring's nonexistent 02:30 moves to 03:00; fall's 01:30 runs only once.
+ny.hour = 2
+assert(ny.next(after: instant("2026-03-08T00:00:00Z")) == instant("2026-03-08T07:00:00Z"))
+ny.hour = 1
+assert(ny.next(after: instant("2026-11-01T00:00:00Z")) == instant("2026-11-01T05:30:00Z"))
+assert(ny.next(after: instant("2026-11-01T05:30:00Z")) == instant("2026-11-02T06:30:00Z"))
+ny.hour = 9
+ny.repeatKind = .weekdays
+assert(ny.next(after: instant("2026-03-06T15:00:00Z")) == instant("2026-03-09T13:30:00Z"))
+ny.repeatKind = .weekly
+ny.weekdays = [1]
+assert(ny.next(after: instant("2026-10-31T00:00:00Z")) == instant("2026-11-01T14:30:00Z"))
+ny.repeatKind = .once
+ny.year = 2026; ny.month = 11; ny.day = 1
+assert(ny.onceDate == instant("2026-11-01T14:30:00Z"))
+// Switching zones retains wall-clock fields; formatting uses the task's date.
+ny.timeZoneID = "Asia/Tokyo"
+assert(ny.hour == 9 && ny.minute == 30 && ny.day == 1)
+assert(ny.onceDate == instant("2026-11-01T00:30:00Z"))
+assert(ny.summary.contains("Asia/Tokyo"))
+ny.repeatKind = .daily
+ny.timeZoneID = "America/New_York"
+var fixed = ScheduleTask(name: "New York", projectID: UUID(), kind: .codex, prompt: "hello", timing: ny)
+assert(store.create(fixed))
+let due = instant("2026-01-01T14:30:00Z")
+store.modify(fixed.id) { $0.nextPlan = due }
+let oldSystemZone = NSTimeZone.default
+NSTimeZone.default = TimeZone(identifier: "Asia/Tokyo")!
+store.timeZoneChanged()
+assert(store.task(fixed.id)!.nextPlan == due) // Do not drop a due fixed-zone plan.
+assert(store.task(fixed.id)!.timing.timeZone.identifier == "America/New_York")
+assert(ScheduleTiming().calendar.timeZone == .current)
+NSTimeZone.default = oldSystemZone
+let persisted = ScheduleStore()
+persisted.load()
+assert(persisted.task(fixed.id)!.timing.timeZoneID == "America/New_York")
+var changedZone = persisted.task(fixed.id)!
+changedZone.timing.timeZoneID = "America/Los_Angeles"
+assert(persisted.applyEdit(changedZone) == nil)
+assert(persisted.task(fixed.id)!.nextPlan! > Date())
+assert(persisted.task(fixed.id)!.timing.hour == 9)
+print("PASS: legacy decoding, region persistence, DST transitions, weekdays, weekly, once and system-zone changes")
+
 '''
     path = root / 'main.swift'
     path.write_text(source)

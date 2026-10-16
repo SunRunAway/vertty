@@ -6,7 +6,7 @@ enum ScheduleRepeat: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-/// When a task runs: wall-clock time in the Mac's time zone (not every 24 hours).
+/// When a task runs: wall-clock time in the selected time zone (not every 24 hours).
 struct ScheduleTiming: Codable, Equatable {
     var repeatKind: ScheduleRepeat = .weekly
     var hour = 9
@@ -18,9 +18,14 @@ struct ScheduleTiming: Codable, Equatable {
     var month: Int?
     var day: Int?
 
+    /// nil follows the Mac; a region identifier follows that region's DST rules.
+    var timeZoneID: String?
+
+    var timeZone: TimeZone { timeZoneID.flatMap(TimeZone.init(identifier:)) ?? .current }
+
     var calendar: Calendar {
         var c = Calendar(identifier: .gregorian)
-        c.timeZone = .current
+        c.timeZone = timeZone
         return c
     }
 
@@ -79,6 +84,11 @@ struct ScheduleTiming: Codable, Equatable {
 
     /// "Every Sat 09:00", "Weekdays 09:00", "Once Oct 17 09:00"…
     var summary: String {
+        guard let timeZoneID else { return wallTimeSummary }
+        return "\(wallTimeSummary) · \(timeZoneID)"
+    }
+
+    private var wallTimeSummary: String {
         let time = String(format: "%02d:%02d", hour, minute)
         switch repeatKind {
         case .daily: return String(localized: "Daily \(time)")
@@ -89,7 +99,7 @@ struct ScheduleTiming: Codable, Equatable {
                 .map { names[($0 - 1) % 7] }.joined(separator: String(localized: ", "))
             return String(localized: "Every \(days) \(time)")
         case .once:
-            let date = onceDate.map { ScheduleFormat.day($0) } ?? "?"
+            let date = onceDate.map { ScheduleFormat.day($0, timeZone: timeZone) } ?? "?"
             return String(localized: "Once \(date) \(time)")
         }
     }
@@ -106,16 +116,18 @@ enum ScheduleFormat {
         return cal.shortWeekdaySymbols
     }
 
-    static func day(_ date: Date) -> String {
+    static func day(_ date: Date, timeZone: TimeZone = .current) -> String {
         let f = DateFormatter()
         f.locale = locale
+        f.timeZone = timeZone
         f.setLocalizedDateFormatFromTemplate("yMMMdEEE")
         return f.string(from: date)
     }
 
-    static func dateTime(_ date: Date) -> String {
+    static func dateTime(_ date: Date, timeZone: TimeZone = .current) -> String {
         let f = DateFormatter()
         f.locale = locale
+        f.timeZone = timeZone
         f.setLocalizedDateFormatFromTemplate("MMMdEEEHHmm")
         return f.string(from: date)
     }

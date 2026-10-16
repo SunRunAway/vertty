@@ -37,7 +37,7 @@ final class DebugSnapshot {
     ///   post <ctrl|cmd|none> <char> · postclick|postscroll <x> <y> ·
     ///   remotepostclick|remotepostscroll <x> <y> · schedules · schedule <task uuid> ·
     ///   runschedule <task uuid> · tickschedules · newschedule · closepanel ·
-    ///   panelsave · panelcancel ·
+    ///   panelsave · panelcancel · windowclick <number> <x> <y> · windowtext <number> <text> ·
     ///   sheetkey return|escape (the open sheet or alert)
     /// The app menu's Remote Connections submenu.
     private static var remoteMenu: NSMenu? {
@@ -109,6 +109,19 @@ final class DebugSnapshot {
             // window-local point, dispatched by AppKit like hardware input.
             if line.hasPrefix("postclick ") || line.hasPrefix("postscroll "), let window {
                 Self.postMouse(line, in: window)
+                continue
+            }
+            // Auxiliary controls (e.g. a popover), confined to this test instance.
+            if line.hasPrefix("windowclick ") || line.hasPrefix("windowtext ") {
+                let parts = line.split(separator: " ", maxSplits: 2).map(String.init)
+                if parts.count == 3, let number = Int(parts[1]),
+                   let targetWindow = NSApp.windows.first(where: { $0.windowNumber == number && $0.isVisible }) {
+                    if parts[0] == "windowclick" {
+                        Self.postMouse("postclick " + parts[2], in: targetWindow)
+                    } else if let input = targetWindow.firstResponder as? NSTextView, input.isFieldEditor {
+                        input.insertText(parts[2], replacementRange: NSRange(location: 0, length: input.string.utf16.count))
+                    }
+                }
                 continue
             }
             if line.hasPrefix("remotepostclick ") || line.hasPrefix("remotepostscroll "),
@@ -408,7 +421,11 @@ final class DebugSnapshot {
             writeLater(rep, "chrome.png")
         }
 
-        var lines: [String] = []
+        var lines: [String] = ["windowSize=\(view.bounds.width),\(view.bounds.height)"]
+        for auxiliary in NSApp.windows where auxiliary.isVisible && auxiliary !== window {
+            lines.append("window=\(auxiliary.windowNumber) class=\(type(of: auxiliary)) size=\(auxiliary.contentView?.bounds.size ?? .zero)")
+            shots.append((CGWindowID(auxiliary.windowNumber), "window-\(auxiliary.windowNumber).png"))
+        }
         lines.append("sidebarVisible=\(store.sidebarVisible) sidebarWidth=\(store.sidebarWidth)")
         if let menu = NSApp.mainMenu?.items.first?.submenu?.items.compactMap(\.submenu).first(where: {
             $0.items.contains { $0.action == NSSelectorFromString("setNewProjectAgent:") }
@@ -438,6 +455,9 @@ final class DebugSnapshot {
             }
         }
         lines.append("schedulesShown=\(store.showingSchedules) panel=\(store.schedulePanel.map { $0.taskID?.uuidString ?? "new" } ?? "-") dirty=\(store.schedulePanelDirty) draft=\(store.schedulePanel?.draft.name ?? "-")")
+        if let timing = store.schedulePanel?.draft.timing {
+            lines.append("draftTiming=\(timing.hour):\(timing.minute) date=\(timing.year ?? 0)-\(timing.month ?? 0)-\(timing.day ?? 0) timezone=\(timing.timeZoneID ?? "local")")
+        }
         if self.window?.attachedSheet != nil || NSApp.modalWindow != nil { lines.append("sheet=open") }
         for task in store.schedules.tasks {
             lines.append("=== task \(task.id) \(task.name) kind=\(task.kind) enabled=\(task.enabled) deleted=\(task.isDeleted) session=\(task.sessionID ?? "-") next=\(task.nextPlan.map { "\($0)" } ?? "-")")

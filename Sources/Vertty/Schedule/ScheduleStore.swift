@@ -218,9 +218,10 @@ final class ScheduleStore: ObservableObject {
         if changed { save() }
     }
 
-    /// The Mac's time zone changed: plans follow its wall clock.
+    /// Only tasks following the Mac are replanned when its time zone changes.
     func timeZoneChanged() {
-        for i in tasks.indices where tasks[i].enabled && !tasks[i].isDeleted && tasks[i].endedAt == nil {
+        for i in tasks.indices where tasks[i].enabled && !tasks[i].isDeleted && tasks[i].endedAt == nil
+            && tasks[i].timing.timeZoneID == nil {
             tasks[i].nextPlan = tasks[i].timing.next(after: Date())
         }
         save()

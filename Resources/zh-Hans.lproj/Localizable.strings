@@ -235,3 +235,8 @@
 "Discard Changes" = "放弃改动";
 "Keep Editing" = "继续编辑";
 "End" = "结束";
+
+"Time Zone" = "时区";
+"Follow System" = "跟随系统";
+"Search time zones" = "搜索时区";
+"Times follow the selected zone, including daylight saving changes." = "按所选时区执行，自动跟随冬夏令时切换。";

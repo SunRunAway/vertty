@@ -22,7 +22,8 @@ fields:
   --repeat once|daily|weekdays|weekly
   --days mon,tue,…          for weekly
   --date YYYY-MM-DD         for once
-  --time HH:MM              24-hour, this Mac's time
+  --time HH:MM              24-hour, in the selected time zone
+  --timezone ZONE          e.g. America/New_York; local (default) follows this Mac
   --project PATH|NAME       default: the project of this session
   --agent claude|codex      default: this session's agent
 
@@ -102,10 +103,12 @@ func replyOK(_ reply: Data) -> Bool {
 
 let mcpInstructions = """
 Vertty (the terminal app this session runs in) can run a prompt on a schedule: once, daily, on weekdays, or on \
-chosen days of the week, at a time on this Mac's clock. A task's first run starts a new session in its project; \
+chosen days of the week, at a wall-clock time in the task's time zone (default: this Mac). A task's first run starts a new session in its project; \
 later runs resume that same session. Runs happen only while Vertty is running and the Mac is awake. Use these \
 tools for any such request ("every Saturday at 9 check dependencies", "move the dependency check to Sunday", \
 "pause that task", "what's scheduled?") instead of cron, cron tools, launchd, /loop or cloud tasks.
+Use timezone America/New_York (or another IANA region) to follow local daylight saving changes automatically; \
+use local to follow this Mac. Editing the zone preserves the specified wall-clock time.
 When the user says a task is done or no longer needed, end it; pause is for a break the user means to come back \
 from. Delete only when asked to.
 Create, edit, delete, pause, resume, end and run take effect immediately without a Vertty confirmation dialog. \
@@ -121,7 +124,8 @@ let taskFields: [String: Any] = [
     "name": ["type": "string", "description": "A short name for the task."],
     "prompt": ["type": "string", "description": "What to run. It must stand alone: the task runs in a fresh session that hasn't seen this conversation."],
     "repeat": ["type": "string", "enum": ["once", "daily", "weekdays", "weekly"]],
-    "time": ["type": "string", "description": "HH:MM, 24-hour, this Mac's time."],
+    "time": ["type": "string", "description": "HH:MM, 24-hour, in the selected time zone."],
+    "timezone": ["type": "string", "description": "IANA time zone, e.g. America/New_York (automatically follows DST), or UTC. Default: local (follows this Mac). Edit to local to reset."],
     "days": ["type": "string", "description": "For weekly: any of mon,tue,wed,thu,fri,sat,sun, comma-separated."],
     "date": ["type": "string", "description": "For once: YYYY-MM-DD, in the future."],
     "project": ["type": "string", "description": "Project path or name. Default: this session's project."],
@@ -226,7 +230,7 @@ default:
 }
 
 let fieldNames = ["--name": "name", "--prompt": "prompt", "--repeat": "repeat", "--days": "days", "--date": "date",
-                  "--time": "time", "--project": "project", "--agent": "agent"]
+                  "--time": "time", "--timezone": "timezone", "--project": "project", "--agent": "agent"]
 var fields: [String: Any] = [:]
 while !args.isEmpty {
     let flag = args.removeFirst()

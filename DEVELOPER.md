@@ -78,7 +78,9 @@ hooks 事件的传递路径：`vertty-hook`（App 里自带的一个小程序）
 
 产品规则见 [docs/spec/schedule-product.md](docs/spec/schedule-product.md)。任务和运行记录存在状态目录的 `schedules.json`。
 
-- **计划**：每个任务记着下一次还没处理的计划时间 `nextPlan`。每 20 秒、启动和唤醒时检查一次：到点的计划里只运行最近一次，更早的直接丢掉；先把新的 `nextPlan` 写盘再启动，所以重复检查、唤醒或重启都不会重复提交。时间按本机系统时区计算，系统时区变了就重算 `nextPlan`（`Calendar.nextDate`，夏令时跳过的时刻顺延，重复的时刻只取第一次）。
+`python3 scripts/test-schedule-state.py` 验证冬夏令时和旧任务兼容；`scripts/test-schedule-api.py` 验证 CLI/MCP；`scripts/test-schedule-timezones.py` 在隔离窗口点击、搜索时区并验证保存、取消和日期时间保持不变。后两者先运行 `make app`，均不启动真实 agent 会话。
+
+- **计划**：每个任务记着下一次还没处理的计划时间 `nextPlan`。每 20 秒、启动和唤醒时检查一次：到点的计划里只运行最近一次，更早的直接丢掉；先把新的 `nextPlan` 写盘再启动，所以重复检查、唤醒或重启都不会重复提交。任务可指定 IANA 地区时区（如 `America/New_York`），默认跟随本机系统时区；系统时区变了只重算跟随本机的任务 `nextPlan`（`Calendar.nextDate`，夏令时跳过的时刻顺延，重复的时刻只取第一次）。
 - **执行**：提示词作为 agent 的命令行参数传入（`claude --session-id/--resume <id> <提示词>`、`codex [resume <id>] <提示词>`），从不往终端里打字。首次运行在项目顶部新建一张后台卡片；之后 resume 任务绑定的会话 ID。这个会话开在某张卡片里时，先释放那张卡片的终端，等它的 agent 进程（Claude 看 `~/.claude/sessions`，外加带这张卡片 `VERTTY_TAB_ID` 的 `claude`、`vertty-hook` 进程；Codex 看带 `tui.terminal_title` 参数的 TUI 进程）都退出后，再在同一张卡片里 resume。确认不了已停止就记异常，不启动第二个实例；卡片的终端已经没了也照样先查一遍进程。停止期间选中这张卡片不会重新拉起它。Claude 会话如果在 Vertty 之外（别的终端、底部终端、后台任务）还有进程，不碰它，直接记异常，因为再 resume 会让会话分叉。
 - **状态**：Claude 靠 hooks：`UserPromptSubmit` 表示已提交，`Stop` 表示已完成，没有 `Stop` 就空闲下来算中断。Codex 没有 hooks，查 `thread_history_<n>.sqlite`：本轮的 `userMessage` 出现表示已提交，同一轮有 `phase` 为 `final_answer` 的 `agentMessage` 表示已回复。App 重启时还在运行的记录记为异常。
 - **对话里管理**：`vertty-schedule mcp`（`$VERTTY_SCHEDULE_CLI`）是一个 stdio MCP server，把各项操作做成工具，使用说明写在工具描述和 server 的 instructions 里。`vertty-claude` 用 `--mcp-config`、`vertty-codex` 用 `-c mcp_servers.vertty…` 把它挂到这张卡片的会话上，不写 agent 的配置文件。Claude 不用 skill：长对话压缩后 Claude Code 不会重发 skill 列表，agent 就不知道有这个 skill 了，而 MCP 的 instructions 和工具名会重发。`vertty-schedule` 通过 hook socket 发 `schedule\n<JSON>` 请求并读回 JSON。接口查询、创建、编辑、删除、暂停、恢复、结束和立即运行均直接执行；手动结束记在任务的 `endedAt`，此后不再安排计划，修改执行计划时清除；创建、编辑、删除成功后返回已保存的 `task` 和 `url`（`vertty://schedule/<UUID>`），agent 可以回复链接，用户点击后打开对应任务侧栏，删除后的任务也能查看。终端内的 `vertty://` 文本和 OSC 8 链接由 Ghostty 识别，按 ⌘ 点击会在当前实例打开任务侧栏，停留在当前会话，不切到定时任务页。Claude Code 全屏模式等捕获鼠标的 TUI 下，Ghostty 原本只在按住 Shift 时才处理链接；补丁里让 `vertty://` 链接在这时也由终端处理，按不按 ⌘ 都行，跟 Claude Code 点 http(s) 链接一样，这次点击不再发给 TUI。其他链接和文件路径的点击仍交给 TUI（Claude Code 自己打开 http(s) 链接和文件路径，但不认 `vertty://`）。请求不会自动打开界面，也不要求人工确认；保存失败返回错误。请求里多出的字段会被拒绝。MCP server 不在 Claude Code 的 Bash 沙箱里运行，不需要给 socket 开例外。
@@ -140,6 +142,7 @@ build/Vertty.app/Contents/MacOS/Vertty
 | `refreshhistory` | 立即刷新历史列表 |
 | `toggleshell` | 开关当前会话的底部终端 |
 | `click <x> <y>` / `cmdclick <x> <y>` | 点击 / 按 ⌘ 点击测试窗口内的位置，坐标单位为点，原点在内容区域左上角 |
+| `windowclick <窗口编号> <x> <y>` / `windowtext <窗口编号> <文字>` | 操作测试实例的浮层；编号和尺寸在 `state.txt`，截图为 `window-<编号>.png`；文字仅写入已聚焦的原生文本框 |
 | `postclick <x> <y>` / `postscroll <x> <y>` | 把一次点击 / 滚动放进 App 的事件队列，像真实输入一样经 AppKit 分发；坐标同 `click` |
 | `focus claude` / `focus shell` | 聚焦上面 / 下面的终端 |
 | `menukey <ctrl\|cmd> <字符>` | 把快捷键直接交给主菜单处理 |

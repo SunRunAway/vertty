@@ -97,6 +97,29 @@ try:
     assert 'panel=-' in state()
     print('PASS direct CRUD, durable state, no automatic panels, links including deleted tasks', flush=True)
 
+    # Named zones round-trip through MCP and CLI, with wall-clock values preserved.
+    zoned = call('create', dict(fields, name='New York', date='2099-01-15', time='09:30',
+                                timezone='America/New_York'))['task']
+    zone_id = zoned['id']
+    assert zoned['timezone'] == 'America/New_York' and zoned['nextRun'] == '2099-01-15T14:30:00Z', zoned
+    assert 'America/New_York' in zoned['schedule']
+    summer = call('edit', dict(task_id=zone_id, date='2099-07-15'))['task']
+    assert summer['nextRun'] == '2099-07-15T13:30:00Z', summer
+    west = call('edit', dict(task_id=zone_id, timezone='America/Los_Angeles'))['task']
+    assert west['time'] == '09:30' and west['date'] == '2099-07-15', west
+    assert west['nextRun'] == '2099-07-15T16:30:00Z', west
+    for invalid in ('America/Not_A_Zone', 'EST', '', 123):
+        call('edit', dict(task_id=zone_id, timezone=invalid), ok=False)
+    assert call('show', {'task_id': zone_id})['task']['timezone'] == 'America/Los_Angeles'
+    cli_result = subprocess.run([str(cli), 'edit', zone_id, '--timezone', 'UTC'],
+                                capture_output=True, text=True, check=True, env=env, cwd=project)
+    assert json.loads(cli_result.stdout)['task']['nextRun'] == '2099-07-15T09:30:00Z'
+    local = call('edit', dict(task_id=zone_id, timezone='local'))['task']
+    assert local['timezone'] == 'local' and local['time'] == '09:30'
+    assert 'timeZoneID' not in next(t for t in saved() if t['id'] == zone_id)['timing']
+    call('delete', {'task_id': zone_id})
+    print('PASS MCP/CLI time zones, DST offsets, wall-clock preservation, validation and local reset', flush=True)
+
     # Ending: done for good, until its schedule changes, even if it was paused.
     weekly = call('create', dict(fields, name='Ends', repeat='weekly', days='sat', time='09:00'))['task']['id']
     call('pause', {'task_id': weekly})
