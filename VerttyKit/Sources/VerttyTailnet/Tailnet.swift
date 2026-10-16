@@ -93,7 +93,8 @@ public final class Tailnet: ObservableObject {
     private var users = 0
     private var timer: Timer?
     private var polling = false
-    private var openWhenReady: ((URL) -> Void)?
+    /// Bumped per login(open:), so only the latest opens its page.
+    private var loginRequest = 0
 
     private init() {}
 
@@ -155,7 +156,7 @@ public final class Tailnet: ObservableObject {
     private func stop() {
         timer?.invalidate()
         timer = nil
-        openWhenReady = nil
+        loginRequest += 1
         control.async { VTStop() }
         state = .stopped
         authURL = nil
@@ -173,24 +174,38 @@ public final class Tailnet: ObservableObject {
 
     // MARK: - Signing in
 
-    /// Asks Tailscale for a sign-in page and calls `open` with it once it's
-    /// there. Call while using the device (use()).
+    /// Calls `open` with Tailscale's sign-in page as soon as it's there
+    /// (never if the device is signed in by then). Call while using the
+    /// device (use()).
     public func login(open: @escaping (URL) -> Void) {
         if let authURL, state == .needsLogin {
             open(authURL)
             return
         }
-        openWhenReady = open
+        loginRequest += 1
+        let request = loginRequest
+        // After the device has started; waiting for the page off the
+        // control queue, which stays free for stopping and the like.
         control.async {
-            _ = Self.take(VTLogin())
-            DispatchQueue.main.async { self.poll() }
+            DispatchQueue.global(qos: .userInitiated).async {
+                var page: UnsafeMutablePointer<CChar>?
+                // Tailscale's servers take a few seconds, more on a slow
+                // network.
+                _ = Self.take(VTLogin(30_000, &page))
+                let url = Self.take(page).flatMap(URL.init(string:))
+                DispatchQueue.main.async {
+                    guard request == self.loginRequest, let url else { return }
+                    open(url)
+                    self.poll()
+                }
+            }
         }
     }
 
     /// Signs this device out; it leaves the tailnet. Stops it unless the
     /// Mac still serves on it (then it waits for a new sign-in).
     public func logout() {
-        openWhenReady = nil
+        loginRequest += 1
         if let marker { try? FileManager.default.removeItem(at: marker) }
         control.async {
             _ = Self.take(VTLogout())
@@ -303,12 +318,8 @@ public final class Tailnet: ObservableObject {
         if account != (status.user ?? "") { account = status.user ?? "" }
         if name != (status.name ?? "") { name = status.name ?? "" }
         if self.devices != devices { self.devices = devices }
-        if state == .running {
-            openWhenReady = nil
-            if let marker, !signedInHere { FileManager.default.createFile(atPath: marker.path, contents: Data()) }
-        } else if let authURL, let open = openWhenReady {
-            openWhenReady = nil
-            open(authURL)
+        if state == .running, let marker, !signedInHere {
+            FileManager.default.createFile(atPath: marker.path, contents: Data())
         }
     }
 

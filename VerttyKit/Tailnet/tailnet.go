@@ -204,17 +204,40 @@ func firstLabel(dnsName string) string {
 	return dnsName
 }
 
-// VTLogin asks for a sign-in URL; it shows up in VTStatus.
+// VTLogin asks Tailscale for the sign-in URL (it reuses one it has), waits
+// up to timeoutMs for it and returns it in url (malloc'ed; nil when the
+// device is signed in by then). The login tsnet starts by itself when it
+// starts signed out doesn't bring a URL.
 //
 //export VTLogin
-func VTLogin() *C.char {
+func VTLogin(timeoutMs C.int, url **C.char) *C.char {
 	_, c, err := current()
 	if err != nil {
 		return cerr(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMs)*time.Millisecond)
 	defer cancel()
-	return cerr(c.StartLoginInteractive(ctx))
+	if err := c.StartLoginInteractive(ctx); err != nil {
+		return cerr(err)
+	}
+	for {
+		st, err := c.StatusWithoutPeers(ctx)
+		if err != nil {
+			return cerr(err)
+		}
+		if st.BackendState == "Running" {
+			return nil
+		}
+		if st.AuthURL != "" {
+			*url = cstr(st.AuthURL)
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return cerr(errors.New("Tailscale didn't send a sign-in page in time"))
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
 }
 
 //export VTLogout

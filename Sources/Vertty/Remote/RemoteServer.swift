@@ -89,6 +89,9 @@ final class RemoteServer: ObservableObject {
         if mode == .tailscale {
             // Any free port: only the Tailscale device connects to it.
             port = 0
+            // Started now, so signing in can begin before the port is ready.
+            usingTailnet = true
+            Tailnet.shared.use()
         } else {
             switch Self.configuredPort() {
             case .success(let p): port = p
@@ -125,8 +128,6 @@ final class RemoteServer: ObservableObject {
             case .ready where mode == .tailscale:
                 guard let local = listener.port?.rawValue else { return }
                 self.status = .tailnet
-                self.usingTailnet = true
-                Tailnet.shared.use()
                 Tailnet.shared.serve(port: Remote.defaultPort, to: local) { [weak self] reason in
                     guard let self, self.listener === listener else { return }
                     self.status = .failed(reason)
