@@ -97,6 +97,20 @@ try:
     assert 'panel=-' in state()
     print('PASS direct CRUD, durable state, no automatic panels, links including deleted tasks', flush=True)
 
+    # Ending: done for good, until its schedule changes, even if it was paused.
+    weekly = call('create', dict(fields, name='Ends', repeat='weekly', days='sat', time='09:00'))['task']['id']
+    call('pause', {'task_id': weekly})
+    ended = call('end', {'task_id': weekly})['task']
+    assert ended['state'] == 'ended' and ended['nextRun'] is None, ended
+    for verb in ('pause', 'resume', 'end'):
+        call(verb, {'task_id': weekly}, ok=False)
+    assert call('edit', {'task_id': weekly, 'name': 'Still ended'})['task']['state'] == 'ended'
+    again = call('edit', {'task_id': weekly, 'time': '10:00'})['task']
+    assert again['state'] == 'active' and again['enabled'] and again['nextRun'], again
+    assert 'end it' in rpc('initialize')['instructions'] and 'end_scheduled_task' in descriptions
+    call('delete', {'task_id': weekly})
+    print('PASS ending a task stops its schedule until the schedule is edited', flush=True)
+
     # A failed atomic write must return an error and roll back the in-memory mutation.
     live = call('create', dict(fields, name='Survivor'))['task']['id']
     path = support / 'schedules.json'

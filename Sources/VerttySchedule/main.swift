@@ -10,8 +10,9 @@ usage: vertty-schedule <command> [options]
   show <task-id>            one task with its recent runs
   create [fields]           create and enable a task
   edit <task-id> [fields]   apply these changes to the task
-  pause|resume|run <task-id>
-                            done at once ("run" = run now)
+  pause|resume|end|run <task-id>
+                            done at once ("end" = done for good,
+                            "run" = run now)
   delete <task-id>          delete the task (keep its history)
   mcp                       serve these as MCP tools on stdin/stdout
 
@@ -105,7 +106,9 @@ chosen days of the week, at a time on this Mac's clock. A task's first run start
 later runs resume that same session. Runs happen only while Vertty is running and the Mac is awake. Use these \
 tools for any such request ("every Saturday at 9 check dependencies", "move the dependency check to Sunday", \
 "pause that task", "what's scheduled?") instead of cron, cron tools, launchd, /loop or cloud tasks.
-Create, edit, delete, pause, resume and run take effect immediately without a Vertty confirmation dialog. \
+When the user says a task is done or no longer needed, end it; pause is for a break the user means to come back \
+from. Delete only when asked to.
+Create, edit, delete, pause, resume, end and run take effect immediately without a Vertty confirmation dialog. \
 Create, edit and delete return the saved task and its url. You may include that URL as a Markdown link in your reply \
 so the user can open the task's sidebar in Vertty. Deleted tasks remain accessible through their links. \
 Only report success when the tool returns ok=true; report errors honestly.
@@ -142,6 +145,9 @@ let tools: [[String: Any]] = [
          taskFields.merging(taskIDField) { a, _ in a }, ["task_id"]),
     tool("pause_scheduled_task", "Pause a scheduled task (at once). A run going on isn't stopped.", taskIDField, ["task_id"]),
     tool("resume_scheduled_task", "Resume a paused scheduled task (at once), from now on.", taskIDField, ["task_id"]),
+    tool("end_scheduled_task",
+         "End a scheduled task (at once) that is done for good, e.g. the user says it's finished or no longer needed. It stops being scheduled and moves to Ended, keeping its history and session; a run going on isn't stopped. Editing its schedule enables it again. For a break, pause it instead.",
+         taskIDField, ["task_id"]),
     tool("run_scheduled_task", "Run a scheduled task once now (at once); its schedule stays as it is.", taskIDField, ["task_id"]),
     tool("delete_scheduled_task", "Delete a scheduled task immediately, keeping its history and current run. Returns the deleted task and its URL; you may share the link with the user.", taskIDField, ["task_id"]),
 ]
@@ -149,7 +155,7 @@ let tools: [[String: Any]] = [
 func callTool(_ name: String, _ arguments: [String: Any]) -> [String: Any] {
     let ops = ["list_scheduled_tasks": "list", "show_scheduled_task": "show", "create_scheduled_task": "create",
                "edit_scheduled_task": "edit", "pause_scheduled_task": "pause", "resume_scheduled_task": "resume",
-               "run_scheduled_task": "run", "delete_scheduled_task": "delete"]
+               "run_scheduled_task": "run", "end_scheduled_task": "end", "delete_scheduled_task": "delete"]
     guard let op = ops[name] else {
         return ["content": [["type": "text", "text": "Unknown tool \(name)."]], "isError": true]
     }
@@ -211,7 +217,7 @@ case "mcp":
     serveMCP()
 case "list", "create":
     break
-case "show", "edit", "pause", "resume", "delete", "run":
+case "show", "edit", "pause", "resume", "end", "delete", "run":
     guard let id = args.first, !id.hasPrefix("--") else { fail("\(command) needs a task id.") }
     taskID = id
     args.removeFirst()

@@ -211,6 +211,9 @@ private struct ScheduleActions: View {
             Button("Resume") { schedules.setEnabled(task.id, true) }
                 .disabled(schedules.state(of: task) == .ended || store.project(task.projectID) == nil || !task.timing.canResume)
         }
+        if schedules.state(of: task) != .ended {
+            Button("End") { schedules.end(task.id) }
+        }
         if let id = task.sessionID, !id.isEmpty {
             Button("Open Session") {
                 store.openScheduleSession(kind: task.kind, sessionID: id, projectID: task.projectID, title: task.name)
@@ -431,6 +434,7 @@ struct SchedulePanelView: View {
     private var nextLine: String {
         let t = draft.wrappedValue
         guard let next = t.timing.next(after: Date()) else { return String(localized: "No more plans") }
+        if let task, task.endedAt != nil, !store.schedulePanelDirty { return String(localized: "No more plans") }
         if let task, !task.enabled, !store.schedulePanelDirty { return String(localized: "Paused") }
         return String(localized: "Next: \(ScheduleFormat.dateTime(next)) · \(ScheduleText.relative(next))")
     }

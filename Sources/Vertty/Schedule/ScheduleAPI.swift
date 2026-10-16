@@ -21,7 +21,7 @@ extension AppStore {
             var d = describe(task)
             d["recentRuns"] = schedules.runs(of: id).prefix(10).map(describe)
             return ["ok": true, "task": d]
-        case "pause", "resume", "run":
+        case "pause", "resume", "end", "run":
             // The same actions as in the window.
             guard let id = taskID, let task = schedules.task(id), !task.isDeleted else { return error("No task with that id.") }
             if !fields.isEmpty { return error("\(op) takes no fields.") }
@@ -36,6 +36,9 @@ extension AppStore {
                     return error("This task can't be resumed as it is: its project is gone or its one-time date has passed. Edit it first.")
                 }
                 schedules.setEnabled(id, true)
+            case "end":
+                guard schedules.state(of: task) != .ended else { return error("This task has already ended.") }
+                guard schedules.end(id) else { return error("Couldn't save the task.") }
             default:
                 guard project(task.projectID) != nil else { return error("The task's project is gone.") }
                 guard schedules.openRun(of: id) == nil else { return error("The task is running now.") }

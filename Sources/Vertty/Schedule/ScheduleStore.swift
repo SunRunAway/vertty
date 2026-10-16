@@ -55,10 +55,11 @@ final class ScheduleStore: ObservableObject {
     var activeTasks: [ScheduleTask] { tasks.filter { !$0.isDeleted } }
     var deletedTasks: [ScheduleTask] { tasks.filter(\.isDeleted).sorted { $0.deletedAt! > $1.deletedAt! } }
 
-    /// Only the scheduled run for the current one-time plan can end it.
+    /// Ended by hand, or by the scheduled run for the current one-time plan.
     /// Manual reruns do not change the scheduling lifecycle.
     func state(of task: ScheduleTask) -> ScheduleState {
         if task.isDeleted { return .deleted }
+        if task.endedAt != nil { return .ended }
         if !task.enabled { return .paused }
         if task.timing.repeatKind == .once, task.nextPlan == nil,
            let plannedAt = task.timing.onceDate,
@@ -133,6 +134,8 @@ final class ScheduleStore: ObservableObject {
         t.kind = edit.kind
         if edit.timing != t.timing {
             t.timing = edit.timing
+            // A task ended by hand starts again with its new schedule.
+            t.endedAt = nil
             t.nextPlan = t.enabled ? t.timing.next(after: Date()) : nil
         }
         let previous = tasks[i]
@@ -159,6 +162,22 @@ final class ScheduleStore: ObservableObject {
             t.enabled = enabled
             t.nextPlan = enabled ? t.timing.next(after: Date()) : nil
         }
+    }
+
+    /// Ends the task by hand: no more plans, a run going on keeps going.
+    /// Editing its schedule enables it again, even if it was paused.
+    @discardableResult
+    func end(_ id: UUID) -> Bool {
+        guard let i = tasks.firstIndex(where: { $0.id == id }) else { return false }
+        let previous = tasks[i]
+        tasks[i].endedAt = Date()
+        tasks[i].enabled = true
+        tasks[i].nextPlan = nil
+        guard save() else {
+            tasks[i] = previous
+            return false
+        }
+        return true
     }
 
     @discardableResult
@@ -201,7 +220,7 @@ final class ScheduleStore: ObservableObject {
 
     /// The Mac's time zone changed: plans follow its wall clock.
     func timeZoneChanged() {
-        for i in tasks.indices where tasks[i].enabled && !tasks[i].isDeleted {
+        for i in tasks.indices where tasks[i].enabled && !tasks[i].isDeleted && tasks[i].endedAt == nil {
             tasks[i].nextPlan = tasks[i].timing.next(after: Date())
         }
         save()

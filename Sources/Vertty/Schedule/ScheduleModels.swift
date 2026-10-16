@@ -137,6 +137,8 @@ struct ScheduleTask: Codable, Identifiable, Equatable {
     var sessionID: String?
     /// The next planned time not handled yet (nil: no more plans).
     var nextPlan: Date?
+    /// Ended by hand: no more plans until its schedule changes.
+    var endedAt: Date?
 
     var isDeleted: Bool { deletedAt != nil }
     /// Project and agent are fixed once the task has its session.
