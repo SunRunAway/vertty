@@ -84,12 +84,16 @@
                 if let n = Int(argument) { terminal?.debugSlide(n) }
             case "type":
                 terminal?.debugType(argument)
-            case "insert":
-                terminal?.debugInsert(argument)
+            case "mark":
+                terminal?.debugMark(argument)
             case "enter":
-                terminal?.debugKey(.enter)
-            case "ctrlc":
-                terminal?.debugKey(.c, modifiers: .ctrl)
+                terminal?.debugType("\n")
+            case "backspace":
+                terminal?.debugBackspace()
+            case "send":
+                terminal?.debugSend()
+            case "key":
+                terminal?.debugPress(argument)
             case "background":
                 store?.client.reconnectsAutomatically = false
             case "foreground":

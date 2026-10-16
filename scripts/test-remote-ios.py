@@ -184,6 +184,19 @@ def input_size(hex_input):
     return None
 
 
+def inputs():
+    """Every read the agent made, as (hex, size)."""
+    return [(p[1], p[2]) for p in (l.split() for l in read(agent_log).splitlines()) if p and p[0] == "input"]
+
+
+def composer():
+    """What the bar's text field holds (its first line)."""
+    for line in phone().splitlines():
+        if line.startswith("composer|"):
+            return line[len("composer|"):]
+    return None
+
+
 for path, what in ((APP, "the iPhone app"), (PROBE, "remote-probe"), (ROOT / "build/Vertty.app", "Vertty.app")):
     if not path.exists():
         sys.exit(f"Build {what} first (see the top of this script): {path} is missing")
@@ -248,20 +261,53 @@ try:
 
     drive("focus")
     wait(lambda: terminal("keyboard") == "true", "tapping the terminal didn't bring up the keyboard")
+    assert terminal("bar") == "keys", phone()
     own = settled_size("session not at the size with the keyboard up")
-    drive("type hi")
-    wait(lambda: input_size("69") is not None, "typing didn't reach the agent")
-    assert input_size("68") == own and input_size("69") == own, read(agent_log)
-    wait(lambda: re.search(r"GOT (..)*69", phone()), "the echo didn't show on the iPhone")
-    drive("insert 你好")
-    wait(lambda: input_size("e4bda0e5a5bd") is not None, "committed IME text didn't reach the agent")
-    assert input_size("e4bda0e5a5bd") == own, read(agent_log)
-    drive("ctrlc")
-    wait(lambda: input_size("03") is not None, "Ctrl+C didn't reach the agent")
-    # Holding the space bar and sliding left moves the cursor: Left presses.
-    drive("slide -2")
-    wait(lambda: input_size("1b5b44") is not None, "sliding on the space bar didn't press Left")
-    print("PASS typing, IME text, Ctrl+C and space-bar sliding reach the session at the device's size", flush=True)
+    simctl("io", udid, "screenshot", str(root / "keyboard-keys.png"))
+    # With nothing typed, Return and Backspace are the terminal's, as are
+    # the bar's keys and sliding on the space bar (Left presses).
+    for command, sent, what in (("enter", "0d", "Return"), ("backspace", "7f", "Backspace"),
+                                ("key esc", "1b", "Esc"), ("key ⇧tab", "1b5b5a", "Shift-Tab"),
+                                ("key ^c", "03", "Ctrl+C"), ("key ↓", "1b5b42", "Down"),
+                                ("slide -2", "1b5b44", "sliding on the space bar")):
+        count = len(inputs())
+        drive(command)
+        wait(lambda: any(h.startswith(sent) for h, _ in inputs()[count:]), f"{what} with nothing typed didn't reach the agent")
+        assert all(size == own for _, size in inputs()[count:]), read(agent_log)
+    wait(lambda: re.search(r"GOT (..)*7f", phone()), "the echo didn't show on the iPhone")
+    assert terminal("bar") == "keys" and composer() == "", phone()
+    print("PASS with nothing typed, Return, Backspace, the bar's keys and space-bar sliding reach the session",
+          flush=True)
+
+    # Typing goes into the field, which takes the keys' place (an IME
+    # composition already does); Return there is a line break. Send pastes
+    # it all, then presses Enter.
+    count = len(inputs())
+    drive("mark ni")
+    wait(lambda: terminal("bar") == "field", "a composition didn't bring up the field")
+    drive("type hi", "enter", "type 你好")
+    wait(lambda: composer() == "hi", "typing didn't go into the field")
+    simctl("io", udid, "screenshot", str(root / "keyboard-field.png"))
+    time.sleep(0.5)
+    assert inputs()[count:] == [], read(agent_log)
+    drive("send")
+    wait(lambda: "0d" in [h for h, _ in inputs()[count:]][1:], "sending didn't paste the text and press Enter")
+    sent = [h for h, _ in inputs()[count:]]
+    assert "".join(sent[:-1]) in ("68690de4bda0e5a5bd", "68690ae4bda0e5a5bd") and sent[-1] == "0d", sent
+    assert all(size == own for _, size in inputs()[count:]), read(agent_log)
+    wait(lambda: terminal("bar") == "keys" and composer() == "", "the field didn't empty after sending")
+    print("PASS typing fills the field in the keys' place; sending pastes it and presses Enter", flush=True)
+
+    # Put away with something typed, the field keeps it for the next time.
+    drive("type draft", "hidekeyboard")
+    wait(lambda: terminal("keyboard") == "false" and terminal("bar") == "keys", "the keyboard didn't go away")
+    assert composer() == "draft", phone()
+    drive("focus")
+    wait(lambda: terminal("keyboard") == "true" and terminal("bar") == "field", "the draft didn't come back")
+    count = len(inputs())
+    drive("send")
+    wait(lambda: any(h.startswith("6472616674") for h, _ in inputs()[count:]), "the draft didn't send")
+    print("PASS a draft stays in the field while the keyboard is away", flush=True)
 
     # Typing on the computer takes the session to the computer's size; the
     # iPhone shows it at that grid (scaled down when bigger), and typing on
@@ -273,7 +319,7 @@ try:
     wait(lambda: terminal("session") == local and terminal("reported") == local,
          f"the iPhone didn't show the computer's size {local}")
     simctl("io", udid, "screenshot", str(root / "computer-size.png"))
-    drive("type y")
+    drive("type y", "send")
     wait(lambda: input_size("79") is not None, "typing after the computer's input didn't reach the agent")
     assert input_size("79") == own, read(agent_log)
     wait(lambda: terminal("session") == own and terminal("scale") == "1.00", "the iPhone didn't take its size back")

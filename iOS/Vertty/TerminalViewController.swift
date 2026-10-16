@@ -6,10 +6,13 @@ import VerttyRemote
 import VerttyUI
 
 /// The iOS terminal of a card (RemoteStore does the rest, as on the Mac):
-/// the vendored libghostty-spm terminal view, fed by the connection. The
-/// session runs on the computer at one grid size at a time; the view is
-/// laid out at the session's grid and scaled down when it doesn't fit.
-final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeDelegate, RemoteTerminalDisplay {
+/// the vendored libghostty-spm terminal view, fed by the connection, over
+/// the input bar. The session runs on the computer at one grid size at a
+/// time; the view is laid out at the session's grid and scaled down when it
+/// doesn't fit.
+final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeDelegate, RemoteTerminalDisplay,
+    UIGestureRecognizerDelegate
+{
     /// Ghostty's window padding, in points (see the controller's config).
     static let padding: CGFloat = 4
     /// The one on screen, for the debug driver.
@@ -17,8 +20,9 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
 
     let cardID: UUID
     private let store: RemoteStore
-    private let terminal = UITerminalView(frame: .zero)
+    private let terminal = RemoteTerminalView(frame: .zero)
     private let container = LayoutView()
+    private lazy var bar = TerminalInputBar(terminal: terminal)
     /// Ghostty's own colors, as on the computer (no libghostty-spm theme).
     private static let controller = TerminalController(theme: TerminalTheme()) { config in
         config.withWindowPaddingX(Int(TerminalViewController.padding))
@@ -59,20 +63,36 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
         container.onLayout = { [weak self] in self?.containerResized() }
         container.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(container)
+        // The bar rides on the keyboard, or sits at the bottom without it.
+        view.addSubview(bar)
         NSLayoutConstraint.activate([
             container.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             container.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
             container.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
-            container.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor),
+            container.bottomAnchor.constraint(equalTo: bar.topAnchor),
+            bar.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
+            bar.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
+            bar.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor),
         ])
 
         terminal.configuration = TerminalSurfaceOptions(backend: .inMemory(mirror))
         terminal.controller = Self.controller
         terminal.delegate = self
-        terminal.inputAccessoryItems = [.esc, .tab, .shiftTab, .ctrlC, .divider, .arrowLeft, .arrowDown, .arrowUp, .arrowRight]
-        terminal.inputAccessoryShowsDismissKey = true
+        // The keys are on the bar, so the keyboard carries none of its own.
+        terminal.inputAccessoryItems = []
         terminal.onWillInput = { [weak self] in self?.store.willInput() }
+        terminal.toggleKeyboard = { [weak self] in self?.toggleKeyboard() ?? false }
         container.addSubview(terminal)
+
+        bar.keyboardIsUp = { [weak self] in self?.keyboardIsUp ?? false }
+        bar.hideKeyboard = { [weak self] in self?.hideKeyboard() }
+        // A drag on the terminal scrolls it; carried on down onto the bar,
+        // it puts the keyboard away.
+        let drag = UIPanGestureRecognizer(target: self, action: #selector(dragged(_:)))
+        drag.maximumNumberOfTouches = 1
+        drag.cancelsTouchesInView = false
+        drag.delegate = self
+        container.addGestureRecognizer(drag)
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -80,10 +100,44 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
         Self.current = self
         // With a hardware keyboard nothing covers the screen, so the terminal
         // always takes the typing.
-        if GCKeyboard.coalesced != nil || store.opensWithKeyboard(cardID) {
+        if Self.hasHardwareKeyboard {
             terminal.acquireProgrammaticFocus()
+        } else if store.opensWithKeyboard(cardID) {
+            bar.focus()
         }
         attachIfReady()
+    }
+
+    // MARK: - Keyboard
+
+    /// A hardware keyboard types into the terminal directly; the software
+    /// one types into the bar's field.
+    private static var hasHardwareKeyboard: Bool { GCKeyboard.coalesced != nil }
+
+    private var keyboardIsUp: Bool {
+        bar.composer.isFirstResponder || (terminal.isFirstResponder && !Self.hasHardwareKeyboard)
+    }
+
+    private func hideKeyboard() {
+        bar.composer.resignFirstResponder()
+        if terminal.isFirstResponder, !Self.hasHardwareKeyboard { terminal.resignFirstResponder() }
+    }
+
+    /// A tap on the terminal; false leaves it to the terminal.
+    private func toggleKeyboard() -> Bool {
+        guard !Self.hasHardwareKeyboard else { return false }
+        if keyboardIsUp { hideKeyboard() } else { bar.focus() }
+        return true
+    }
+
+    @objc private func dragged(_ drag: UIPanGestureRecognizer) {
+        guard drag.state == .changed, keyboardIsUp, drag.velocity(in: view).y > 0,
+              drag.location(in: view).y >= bar.visibleTop(in: view) else { return }
+        hideKeyboard()
+    }
+
+    func gestureRecognizer(_ gesture: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        true
     }
 
     override func viewDidDisappear(_ animated: Bool) {
@@ -169,35 +223,52 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
         let r = reported.map { "\($0.columns)x\($0.rows)" } ?? "-"
         let g = sessionGrid.map { "\($0.columns)x\($0.rows)" } ?? "-"
         let o = ownSize.map { "\($0.columns)x\($0.rows)" } ?? "-"
-        return "terminal reported=\(r) session=\(g) own=\(o) scale=\(String(format: "%.2f", terminal.transform.a)) keyboard=\(terminal.isFirstResponder) config=\(Self.controller.lastConfigurationIssue == nil ? "ok" : "error")"
+        return "terminal reported=\(r) session=\(g) own=\(o) scale=\(String(format: "%.2f", terminal.transform.a)) keyboard=\(bar.composer.isFirstResponder || terminal.isFirstResponder) bar=\(bar.mode) config=\(Self.controller.lastConfigurationIssue == nil ? "ok" : "error")\ncomposer|\(bar.composer.text ?? "")"
     }
 
     var visibleText: String { mirror.readViewportText() ?? "" }
 
+    /// Typing on the software keyboard, Return included: into the bar's field.
     func debugType(_ text: String) {
-        for ch in text {
-            if let press = TerminalKeyPress(typing: ch) {
-                terminal.sendKey(press)
-            } else {
-                terminal.insertText(String(ch))
-            }
-        }
+        for ch in text { bar.composer.insertText(String(ch)) }
     }
 
-    func debugInsert(_ text: String) { terminal.insertText(text) }
-    /// What a tap on the terminal does to the keyboard.
-    func debugFocus() { terminal.acquireProgrammaticFocus() }
-    /// What the bar's hide-keyboard key does.
-    func debugHideKeyboard() { terminal.resignFirstResponder() }
+    /// An IME composition in the field, not committed yet.
+    func debugMark(_ text: String) {
+        bar.composer.setMarkedText(text, selectedRange: NSRange(location: (text as NSString).length, length: 0))
+    }
+
+    func debugBackspace() { bar.composer.deleteBackward() }
+    func debugSend() { bar.send() }
+    /// A key on the bar, by its label.
+    func debugPress(_ label: String) { bar.debugPress(label) }
+    /// What a tap on the terminal does to the keyboard without a hardware
+    /// keyboard (the simulator has the Mac's).
+    func debugFocus() { bar.focus() }
+    /// What a swipe down onto the bar does, as above; it also puts away the
+    /// terminal's focus a hardware keyboard gave it.
+    func debugHideKeyboard() {
+        bar.composer.resignFirstResponder()
+        terminal.resignFirstResponder()
+    }
     /// Holding the space bar and sliding this many cells (negative: left).
     func debugSlide(_ cells: Int) {
         guard let cell else { return }
         let width = cell.width / traitCollection.displayScale
-        terminal.beginFloatingCursor(at: .zero)
-        terminal.updateFloatingCursor(at: CGPoint(x: (CGFloat(cells) + 0.5 * CGFloat(cells.signum())) * width, y: 0))
-        terminal.endFloatingCursor()
+        bar.composer.beginFloatingCursor(at: .zero)
+        bar.composer.updateFloatingCursor(at: CGPoint(x: (CGFloat(cells) + 0.5 * CGFloat(cells.signum())) * width, y: 0))
+        bar.composer.endFloatingCursor()
     }
-    func debugKey(_ key: TerminalKey, modifiers: TerminalInputModifiers = []) { terminal.sendKey(key, modifiers: modifiers) }
+}
+
+/// The terminal, with a tap's keyboard toggle up to its owner.
+private final class RemoteTerminalView: UITerminalView {
+    /// Shows or hides the keyboard; false leaves it to the terminal.
+    var toggleKeyboard: (() -> Bool)?
+
+    override func toggleSoftwareKeyboard() {
+        if toggleKeyboard?() != true { super.toggleSoftwareKeyboard() }
+    }
 }
 
 /// Tells its owner when it's laid out.
