@@ -2,7 +2,7 @@
 
 <h1 align="center">Vertty</h1>
 
-<p align="center"><b>A vertical-tab terminal built for agents, organized by project</b></p>
+<p align="center"><b>A terminal for agents with project-based tabs, iOS remote access, and scheduled tasks.</b></p>
 
 <p align="center">English · <a href="README.zh-CN.md">简体中文</a></p>
 

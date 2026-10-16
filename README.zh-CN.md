@@ -2,7 +2,7 @@
 
 <h1 align="center">Vertty</h1>
 
-<p align="center"><b>为 agents 打造、按项目组织的垂直标签终端</b></p>
+<p align="center"><b>为 agents 打造的终端，支持按项目分组的标签、iOS 远程访问和定时任务。</b></p>
 
 <p align="center"><a href="README.md">English</a> · 简体中文</p>
 
