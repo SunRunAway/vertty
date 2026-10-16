@@ -2,6 +2,8 @@
     import Foundation
     import GhosttyTerminal
     import UIKit
+    import VerttyRemote
+    import VerttyTailnet
     import VerttyUI
 
     /// Drives the app for scripts/test-remote-ios.py when launched with
@@ -51,7 +53,20 @@
             switch command {
             case "connect":
                 app.address = argument
-                _ = app.connect()
+                if let url = remoteURL(from: argument) { app.connect(url) }
+            case "tailnet":
+                // Picks the computer with this name on the tailnet (its DNS
+                // label) on the connect screen; nothing until it's listed.
+                Tailnet.shared.activateClient()
+                if let computer = Tailnet.shared.computers.first(where: { $0.dnsName == argument && $0.online }) {
+                    app.connect(computer)
+                }
+            case "tailnetlogin":
+                // Same as "Sign In with Tailscale": opens the sign-in page.
+                Tailnet.shared.activateClient()
+                Tailnet.shared.login { UIApplication.shared.open($0) }
+            case "tailnetlogout":
+                Tailnet.shared.logout()
             case "disconnect":
                 app.disconnect()
             case "open":
@@ -101,6 +116,8 @@
             } else {
                 lines.append("status=none")
             }
+            let tailnet = Tailnet.shared
+            lines.append("tailnet state=\(tailnet.state) signedIn=\(!tailnet.account.isEmpty) name=\(tailnet.name) computers=\(tailnet.computers.map { "\($0.dnsName):\($0.online ? "online" : "offline")" }.joined(separator: ","))")
             try? lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
         }
     }

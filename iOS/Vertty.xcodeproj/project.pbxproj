@@ -10,6 +10,7 @@
 		1B3C13BA0A83B74F819FC0E4 /* GhosttyTerminal in Frameworks */ = {isa = PBXBuildFile; productRef = A668E0AC2C3069037800C1C0 /* GhosttyTerminal */; };
 		8976290E6BC2A5F76B09862E /* VerttyRemote in Frameworks */ = {isa = PBXBuildFile; productRef = 1B4C1C18DCB0CF531B1C0E53 /* VerttyRemote */; };
 		F3E9B88D2C51C218B55ED57B /* VerttyUI in Frameworks */ = {isa = PBXBuildFile; productRef = BFE4BA8977B544267B18FF23 /* VerttyUI */; };
+		5A1C0E7B3D9F4A2E8B6C1D01 /* VerttyTailnet in Frameworks */ = {isa = PBXBuildFile; productRef = 5A1C0E7B3D9F4A2E8B6C1D02 /* VerttyTailnet */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -31,6 +32,7 @@
 			files = (
 				8976290E6BC2A5F76B09862E /* VerttyRemote in Frameworks */,
 				F3E9B88D2C51C218B55ED57B /* VerttyUI in Frameworks */,
+				5A1C0E7B3D9F4A2E8B6C1D01 /* VerttyTailnet in Frameworks */,
 				1B3C13BA0A83B74F819FC0E4 /* GhosttyTerminal in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -76,6 +78,7 @@
 			packageProductDependencies = (
 				1B4C1C18DCB0CF531B1C0E53 /* VerttyRemote */,
 				BFE4BA8977B544267B18FF23 /* VerttyUI */,
+				5A1C0E7B3D9F4A2E8B6C1D02 /* VerttyTailnet */,
 				A668E0AC2C3069037800C1C0 /* GhosttyTerminal */,
 			);
 			productName = Vertty;
@@ -278,6 +281,10 @@
 		BFE4BA8977B544267B18FF23 /* VerttyUI */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = VerttyUI;
+		};
+		5A1C0E7B3D9F4A2E8B6C1D02 /* VerttyTailnet */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VerttyTailnet;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

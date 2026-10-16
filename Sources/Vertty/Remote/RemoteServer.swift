@@ -1,19 +1,31 @@
 import AppKit
 import Network
 import VerttyRemote
+import VerttyTailnet
 
 /// Serves remote clients (the iPhone app, Vertty on another Mac) over one
 /// WebSocket per client; see VerttyKit/Proto/vertty_remote.proto. Off unless
-/// "Allow Remote Connections" is checked. Keeps one client at a time: a new
-/// one replaces the previous connection.
+/// one of the ways under "Allow Remote Connections" is checked:
+/// - Via Tailscale: on the embedded Tailscale device (VerttyTailnet), which
+///   forwards the same user's connections to a port on 127.0.0.1;
+/// - Own Network: on the port on every interface.
+/// Keeps one client at a time: a new one replaces the previous connection.
 final class RemoteServer: ObservableObject {
-    /// Present while "Allow Remote Connections" is checked.
+    /// Present while remote connections are allowed; holds the Mode (empty
+    /// means Own Network, from before there was a choice).
     static var enabledMarker: URL { AppPaths.support.appendingPathComponent("remote-enabled") }
+
+    enum Mode: String {
+        case tailscale
+        case direct
+    }
 
     enum Status: Equatable {
         case off
         case starting(UInt16)
         case listening(UInt16)
+        /// Serving on the tailnet (Tailnet.shared has the details).
+        case tailnet
         /// Couldn't start; the reason is shown under the menu item.
         case failed(String)
     }
@@ -28,13 +40,19 @@ final class RemoteServer: ObservableObject {
     /// The connected client, if any.
     @Published private(set) var client: ClientInfo?
 
-    var enabled: Bool { FileManager.default.fileExists(atPath: Self.enabledMarker.path) }
+    /// The checked way, nil while remote connections are off.
+    var mode: Mode? {
+        guard let data = FileManager.default.contents(atPath: Self.enabledMarker.path) else { return nil }
+        return Mode(rawValue: String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)) ?? .direct
+    }
 
     private let store: AppStore
     private var listener: NWListener?
     /// Connections that haven't sent Hello yet.
     private var greeting: [ObjectIdentifier: RemoteConnection] = [:]
     private var current: RemoteConnection?
+    /// Holding the Tailscale device (Tailnet.use()).
+    private var usingTailnet = false
     /// Token of the last client accepted (see ONE CLIENT AT A TIME).
     private var currentToken: String?
     private lazy var bridge = RemoteBridge(store: store, server: self)
@@ -43,11 +61,15 @@ final class RemoteServer: ObservableObject {
         self.store = store
     }
 
-    /// The menu checkbox.
-    func setEnabled(_ on: Bool) {
-        if on {
-            FileManager.default.createFile(atPath: Self.enabledMarker.path, contents: Data())
+    /// The menu's choice: a way, or nil for off. Choosing Tailscale opens
+    /// its sign-in page if this Mac isn't signed in.
+    func setMode(_ mode: Mode?) {
+        if let mode {
+            FileManager.default.createFile(atPath: Self.enabledMarker.path, contents: Data(mode.rawValue.utf8))
             start()
+            if mode == .tailscale, Tailnet.shared.state != .running {
+                Tailnet.shared.login { NSWorkspace.shared.open($0) }
+            }
         } else {
             try? FileManager.default.removeItem(at: Self.enabledMarker)
             stop()
@@ -57,17 +79,23 @@ final class RemoteServer: ObservableObject {
     /// Starts listening if enabled (at launch, once the shell's environment
     /// with VERTTY_REMOTE_PORT is known).
     func startIfEnabled() {
-        if enabled { start() }
+        if mode != nil { start() }
     }
 
     private func start() {
         stop()
+        guard let mode else { return }
         let port: UInt16
-        switch Self.configuredPort() {
-        case .success(let p): port = p
-        case .failure(let reason):
-            status = .failed(reason.message)
-            return
+        if mode == .tailscale {
+            // Any free port: only the Tailscale device connects to it.
+            port = 0
+        } else {
+            switch Self.configuredPort() {
+            case .success(let p): port = p
+            case .failure(let reason):
+                status = .failed(reason.message)
+                return
+            }
         }
 
         let ws = NWProtocolWebSocket.Options()
@@ -79,7 +107,12 @@ final class RemoteServer: ObservableObject {
 
         let listener: NWListener
         do {
-            listener = try NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
+            if mode == .tailscale {
+                params.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: .any)
+                listener = try NWListener(using: params)
+            } else {
+                listener = try NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
+            }
         } catch {
             status = .failed(error.localizedDescription)
             return
@@ -89,6 +122,15 @@ final class RemoteServer: ObservableObject {
         listener.stateUpdateHandler = { [weak self, weak listener] state in
             guard let self, let listener, self.listener === listener else { return }
             switch state {
+            case .ready where mode == .tailscale:
+                guard let local = listener.port?.rawValue else { return }
+                self.status = .tailnet
+                self.usingTailnet = true
+                Tailnet.shared.use()
+                Tailnet.shared.serve(port: Remote.defaultPort, to: local) { [weak self] reason in
+                    guard let self, self.listener === listener else { return }
+                    self.status = .failed(reason)
+                }
             case .ready:
                 self.status = .listening(port)
             case .failed(let error):
@@ -110,6 +152,11 @@ final class RemoteServer: ObservableObject {
         listener?.stateUpdateHandler = nil
         listener?.cancel()
         listener = nil
+        if usingTailnet {
+            usingTailnet = false
+            Tailnet.shared.stopServing()
+            Tailnet.shared.endUse()
+        }
         for c in greeting.values { c.close() }
         greeting = [:]
         if let current {

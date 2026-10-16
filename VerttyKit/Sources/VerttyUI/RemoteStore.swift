@@ -107,8 +107,8 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
     /// The size last sent for the open terminal.
     private var sentSize: Remote.TerminalSize?
 
-    public init(url: URL, platform: Remote.ClientPlatform, deviceName: String) {
-        client = RemoteClient(url: url, platform: platform, deviceName: deviceName)
+    public init(endpoint: RemoteEndpoint, platform: Remote.ClientPlatform, deviceName: String) {
+        client = RemoteClient(endpoint: endpoint, platform: platform, deviceName: deviceName)
         client.terminalSink = self
         client.onNotification = { [weak self] n in self?.notify(n) }
         // Republish the client's changes, and rebuild from each State.
@@ -117,7 +117,7 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
     }
 
     public var state: Remote.State { client.state }
-    public var serverName: String { client.serverName.isEmpty ? client.url.host ?? "" : client.serverName }
+    public var serverName: String { client.serverName.isEmpty ? client.endpoint.name : client.serverName }
 
     private func apply(_ state: Remote.State) {
         projects = state.projects.compactMap { p in

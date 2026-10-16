@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import VerttyRemote
+import VerttyTailnet
 
 /// The desktop remote client: a window showing another computer's Vertty
 /// in the shared sidebar (VerttyUI.RemoteWorkspace), with the selected
@@ -8,37 +9,24 @@ import VerttyRemote
 final class RemoteWindowController: NSObject, NSWindowDelegate {
     private(set) static var all: [RemoteWindowController] = []
     static let lastURLKey = "RemoteLastURL"
+    private let usesTailnet: Bool
 
     let store: RemoteStore
     let terminal: MacRemoteTerminal
     let window: NSWindow
 
-    /// Asks for the address, then opens a window connected to it.
-    static func connectViaPrompt() {
-        let alert = NSAlert()
-        alert.messageText = String(localized: "Connect to Remote Computer")
-        alert.informativeText = String(localized: "The other computer's address, with the port shown under Allow Remote Connections in its Vertty menu. The connection's security is up to you (for example a VPN).")
-        let field = NSTextField(string: UserDefaults.standard.string(forKey: lastURLKey) ?? "")
-        field.placeholderString = "192.168.1.5:58563"
-        field.frame = NSRect(x: 0, y: 0, width: 300, height: 24)
-        alert.accessoryView = field
-        alert.addButton(withTitle: String(localized: "Connect"))
-        alert.addButton(withTitle: String(localized: "Cancel"))
-        alert.window.initialFirstResponder = field
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        guard let url = remoteURL(from: field.stringValue) else {
-            let bad = NSAlert()
-            bad.messageText = String(localized: "That isn't an address Vertty can connect to.")
-            bad.informativeText = String(localized: "Enter a host and port, such as 192.168.1.5:58563 or mac.local:58563.")
-            bad.runModal()
-            return
-        }
-        UserDefaults.standard.set(field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: lastURLKey)
-        open(url)
+    /// Opens a window connected to `endpoint`.
+    static func open(_ endpoint: RemoteEndpoint) {
+        show(RemoteWindowController(endpoint: endpoint, tailnet: false))
     }
 
-    static func open(_ url: URL) {
-        let controller = RemoteWindowController(url: url)
+    /// Opens a window connected to a computer on the tailnet, keeping the
+    /// Tailscale device running while it's open.
+    static func open(_ computer: Tailnet.Device) {
+        show(RemoteWindowController(endpoint: .tailnet(computer), tailnet: true))
+    }
+
+    private static func show(_ controller: RemoteWindowController) {
         all.append(controller)
         controller.window.makeKeyAndOrderFront(nil)
         controller.store.client.connect()
@@ -60,8 +48,10 @@ final class RemoteWindowController: NSObject, NSWindowDelegate {
         all.first { $0.store.id == id }
     }
 
-    private init(url: URL) {
-        store = RemoteStore(url: url, platform: .mac, deviceName: Host.current().localizedName ?? "Mac")
+    private init(endpoint: RemoteEndpoint, tailnet: Bool) {
+        usesTailnet = tailnet
+        if tailnet { Tailnet.shared.use() }
+        store = RemoteStore(endpoint: endpoint, platform: .mac, deviceName: Host.current().localizedName ?? "Mac")
         store.terminalBackground = AppStore.shared.terminalBackground
         terminal = MacRemoteTerminal(store: store)
         window = NSWindow(
@@ -92,11 +82,71 @@ final class RemoteWindowController: NSObject, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         store.close()
+        if usesTailnet { Tailnet.shared.endUse() }
         Self.all.removeAll { $0 === self }
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
         terminal.focus()
+    }
+}
+
+/// Where the Mac picks the computer to connect to: VerttyUI's
+/// RemoteConnectView (Tailscale, or an address) in a window of its own.
+final class RemoteConnectWindowController: NSObject, NSWindowDelegate {
+    private static var shown: RemoteConnectWindowController?
+    private let window: NSWindow
+
+    static func show() {
+        if let shown { return shown.window.makeKeyAndOrderFront(nil) }
+        let controller = RemoteConnectWindowController()
+        shown = controller
+        controller.window.makeKeyAndOrderFront(nil)
+    }
+
+    private override init() {
+        window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 460, height: 520),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered, defer: false)
+        super.init()
+        window.title = String(localized: "Connect to Remote Computer")
+        window.isReleasedWhenClosed = false
+        window.tabbingMode = .disallowed
+        window.minSize = NSSize(width: 380, height: 360)
+        window.delegate = self
+        window.contentView = NSHostingView(rootView: ConnectRoot { [weak self] pick in
+            switch pick {
+            case .address(let url): RemoteWindowController.open(.url(url))
+            case .computer(let computer): RemoteWindowController.open(computer)
+            }
+            self?.window.close()
+        })
+        window.center()
+        // The list of computers needs the Tailscale device; start it if the
+        // user signed in here (signing in starts it otherwise).
+        if Tailnet.shared.signedInHere { Tailnet.shared.activateClient() }
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        Tailnet.shared.deactivateClient()
+        Self.shown = nil
+    }
+
+    enum Pick {
+        case address(URL)
+        case computer(Tailnet.Device)
+    }
+
+    private struct ConnectRoot: View {
+        @AppStorage(RemoteWindowController.lastURLKey) private var address = ""
+        let picked: (Pick) -> Void
+
+        var body: some View {
+            RemoteConnectView(address: $address,
+                              connectAddress: { picked(.address($0)) },
+                              connectComputer: { picked(.computer($0)) })
+        }
     }
 }
 

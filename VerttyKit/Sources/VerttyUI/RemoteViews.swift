@@ -154,7 +154,7 @@ public struct RemoteBadge: View {
         .padding(.vertical, 8)
         .background(RoundedRectangle(cornerRadius: 9).fill(Self.tint.opacity(0.10)))
         .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Self.tint.opacity(0.30), lineWidth: 1))
-        .help(store.client.url.absoluteString)
+        .help(store.client.endpoint.detail)
     }
 }
 
@@ -186,7 +186,7 @@ public struct RemoteStatusOverlay: View {
                 Text(message).multilineTextAlignment(.center).frame(maxWidth: 380)
                 HStack {
                     if let onDisconnect {
-                        Button(action: onDisconnect) { Text("Change Address", bundle: .verttyUIResources) }
+                        Button(action: onDisconnect) { Text("Choose Another Computer", bundle: .verttyUIResources) }
                     }
                     Button { store.client.connect() } label: { Text("Try Again", bundle: .verttyUIResources) }
                 }

@@ -74,6 +74,33 @@ public struct RemoteError: Swift.Error, LocalizedError, Equatable {
     }
 }
 
+/// Where a RemoteClient connects: an address the user typed, or a computer
+/// found another way (Tailscale), whose URL is worked out for each attempt.
+public struct RemoteEndpoint {
+    /// The computer's name until the server tells it.
+    public let name: String
+    /// How it's reached, for a tooltip.
+    public let detail: String
+    /// What to tell the user when the computer doesn't answer.
+    public let unreachable: String
+    /// The WebSocket URL to connect to now; its error's description is
+    /// shown to the user.
+    public let resolve: @MainActor () async throws -> URL
+
+    public init(name: String, detail: String, unreachable: String, resolve: @escaping @MainActor () async throws -> URL) {
+        self.name = name
+        self.detail = detail
+        self.unreachable = unreachable
+        self.resolve = resolve
+    }
+
+    /// An address the user typed (see remoteURL(from:)).
+    public static func url(_ url: URL) -> RemoteEndpoint {
+        RemoteEndpoint(name: url.host ?? "", detail: url.absoluteString,
+                       unreachable: String(localized: "Can't reach the computer. Check the address and that remote connections are allowed in Vertty there.", bundle: .verttyRemoteResources)) { url }
+    }
+}
+
 /// Turns what the user typed into a WebSocket URL: adds ws:// and the
 /// default port when they're missing.
 public func remoteURL(from input: String) -> URL? {

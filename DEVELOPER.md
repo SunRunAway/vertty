@@ -10,10 +10,10 @@
 
 ### macOS
 
-只需要 Command Line Tools 和 zig，**不需要 Xcode**。
+只需要 Command Line Tools、zig 和 Go，**不需要 Xcode**。
 
 ```bash
-brew install zig          # 需要 0.15.2（Ghostty 1.3.1 的要求）
+brew install zig go       # zig 需要 0.15.2（Ghostty 1.3.1 的要求）；Go 用来编译内置的 Tailscale
 git clone --recursive https://github.com/SunRunAway/vertty.git
 cd vertty
 make                      # 第一次会先编译 libghostty，大约 5 分钟
@@ -22,7 +22,7 @@ make install              # 拷贝到 /Applications/Vertty.app
 
 ### iOS
 
-iPhone 和 iPad app 需要 Xcode。先运行 `scripts/build-ghostty-ios.sh` 编译终端库，再打开 `iOS/Vertty.xcodeproj`，在 Signing 里选择你的 team，运行到设备上。
+iPhone 和 iPad app 需要 Xcode。先运行 `scripts/build-ghostty-ios.sh` 编译终端库、`scripts/build-tailnet.sh` 编译 Tailscale 库（装了 Xcode 时 `make` 也会顺带编好），再打开 `iOS/Vertty.xcodeproj`，在 Signing 里选择你的 team，运行到设备上。
 
 ## 工作原理
 
@@ -88,10 +88,11 @@ hooks 事件的传递路径：`vertty-hook`（App 里自带的一个小程序）
 
 产品规则见 [docs/spec/remote-client-product.md](docs/spec/remote-client-product.md)。
 
-`VERTTY_REMOTE_PORT` 设置开启「允许远程连接」后的监听端口，默认 `58563`。在登录 shell 的配置文件（如 `~/.zshrc`）中设置后重启 Vertty；端口无效或无法使用时，菜单项下方会显示「启动失败」及原因。
+`VERTTY_REMOTE_PORT` 设置「允许远程连接」选「自行组网」时的监听端口，默认 `58563`。在登录 shell 的配置文件（如 `~/.zshrc`）中设置后重启 Vertty；端口无效或无法使用时，菜单项下方会显示「启动失败」及原因。
 
 - **协议**：一条 WebSocket，消息是 `VerttyKit/Proto/vertty_remote.proto` 定义的 Protobuf（每帧一条，客户端发 `ClientMessage`，服务端发 `ServerMessage`）。改了 proto 后运行 `scripts/gen-proto.sh` 重新生成 Swift 代码（protoc 和 protoc-gen-swift 编译到 `build/tools`）。协议代码和客户端 `RemoteClient`（连接、重连、请求、终端流）在 `VerttyKit` 包的 `VerttyRemote` 里。
 - **服务端**：`Sources/Vertty/Remote/RemoteServer.swift` 用 Network.framework 监听，同时只留一个客户端，新连接接管旧连接；`RemoteBridge.swift` 把 `AppStore` 的项目、卡片和历史做成 State（有变化才发），执行新建、恢复、关闭等请求，并把卡片终端转给客户端。
+- **Tailscale**：内置的 Tailscale 设备是 Go 写的 `VerttyKit/Tailnet`（基于 Tailscale 官方的 `tsnet`，用户态网络，不需要系统 VPN），`scripts/build-tailnet.sh` 把它编成静态库 `VerttyKit/CTailnet.xcframework`（不进仓库；源码没变时跳过；Mac 那份总会编，装了 Xcode 时再编 iPhone 和模拟器两份），Swift 这边是 `VerttyKit` 的 `VerttyTailnet`（`Tailnet.shared`）。电脑选「通过 Tailscale」时，远程服务只监听 `127.0.0.1` 的随机端口，Go 在 Tailscale 上监听 58563，确认对方设备属于同一用户后转过去。客户端每次连接先经 Tailscale 拨通电脑，再连 Go 在 `127.0.0.1` 上开的一次性端口，协议和自行组网完全一样（`RemoteEndpoint` 负责每次连接前找到地址）。设备名是「电脑名-vertty」，客户端据此和系统类型找出 Vertty 电脑；登录状态在状态目录的 `tailscale/` 下。Tailscale 自带的 peer API 在 Mac 上默认还会在所有网卡上开一个端口，`tailnet.go` 用 `go:linkname` 挂了 ipnlocal 的钩子让它只在 Tailscale 里提供；升级 tailscale.com 后如果这个内部变量改了名，会直接编译失败。不上传 Tailscale 的日志。`TS_AUTHKEY="$(cat <key>)" python3 scripts/test-remote-tailscale.py`（Mac 客户端）和 `scripts/test-remote-ios-tailscale.py`（iOS 模拟器）用测试专用的 auth key（可复用、临时设备、不带 tag）跑真实的 Tailscale 连接。
 - **终端镜像**：补丁给 Ghostty 加了 tap（`src/termio/remote.zig`）：打开时发一份快照（把屏幕、滚动历史和终端模式重新写成 VT 序列；在 IO 线程上处理完之前排队的尺寸变化再拍，所以客户端带着自己的尺寸打开时只收到一份），之后转发程序的原始输出，网格尺寸变了就重发快照。客户端的终端用补丁里的 host-managed 后端（`src/termio/HostManaged.zig`，改自 libghostty-spm）：没有 pty，输出由 `ghostty_surface_write_buffer` 喂进去，键盘、粘贴产生的字节通过回调交给客户端发回去，终端对查询的应答一律丢掉，由电脑上的真终端回答。
 - **尺寸**：会话的网格跟随最后一个进入、调整视口或输入的一端。服务端用 `ghostty_surface_set_grid_override` 只改行列、不改窗口；客户端每次键盘输入或粘贴之前先发 `AlignForInput`，本机输入也会先恢复本机尺寸。Ghostty 的 IO 线程会把连续的 resize 合并 25ms，补丁在每次写入前先应用还没处理的 resize（`Thread.zig` 的 `flushResize`），保证输入按新尺寸到达程序。
 - **界面共享**：Mac 本机、Mac 远程窗口、iPhone、iPad 用同一份界面代码，在 `VerttyKit` 包的 `VerttyUI` 里：侧栏 `SidebarView`、卡片 `SessionCard`、窗口布局 `Workspace`（侧栏、拖动改宽度、标题条）和模型类型。侧栏读写的是 `SidebarStore` 协议：本机是 `AppStore`，远程是 `RemoteStore`（选中卡片就打开它的终端，取消选中就离开）。远程端没有的功能（管理项目、拖动排序、定时任务、默认会话类型、本机文件操作、关闭其他）由 `SidebarFeatures` 关掉，界面上直接不显示。远程界面是 `RemoteWorkspace`：Mac 和 iPad 侧栏加终端并排，iPhone（compact 宽度）侧栏占满一屏、点卡片推入终端。各端单独写的只有终端（两边是同一份打了补丁的 Ghostty，Mac 用 AppKit 的终端视图，iOS 用 libghostty-spm 的 UIKit 终端视图）、键盘和触屏适配：右键菜单在触屏上是长按，悬停才出现的按钮在触屏上放进长按菜单（项目行的搜索和新会话除外：触屏上常驻，长按新会话选类型）；共享视图里的字号、间距和行高都经过 `Touch`（`Controls.swift`），macOS 上就是原值，iOS 上按比例放大、可点的行至少 44pt。界面文字的中文在 `VerttyKit/Sources/VerttyUI/Resources`，Mac app 只放自己独有的文字。改界面先改共享代码，不要给某一端另写一份。
@@ -151,6 +152,9 @@ build/Vertty.app/Contents/MacOS/Vertty
 | `remote <地址>` | 打开远程窗口连接这个地址 |
 | `remoteopen <n>` / `remotenew` | 远程窗口打开第 n 张卡片 / 新建会话 |
 | `remotetext …` / `remoteenter` | 往远程窗口的终端输入文字 / 回车 |
+| `remotemode tailscale` / `remotemode direct` | 点 Vertty 菜单“允许远程连接”下的“通过 Tailscale” / “自行组网”（点已勾的一项即关闭） |
+| `remotetailnet <名称>` | 打开远程窗口，连接 Tailscale 上这个名称（DNS 名的第一段）的电脑；列表里还没有它时不做任何事 |
+| `tailnetlogout` | 退出 Tailscale 登录 |
 
 按键和文字只会发给用 `to` / `toshell` 明确指定的会话。截图时如果有确认框（sheet）打开，另存为 `sheet.png`；`state.txt` 末尾列出定时任务及其运行记录。
 

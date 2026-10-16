@@ -2,6 +2,7 @@ import Combine
 import SwiftUI
 import UserNotifications
 import VerttyRemote
+import VerttyTailnet
 import VerttyUI
 
 @main
@@ -36,9 +37,12 @@ struct VerttyRemoteApp: App {
 final class AppModel: ObservableObject {
     static let shared = AppModel()
     static let addressKey = "RemoteAddress"
+    /// The computer last connected to through Tailscale, as id, host name
+    /// and name on separate lines; absent when it was an address.
+    static let tailnetKey = "RemoteTailnetComputer"
     /// The connection's token while connected; the app connects again with
     /// it when it starts. Gone once the user disconnects or another device
-    /// takes over, so the app then starts on the address screen.
+    /// takes over, so the app then starts on the connect screen.
     static let tokenKey = "RemoteConnectionToken"
 
     @Published private(set) var store: RemoteStore?
@@ -46,22 +50,34 @@ final class AppModel: ObservableObject {
     private var statusWatch: AnyCancellable?
 
     private init() {
-        if let token = UserDefaults.standard.string(forKey: Self.tokenKey) {
-            _ = connect(resuming: token)
+        let tailnet = Tailnet.shared
+        tailnet.directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("tailscale")
+        tailnet.deviceName = UIDevice.current.name
+        if tailnet.signedInHere { tailnet.activateClient() }
+        guard let token = UserDefaults.standard.string(forKey: Self.tokenKey) else { return }
+        if let saved = UserDefaults.standard.string(forKey: Self.tailnetKey)?.components(separatedBy: "\n"), saved.count == 3 {
+            connect(.tailnet(id: saved[0], hostName: saved[1], name: saved[2]), resuming: token)
+        } else if let url = remoteURL(from: address) {
+            connect(.url(url), resuming: token)
         }
     }
 
-    /// Connects to `address`; false if it isn't one.
-    func connect() -> Bool {
-        connect(resuming: nil)
+    /// Connects to the address the user typed.
+    func connect(_ url: URL) {
+        UserDefaults.standard.set(address.trimmingCharacters(in: .whitespacesAndNewlines), forKey: Self.addressKey)
+        UserDefaults.standard.removeObject(forKey: Self.tailnetKey)
+        connect(.url(url), resuming: nil)
     }
 
-    private func connect(resuming token: String?) -> Bool {
-        let text = address.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = remoteURL(from: text) else { return false }
-        UserDefaults.standard.set(text, forKey: Self.addressKey)
+    func connect(_ computer: Tailnet.Device) {
+        UserDefaults.standard.set([computer.id, computer.hostName, computer.name].joined(separator: "\n"), forKey: Self.tailnetKey)
+        connect(.tailnet(computer), resuming: nil)
+    }
+
+    private func connect(_ endpoint: RemoteEndpoint, resuming token: String?) {
         store?.close()
-        let store = RemoteStore(url: url, platform: UIDevice.current.userInterfaceIdiom == .pad ? .ipad : .iphone,
+        let store = RemoteStore(endpoint: endpoint, platform: UIDevice.current.userInterfaceIdiom == .pad ? .ipad : .iphone,
                                 deviceName: UIDevice.current.name)
         store.terminalBackground = TerminalViewController.background
         store.isViewing = { [weak store] id in
@@ -85,7 +101,6 @@ final class AppModel: ObservableObject {
         // Not under the debug driver: the system's alert would sit over the
         // app and take the focus a scripted test gives the terminal.
         if ProcessInfo.processInfo.environment["VERTTY_DEBUG"] != "1" { store.askForNotifications() }
-        return true
     }
 
     func disconnect() {
@@ -107,47 +122,13 @@ struct RootView: View {
                     .ignoresSafeArea(.keyboard)
             }
         } else {
-            ConnectView(app: app)
-        }
-    }
-}
-
-/// Where the address is entered (the Mac asks in a dialog instead).
-struct ConnectView: View {
-    @ObservedObject var app: AppModel
-    @State private var invalid = false
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    TextField("192.168.1.5:58563", text: $app.address)
-                        .keyboardType(.URL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .submitLabel(.go)
-                        .onSubmit(connect)
-                } header: {
-                    Text("Computer")
-                } footer: {
-                    Text("Your computer's address, with the port shown under Allow Remote Connections in its Vertty menu. The connection's security is up to you (for example a VPN).")
-                }
-                Section {
-                    Button("Connect", action: connect)
-                        .disabled(app.address.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-            }
-            .navigationTitle("Vertty")
-            .alert("That isn't an address Vertty can connect to.", isPresented: $invalid) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text("Enter a host and port, such as 192.168.1.5:58563 or mac.local:58563.")
+            NavigationStack {
+                RemoteConnectView(address: $app.address,
+                                  connectAddress: { app.connect($0) },
+                                  connectComputer: { app.connect($0) })
+                    .navigationTitle("Vertty")
             }
         }
-    }
-
-    private func connect() {
-        if !app.connect() { invalid = true }
     }
 }
 

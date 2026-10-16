@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 [ -f build/ghostty/lib/libghostty.a ] || scripts/build-ghostty.sh
+# The embedded Tailscale device (Go); skipped when its sources are unchanged.
+scripts/build-tailnet.sh
 
 # The macOS 27 SDK turns SwiftUI's @State into a macro whose plugin only ships
 # with Xcode, so prefer the macOS 26 SDK from the Command Line Tools.

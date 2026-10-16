@@ -3,6 +3,7 @@ import SwiftUI
 import UserNotifications
 import GhosttyC
 import VerttyRemote
+import VerttyTailnet
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, GhosttyRuntimeDelegate,
     UNUserNotificationCenterDelegate, NSMenuDelegate, NSMenuItemValidation {
@@ -16,17 +17,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     private var debugSnapshot: DebugSnapshot?
     private var fileMenu: NSMenu?
     private var appMenu: NSMenu?
+    /// "Via Tailscale" and "Own Network" under "Allow Remote Connections".
+    private var remoteModeItems: [NSMenuItem] = []
     /// See updateRemoteInfoItems.
-    private let remoteInfoItems: [NSMenuItem] = (0..<2).map { _ in
+    private let remoteInfoItems: [NSMenuItem] = (0..<3).map { _ in
         let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         item.indentationLevel = 1
         item.isEnabled = false
         item.isHidden = true
         return item
     }
+    /// Signs in to or out of Tailscale, under the info lines.
+    private lazy var tailscaleAccountItem: NSMenuItem = {
+        let item = NSMenuItem(title: "", action: #selector(tailscaleAccount), keyEquivalent: "")
+        item.target = self
+        item.indentationLevel = 1
+        item.isHidden = true
+        return item
+    }()
     private var newSessionItems: [NSMenuItem] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        Tailnet.shared.directory = AppPaths.support.appendingPathComponent("tailscale")
+        Tailnet.shared.deviceName = Host.current().localizedName ?? "Mac"
         DispatchQueue.global(qos: .userInitiated).async {
             ShellEnvironment.load()
             ShellEnvironment.loadInteractive()
@@ -84,7 +97,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
 
     @objc private func toggleSleepProtection() { sleepProtection.toggle() }
     @objc private func toggleDisplayAwake() { displayAwake.setEnabled(!displayAwake.enabled) }
-    @objc private func toggleRemoteConnections() { remoteServer.setEnabled(!remoteServer.enabled) }
+    @objc private func chooseRemoteMode(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let mode = RemoteServer.Mode(rawValue: raw) else { return }
+        remoteServer.setMode(remoteServer.mode == mode ? nil : mode)
+    }
+
+    @objc private func tailscaleAccount() {
+        if Tailnet.shared.state == .running {
+            Tailnet.shared.logout()
+        } else {
+            Tailnet.shared.login { NSWorkspace.shared.open($0) }
+        }
+    }
 
     @objc private func setNewProjectAgent(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let kind = AgentKind(rawValue: raw) else { return }
@@ -98,8 +122,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
             menuItem.title = store.sidebarVisible ? String(localized: "Hide Sidebar") : String(localized: "Show Sidebar")
         } else if menuItem.action == #selector(toggleDisplayAwake) {
             menuItem.state = displayAwake.enabled ? .on : .off
-        } else if menuItem.action == #selector(toggleRemoteConnections) {
-            menuItem.state = remoteServer.enabled ? .on : .off
+        } else if menuItem.action == #selector(chooseRemoteMode(_:)) {
+            menuItem.state = (menuItem.representedObject as? String) == remoteServer.mode?.rawValue ? .on : .off
         } else if menuItem.action == #selector(toggleShell) {
             menuItem.title = store.selectedTab?.shellVisible == true ? String(localized: "Hide Terminal") : String(localized: "Show Terminal")
             // Remote windows have no bottom shell.
@@ -204,8 +228,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         sleepProtection.menuItem = sleepItem
         appMenu.addItem(sleepItem)
         appMenu.addItem(item("Don’t Let the Display Turn Off", #selector(toggleDisplayAwake), ""))
-        appMenu.addItem(item("Allow Remote Connections", #selector(toggleRemoteConnections), ""))
-        for info in remoteInfoItems { appMenu.addItem(info) }
+        appMenu.addItem(.sectionHeader(title: String(localized: "Allow Remote Connections")))
+        let modes: [(String.LocalizationValue, RemoteServer.Mode)] = [("Via Tailscale", .tailscale), ("Own Network", .direct)]
+        remoteModeItems = modes.map { title, mode in
+            let choice = item(title, #selector(chooseRemoteMode(_:)), "")
+            choice.representedObject = mode.rawValue
+            return choice
+        }
+        for choice in remoteModeItems { appMenu.addItem(choice) }
+        // Placed under the checked way by updateRemoteInfoItems.
+        for info in remoteInfoItems + [tailscaleAccountItem] { appMenu.addItem(info) }
+        appMenu.addItem(.separator())
         appMenu.delegate = self
         self.appMenu = appMenu
         appMenu.addItem(item("Open Ghostty Config", #selector(openGhosttyConfig), ""))
@@ -312,31 +345,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         guard let p = store.currentProject else { return store.newSession() }
         store.newSession(in: p, kind: store.kindsDefaultFirst(p)[1])
     }
-    @objc private func connectRemote() { RemoteWindowController.connectViaPrompt() }
+    @objc private func connectRemote() { RemoteConnectWindowController.show() }
 
-    /// Gray lines under "Allow Remote Connections" while it's on, like the
-    /// details under the Wi-Fi network in the menu bar: the port and who is
-    /// connected, or why the service couldn't start.
+    /// Gray lines under the checked way of "Allow Remote Connections", like
+    /// the details under the Wi-Fi network in the menu bar: the port, or the
+    /// Tailscale account and this Mac's name there, and who is connected; or
+    /// why the service couldn't start. With Tailscale, an item to sign in or
+    /// out follows.
     private func updateRemoteInfoItems() {
-        let (first, second) = (remoteInfoItems[0], remoteInfoItems[1])
+        guard let appMenu else { return }
+        var lines: [String] = []
+        var account: String?
+        let tailnet = Tailnet.shared
+        let client = remoteServer.client.map { c in
+            let name = c.deviceName.isEmpty ? Self.deviceKind(c.platform) : c.deviceName
+            return String(localized: "\(name), connected since \(c.since.formatted(date: .omitted, time: .shortened))")
+        } ?? String(localized: "Not connected")
         switch remoteServer.status {
         case .off:
-            first.isHidden = true
-            second.isHidden = true
+            break
         case .failed(let reason):
-            first.title = String(localized: "Failed to start: \(reason)")
-            first.isHidden = false
-            second.isHidden = true
+            lines = [String(localized: "Failed to start: \(reason)")]
         case .starting(let port), .listening(let port):
-            first.title = String(localized: "Port: \(String(port))")
-            let client = remoteServer.client.map { c in
-                let name = c.deviceName.isEmpty ? Self.deviceKind(c.platform) : c.deviceName
-                return String(localized: "\(name), connected since \(c.since.formatted(date: .omitted, time: .shortened))")
-            } ?? String(localized: "Not connected")
-            second.title = String(localized: "Remote client: \(client)")
-            first.isHidden = false
-            second.isHidden = false
+            lines = [String(localized: "Port: \(String(port))"), String(localized: "Remote client: \(client)")]
+        case .tailnet:
+            switch tailnet.state {
+            case .running:
+                lines = [String(localized: "Tailscale: \(tailnet.account)"),
+                         String(localized: "Name on Tailscale: \(tailnet.name)"),
+                         String(localized: "Remote client: \(client)")]
+                account = String(localized: "Sign Out of Tailscale")
+            case .needsLogin:
+                lines = [String(localized: "Tailscale: Waiting for sign-in")]
+                account = String(localized: "Sign In to Tailscale…")
+            case .failed(let reason):
+                lines = [String(localized: "Failed to start: \(reason)")]
+            case .starting, .stopped:
+                lines = [String(localized: "Tailscale: Starting…")]
+            }
         }
+        // Under the checked way.
+        let rows = remoteInfoItems + [tailscaleAccountItem]
+        for row in rows where row.menu != nil { appMenu.removeItem(row) }
+        let checked = remoteModeItems.first { ($0.representedObject as? String) == remoteServer.mode?.rawValue } ?? remoteModeItems.last!
+        var index = appMenu.index(of: checked) + 1
+        for row in rows {
+            appMenu.insertItem(row, at: index)
+            index += 1
+        }
+        for (i, row) in remoteInfoItems.enumerated() {
+            row.title = i < lines.count ? lines[i] : ""
+            row.isHidden = i >= lines.count
+        }
+        tailscaleAccountItem.title = account ?? ""
+        tailscaleAccountItem.isHidden = account == nil
     }
 
     private static func deviceKind(_ platform: Remote.ClientPlatform) -> String {

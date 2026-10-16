@@ -36,7 +36,7 @@ public final class RemoteClient: ObservableObject {
     @Published public private(set) var hasState = false
     @Published public private(set) var serverName = ""
 
-    public let url: URL
+    public let endpoint: RemoteEndpoint
     public weak var terminalSink: RemoteTerminalSink?
     public var onNotification: ((Remote.Notification) -> Void)?
 
@@ -62,9 +62,11 @@ public final class RemoteClient: ObservableObject {
     private var retryWork: DispatchWorkItem?
     private var retryDelay: TimeInterval = 1
     private var pingTimer: Timer?
+    /// When the server last answered a ping (or sent anything).
+    private var lastHeard = Date()
 
-    public init(url: URL, platform: Remote.ClientPlatform, deviceName: String) {
-        self.url = url
+    public init(endpoint: RemoteEndpoint, platform: Remote.ClientPlatform, deviceName: String) {
+        self.endpoint = endpoint
         self.platform = platform
         self.deviceName = deviceName
     }
@@ -107,8 +109,23 @@ public final class RemoteClient: ObservableObject {
 
     private func start() {
         stop()
-        generation += 1
         let gen = generation
+        // The endpoint may have to find the computer first (Tailscale).
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let url: URL
+            do {
+                url = try await self.endpoint.resolve()
+            } catch {
+                self.dropped(gen, reason: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+                return
+            }
+            guard self.generation == gen else { return }
+            self.open(url, gen)
+        }
+    }
+
+    private func open(_ url: URL, _ gen: Int) {
         let task = urlSession.webSocketTask(with: url)
         task.maximumMessageSize = Remote.maxFrameSize
         self.task = task
@@ -124,16 +141,27 @@ public final class RemoteClient: ObservableObject {
         msg.hello = hello
         send(msg)
 
+        // A server that went away without closing (the computer slept, or
+        // left the network) stops answering pings, as the server watches
+        // its clients.
+        lastHeard = Date()
         pingTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             guard let self, self.generation == gen else { return }
+            if Date().timeIntervalSince(self.lastHeard) > 45 {
+                self.dropped(gen)
+                return
+            }
             self.task?.sendPing { error in
-                guard error != nil else { return }
-                DispatchQueue.main.async { self.dropped(gen) }
+                DispatchQueue.main.async {
+                    if error != nil { self.dropped(gen) } else if self.generation == gen { self.lastHeard = Date() }
+                }
             }
         }
     }
 
+    /// Also ends a connection attempt still finding the computer.
     private func stop() {
+        generation += 1
         pingTimer?.invalidate()
         pingTimer = nil
         task?.cancel(with: .goingAway, reason: nil)
@@ -152,6 +180,7 @@ public final class RemoteClient: ObservableObject {
                 case .failure:
                     self.dropped(gen)
                 case .success(let message):
+                    self.lastHeard = Date()
                     if case .data(let data) = message, let msg = try? Remote.ServerMessage(serializedBytes: data) {
                         self.handle(msg)
                     }
@@ -161,13 +190,14 @@ public final class RemoteClient: ObservableObject {
         }
     }
 
-    /// The connection is gone without the server saying why.
-    private func dropped(_ gen: Int) {
+    /// The connection is gone without the server saying why, or the
+    /// endpoint couldn't find the computer (`reason`).
+    private func dropped(_ gen: Int, reason: String? = nil) {
         guard gen == generation else { return }
         let wasConnecting = status == .connecting
         stop()
         if wasConnecting {
-            status = .failed(String(localized: "Can't reach the computer. Check the address and that remote connections are allowed in Vertty there.", bundle: .verttyRemoteResources))
+            status = .failed(reason ?? endpoint.unreachable)
             return
         }
         guard status == .connected || status == .reconnecting else { return }

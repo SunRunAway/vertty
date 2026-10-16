@@ -17,6 +17,7 @@ let package = Package(
             dependencies: [
                 "GhosttyC",
                 .product(name: "VerttyRemote", package: "VerttyKit"),
+                .product(name: "VerttyTailnet", package: "VerttyKit"),
                 .product(name: "VerttyUI", package: "VerttyKit"),
             ],
             path: "Sources/Vertty",

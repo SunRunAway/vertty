@@ -2,14 +2,16 @@
 import PackageDescription
 
 /// The code every Vertty app shares (Mac, iPhone, iPad): the remote
-/// protocol and its client (VerttyRemote), and the sidebar and session UI
-/// with the models behind it (VerttyUI).
+/// protocol and its client (VerttyRemote), the embedded Tailscale device
+/// remote connections can go through (VerttyTailnet), and the sidebar and
+/// session UI with the models behind it (VerttyUI).
 let package = Package(
     name: "VerttyKit",
     defaultLocalization: "en",
     platforms: [.macOS(.v14), .iOS(.v17)],
     products: [
         .library(name: "VerttyRemote", targets: ["VerttyRemote"]),
+        .library(name: "VerttyTailnet", targets: ["VerttyTailnet"]),
         .library(name: "VerttyUI", targets: ["VerttyUI"]),
     ],
     dependencies: [
@@ -22,9 +24,21 @@ let package = Package(
             path: "Sources/VerttyRemote",
             resources: [.process("Resources")]
         ),
+        // Built from Tailnet (Go) by scripts/build-tailnet.sh.
+        .binaryTarget(name: "CTailnet", path: "CTailnet.xcframework"),
+        .target(
+            name: "VerttyTailnet",
+            dependencies: ["CTailnet"],
+            path: "Sources/VerttyTailnet",
+            linkerSettings: [
+                .linkedFramework("CoreFoundation"),
+                .linkedFramework("Security"),
+                .linkedLibrary("resolv"),
+            ]
+        ),
         .target(
             name: "VerttyUI",
-            dependencies: ["VerttyRemote"],
+            dependencies: ["VerttyRemote", "VerttyTailnet"],
             path: "Sources/VerttyUI",
             resources: [.process("Resources")]
         ),

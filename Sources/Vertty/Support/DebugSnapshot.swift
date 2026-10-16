@@ -1,6 +1,8 @@
 import AppKit
 import GhosttyC
 import UserNotifications
+import VerttyRemote
+import VerttyTailnet
 
 /// Development aid: with VERTTY_DEBUG_SNAPSHOT=<dir>, periodically writes a PNG of
 /// the window and a text dump of the app state and visible terminal text, so the
@@ -241,8 +243,32 @@ final class DebugSnapshot {
             }
             // Remote windows: connect, open a card, type into its terminal.
             if line.hasPrefix("remote "), let url = URL(string: String(line.dropFirst(7))) {
-                RemoteWindowController.open(url)
+                RemoteWindowController.open(.url(url))
                 RemoteWindowController.all.last?.window.orderBack(nil)
+                continue
+            }
+            if line == "tailnetlogout" {
+                Tailnet.shared.logout()
+                continue
+            }
+            // Same as the menu's ways under Allow Remote Connections.
+            if line.hasPrefix("remotemode "), let menu = NSApp.mainMenu?.items.first?.submenu,
+               let index = menu.items.firstIndex(where: {
+                   $0.action == NSSelectorFromString("chooseRemoteMode:") && ($0.representedObject as? String) == String(line.dropFirst(11))
+               }) {
+                menu.performActionForItem(at: index)
+                continue
+            }
+            // Same as picking the computer with this name on the tailnet (its
+            // unique DNS label) in the connect window's Tailscale list; does
+            // nothing until it's listed there.
+            if line.hasPrefix("remotetailnet ") {
+                let name = String(line.dropFirst(14))
+                Tailnet.shared.activateClient()
+                if let computer = Tailnet.shared.computers.first(where: { $0.dnsName == name && $0.online }) {
+                    RemoteWindowController.open(computer)
+                    RemoteWindowController.all.last?.window.orderBack(nil)
+                }
                 continue
             }
             if let remote = RemoteWindowController.all.last {
@@ -309,13 +335,20 @@ final class DebugSnapshot {
            let item = menu.items.first(where: { $0.action == NSSelectorFromString("toggleSleepProtection") }) {
             try? item.title.write(to: directory.appendingPathComponent("sleep-menu.txt"), atomically: true, encoding: .utf8)
         }
-        // "Allow Remote Connections" and the visible lines under it.
+        // The ways under "Allow Remote Connections" and the visible lines
+        // under the checked one.
         if let menu = NSApp.mainMenu?.items.first?.submenu,
-           let toggle = menu.items.firstIndex(where: { $0.action == NSSelectorFromString("toggleRemoteConnections") }) {
+           menu.items.contains(where: { $0.action == NSSelectorFromString("chooseRemoteMode:") }) {
             menu.delegate?.menuNeedsUpdate?(menu)
             menu.update()
-            let lines = [menu.items[toggle].title + (menu.items[toggle].state == .on ? " [on]" : " [off]")]
-                + menu.items[(toggle + 1)...].prefix { $0.indentationLevel > 0 }.filter { !$0.isHidden }.map { "  " + $0.title }
+            var lines: [String] = []
+            for item in menu.items where !item.isHidden {
+                if item.action == NSSelectorFromString("chooseRemoteMode:") {
+                    lines.append(item.title + (item.state == .on ? " [on]" : " [off]"))
+                } else if item.indentationLevel > 0, !lines.isEmpty {
+                    lines.append("  " + item.title)
+                }
+            }
             try? lines.joined(separator: "\n").write(to: directory.appendingPathComponent("remote-menu.txt"), atomically: true, encoding: .utf8)
         }
         let modal = window?.attachedSheet ?? NSApp.modalWindow
@@ -389,9 +422,11 @@ final class DebugSnapshot {
             lines.append("prompts[\(name)] \(matches.query): " + matches.sessions.sorted { $0.key < $1.key }
                 .map { "\($0.key)=\($0.value.before)[\($0.value.match)]\($0.value.after.prefix(40))" }.joined(separator: " / "))
         }
+        let tailnet = Tailnet.shared
+        lines.append("tailnet state=\(tailnet.state) signedIn=\(!tailnet.account.isEmpty) name=\(tailnet.name) computers=\(tailnet.computers.map { "\($0.dnsName):\($0.online ? "online" : "offline")" }.joined(separator: ","))")
         for remote in RemoteWindowController.all {
             let store = remote.store
-            lines.append("=== remote \(store.client.url) status=\(store.client.status) server=\(store.client.serverName) open=\(store.selectedCardID?.uuidString ?? "-")")
+            lines.append("=== remote \(store.client.endpoint.detail) status=\(store.client.status) server=\(store.client.serverName) open=\(store.selectedCardID?.uuidString ?? "-")")
             for card in store.allCards {
                 lines.append("    card \(card.id) \(card.title) status=\(card.status) attention=\(card.attention) pr=\(card.prURL ?? "-")")
             }
