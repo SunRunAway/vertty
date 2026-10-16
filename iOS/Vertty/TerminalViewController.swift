@@ -124,17 +124,12 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
         if terminal.isFirstResponder, !Self.hasHardwareKeyboard { terminal.resignFirstResponder() }
     }
 
-    /// A tap on the terminal, after its click, brings up the keyboard; it
-    /// never puts it away (a swipe does), so tapping something in the
-    /// program leaves typing alone. False leaves it to the terminal.
+    /// A tap on the terminal is only its click, for the program (an option,
+    /// Claude Code's "Jump to bottom"): the bar's keyboard key brings the
+    /// keyboard up and puts it away. False leaves the tap to the terminal,
+    /// which takes a hardware keyboard's focus.
     private func terminalTapped() -> Bool {
-        guard !Self.hasHardwareKeyboard else { return false }
-        showKeyboard()
-        return true
-    }
-
-    private func showKeyboard() {
-        if !keyboardIsUp { bar.focus() }
+        !Self.hasHardwareKeyboard
     }
 
     @objc private func dragged(_ drag: UIPanGestureRecognizer) {
@@ -249,19 +244,16 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
     func debugSend() { bar.send() }
     /// A key on the bar, by its label.
     func debugPress(_ label: String) { bar.debugPress(label) }
-    /// What a tap on the terminal does to the keyboard without a hardware
-    /// keyboard (the simulator has the Mac's).
-    func debugFocus() { bar.focus() }
-    /// A tap in the middle of the terminal: its click, then the keyboard
-    /// as without a hardware keyboard.
+    /// A tap in the middle of the terminal without a hardware keyboard: only
+    /// its click.
     func debugTap() {
         terminal.sendMousePos(x: terminal.bounds.midX, y: terminal.bounds.midY)
         terminal.sendMouseButton(state: GHOSTTY_MOUSE_PRESS, button: GHOSTTY_MOUSE_LEFT)
         terminal.sendMouseButton(state: GHOSTTY_MOUSE_RELEASE, button: GHOSTTY_MOUSE_LEFT)
-        showKeyboard()
     }
-    /// What a swipe down onto the bar does, as above; it also puts away the
-    /// terminal's focus a hardware keyboard gave it.
+    /// What a swipe down onto the bar does without a hardware keyboard (the
+    /// simulator has the Mac's); it also puts away the terminal's focus a
+    /// hardware keyboard gave it.
     func debugHideKeyboard() {
         bar.composer.resignFirstResponder()
         terminal.resignFirstResponder()

@@ -1,9 +1,10 @@
 import GhosttyTerminal
 import UIKit
 
-/// The bar under the terminal. It shows the keys a phone keyboard lacks;
-/// while the keyboard is up and something is typed, it shows the text field
-/// the typing goes into and a send key instead. The keyboard always belongs
+/// The bar under the terminal. It shows the keys a phone keyboard lacks and,
+/// at the right end, the key that brings the keyboard up and puts it away;
+/// while the keyboard is up and something is typed, the text field the
+/// typing goes into and a send key take the other keys' place. The keyboard always belongs
 /// to that field (`composer`), even while the keys show, so switching
 /// between the two never moves the focus or breaks an IME composition.
 final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDelegate {
@@ -42,6 +43,11 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
     private let keysCapsule = TerminalInputBar.makeCapsule()
     private let fieldCapsule = TerminalInputBar.makeCapsule()
     private let sendButton = UIButton(type: .system)
+    /// Brings the keyboard up and puts it away, always at the right end:
+    /// the last of the keys, and beside the field while it shows.
+    private let keysToggle = UIButton(type: .system)
+    private let fieldToggleCapsule = TerminalInputBar.makeCapsule()
+    private let fieldToggle = UIButton(type: .system)
     private var composerHeight: NSLayoutConstraint!
     private(set) var mode = Mode.keys
 
@@ -87,7 +93,9 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
     }
 
     private func setUpKeys() {
-        let row = UIStackView(arrangedSubviews: Self.keys.map(makeKey))
+        styleKey(keysToggle)
+        keysToggle.addAction(UIAction { [weak self] _ in self?.toggleKeyboard() }, for: .touchUpInside)
+        let row = UIStackView(arrangedSubviews: Self.keys.map(makeKey) + [keysToggle])
         row.translatesAutoresizingMaskIntoConstraints = false
         row.axis = .horizontal
         row.distribution = .fillEqually
@@ -97,7 +105,8 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
         let pad = (Self.rowHeight - 36) / 2
         // The keys share the row; past their widest the row stops growing
         // and stays centered (an iPad).
-        let widest = CGFloat(Self.keys.count) * Self.maxKeyWidth + CGFloat(Self.keys.count - 1) * Self.keySpacing + pad * 2
+        let count = CGFloat(row.arrangedSubviews.count)
+        let widest = count * Self.maxKeyWidth + (count - 1) * Self.keySpacing + pad * 2
         let fill = keysCapsule.widthAnchor.constraint(equalTo: widthAnchor, constant: -Self.inset * 2)
         fill.priority = .defaultHigh
         NSLayoutConstraint.activate([
@@ -114,12 +123,16 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
         ])
     }
 
-    private func makeKey(_ key: Key) -> UIButton {
-        let button = UIButton(type: .system)
+    private func styleKey(_ button: UIButton) {
         button.tintColor = .label
         button.backgroundColor = UIColor.systemGray5.withAlphaComponent(0.92)
         button.layer.cornerRadius = 18
         button.layer.cornerCurve = .continuous
+    }
+
+    private func makeKey(_ key: Key) -> UIButton {
+        let button = UIButton(type: .system)
+        styleKey(button)
         button.accessibilityLabel = key.accessibility
         if let image = key.image {
             button.setImage(UIImage(systemName: image, withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold)), for: .normal)
@@ -160,14 +173,28 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
         sendButton.accessibilityLabel = NSLocalizedString("Send", comment: "Sends the typed text to the terminal")
         sendButton.addAction(UIAction { [weak self] _ in self?.send() }, for: .touchUpInside)
 
+        fieldToggle.translatesAutoresizingMaskIntoConstraints = false
+        fieldToggle.tintColor = .label
+        fieldToggle.addAction(UIAction { [weak self] _ in self?.toggleKeyboard() }, for: .touchUpInside)
+
         addSubview(fieldCapsule)
+        addSubview(fieldToggleCapsule)
         fieldCapsule.contentView.addSubview(composer)
         fieldCapsule.contentView.addSubview(sendButton)
+        fieldToggleCapsule.contentView.addSubview(fieldToggle)
         composerHeight = composer.heightAnchor.constraint(equalToConstant: Self.rowHeight)
         NSLayoutConstraint.activate([
             fieldCapsule.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.inset),
-            fieldCapsule.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.inset),
+            fieldCapsule.trailingAnchor.constraint(equalTo: fieldToggleCapsule.leadingAnchor, constant: -6),
             fieldCapsule.bottomAnchor.constraint(equalTo: keysCapsule.bottomAnchor),
+            fieldToggleCapsule.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.inset),
+            fieldToggleCapsule.bottomAnchor.constraint(equalTo: keysCapsule.bottomAnchor),
+            fieldToggleCapsule.widthAnchor.constraint(equalToConstant: Self.rowHeight),
+            fieldToggleCapsule.heightAnchor.constraint(equalToConstant: Self.rowHeight),
+            fieldToggle.leadingAnchor.constraint(equalTo: fieldToggleCapsule.contentView.leadingAnchor),
+            fieldToggle.trailingAnchor.constraint(equalTo: fieldToggleCapsule.contentView.trailingAnchor),
+            fieldToggle.topAnchor.constraint(equalTo: fieldToggleCapsule.contentView.topAnchor),
+            fieldToggle.bottomAnchor.constraint(equalTo: fieldToggleCapsule.contentView.bottomAnchor),
             composer.leadingAnchor.constraint(equalTo: fieldCapsule.contentView.leadingAnchor, constant: 8),
             composer.topAnchor.constraint(equalTo: fieldCapsule.contentView.topAnchor),
             composer.bottomAnchor.constraint(equalTo: fieldCapsule.contentView.bottomAnchor),
@@ -223,10 +250,23 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
         // Transparent rather than hidden: the field has to stay able to
         // take the keyboard.
         fieldCapsule.alpha = mode == .field ? 1 : 0
+        fieldToggleCapsule.alpha = fieldCapsule.alpha
+        let up = keyboardIsUp()
+        let icon = UIImage(systemName: up ? "keyboard.chevron.compact.down" : "keyboard",
+                           withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))
+        let label = up ? NSLocalizedString("Hide Keyboard", comment: "Key") : NSLocalizedString("Show Keyboard", comment: "Key")
+        for toggle in [keysToggle, fieldToggle] {
+            toggle.setImage(icon, for: .normal)
+            toggle.accessibilityLabel = label
+        }
         fitComposer()
     }
 
     func focus() { composer.becomeFirstResponder() }
+
+    private func toggleKeyboard() {
+        if keyboardIsUp() { hideKeyboard() } else { focus() }
+    }
 
     private func press(_ key: TerminalKeyPress) {
         terminal?.sendKey(key)
@@ -234,6 +274,7 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
 
     /// A key, by its label, for the debug driver.
     func debugPress(_ label: String) {
+        if label == "keyboard" { return toggleKeyboard() }
         if let key = Self.keys.first(where: { $0.label.lowercased() == label.lowercased() }) { press(key.press) }
     }
 

@@ -260,24 +260,23 @@ try:
     simctl("io", udid, "screenshot", str(root / "terminal.png"))
     print(f"PASS opening shows the terminal at the device's size ({own}), without the keyboard", flush=True)
 
-    # A tap clicks, then brings up the keyboard: the program gets the click
-    # at the size it was tapped at, before the keyboard resizes the session.
+    # A tap on the terminal is only a click for the program; the keyboard
+    # stays away.
     count = len(inputs())
     drive("tap")
-    wait(lambda: terminal("keyboard") == "true", "a tap didn't bring up the keyboard")
     wait(lambda: any(h.startswith("1b5b3c30") for h, _ in inputs()[count:]), "the tap's click didn't reach the agent")
-    clicks = [(h, size) for h, size in inputs()[count:] if h.startswith("1b5b3c30")]
-    assert all(size == own for _, size in clicks), (own, clicks)
-    drive("hidekeyboard")
-    wait(lambda: terminal("keyboard") == "false", "the keyboard didn't go away")
-    print("PASS a tap's click reaches the program before the keyboard resizes it", flush=True)
+    assert all(size == own for _, size in inputs()[count:]), read(agent_log)
+    time.sleep(0.5)
+    assert terminal("keyboard") == "false", phone()
+    print("PASS a tap on the terminal only clicks", flush=True)
 
-    drive("focus")
-    wait(lambda: terminal("keyboard") == "true", "tapping the terminal didn't bring up the keyboard")
+    # The bar's keyboard key brings the keyboard up.
+    drive("key keyboard")
+    wait(lambda: terminal("keyboard") == "true", "the keyboard key didn't bring up the keyboard")
     assert terminal("bar") == "keys", phone()
     own = settled_size("session not at the size with the keyboard up")
     simctl("io", udid, "screenshot", str(root / "keyboard-keys.png"))
-    # With the keyboard up, a tap only clicks: the keyboard stays.
+    # With the keyboard up too, a tap only clicks: the keyboard stays.
     count = len(inputs())
     drive("tap")
     wait(lambda: any(h.startswith("1b5b3c30") for h, _ in inputs()[count:]), "a tap with the keyboard up didn't click")
@@ -317,11 +316,14 @@ try:
     wait(lambda: terminal("bar") == "keys" and composer() == "", "the field didn't empty after sending")
     print("PASS typing fills the field in the keys' place; sending pastes it and presses Enter", flush=True)
 
-    # Put away with something typed, the field keeps it for the next time.
-    drive("type draft", "hidekeyboard")
+    # Put away with something typed (the keyboard key beside the field),
+    # the field keeps it for the next time.
+    drive("type draft")
+    wait(lambda: terminal("bar") == "field", "typing didn't bring up the field")
+    drive("key keyboard")
     wait(lambda: terminal("keyboard") == "false" and terminal("bar") == "keys", "the keyboard didn't go away")
     assert composer() == "draft", phone()
-    drive("focus")
+    drive("key keyboard")
     wait(lambda: terminal("keyboard") == "true" and terminal("bar") == "field", "the draft didn't come back")
     count = len(inputs())
     drive("send")
