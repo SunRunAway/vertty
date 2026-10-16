@@ -2,7 +2,7 @@
 
 <h1 align="center">Vhostty</h1>
 
-<p align="center"><b>A vertical-tab terminal built for Claude Code and Codex</b></p>
+<p align="center"><b>A vertical-tab terminal built for Claude Code and Codex, organized by project</b></p>
 
 <p align="center">English · <a href="README.zh-CN.md">简体中文</a></p>
 
