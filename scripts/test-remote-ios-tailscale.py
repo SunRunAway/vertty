@@ -162,6 +162,26 @@ def input_size(hex_input):
 
 
 
+def settle(check, timeout):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if check():
+            return True
+        time.sleep(0.2)
+    return False
+
+
+def sign_out(inbox, state):
+    """Signs a test device out, best effort: Tailscale removes an ephemeral
+    device as soon as it signs out, but keeps listing one that only went
+    offline for up to an hour, on the user's other devices too."""
+    if not settle(lambda: tailnet_field(state(), "signedIn") == "true", 0.5):
+        return
+    if settle(lambda: not inbox.exists(), 5):
+        inbox.write_text("tailnetlogout\n")
+        settle(lambda: tailnet_field(state(), "signedIn") == "false", 15)
+
+
 for path, what in ((APP, "the iPhone app"), (ROOT / "build/Vertty.app", "Vertty.app")):
     if not path.exists():
         sys.exit(f"Build {what} first (see scripts/test-remote-ios.py): {path} is missing")
@@ -233,6 +253,10 @@ try:
     print(f"PASS signing out (Tailscale state: {tailnet_field(phone(), 'state')})", flush=True)
     print(f"Screenshots: {root}", flush=True)
 finally:
+    if debug_dir:
+        sign_out(debug_dir / "input.txt", phone)
+    if server:
+        sign_out(server_snap / "input.txt", lambda: read(server_snap / "state.txt"))
     simctl("terminate", udid, BUNDLE, check=False)
     if server:
         server.terminate()

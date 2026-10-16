@@ -175,6 +175,32 @@ def menu_ways():
     return [w.endswith("[on]") for w in ways], [l.strip() for l in lines if l.startswith("  ")]
 
 
+def settle(check, timeout):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if check():
+            return True
+        time.sleep(0.2)
+    return False
+
+
+def sign_out(snap, server=False):
+    """Signs a test device out, best effort: Tailscale removes an ephemeral
+    device as soon as it signs out, but keeps listing one that only went
+    offline for up to an hour, on the user's other devices too. Signing out
+    needs the device running, so the server goes back to Via Tailscale."""
+    inbox = snap / "input.txt"
+    if server:
+        if not settle(lambda: not inbox.exists(), 5):
+            return
+        inbox.write_text("remotemode tailscale\n")
+    if not settle(lambda: tailnet_field(snap, "signedIn") == "true", 30 if server else 0.5):
+        return
+    if settle(lambda: not inbox.exists(), 5):
+        inbox.write_text("tailnetlogout\n")
+        settle(lambda: tailnet_field(snap, "signedIn") == "false", 15)
+
+
 def tcp_listeners(pid):
     out = subprocess.run(["lsof", "-nP", "-a", "-p", str(pid), "-iTCP", "-sTCP:LISTEN"],
                          capture_output=True, text=True).stdout
@@ -249,6 +275,9 @@ try:
     wait(lambda: tailnet_field(client_snap, "signedIn") == "false", "the client didn't sign out")
     print(f"PASS signing out on the client (Tailscale state: {tailnet_field(client_snap, 'state')})", flush=True)
 finally:
+    if len(apps) == 2:
+        sign_out(server_snap, server=True)
+        sign_out(client_snap)
     for app in apps:
         app.terminate()
     for app in apps:
