@@ -2,6 +2,7 @@
 
 ## Workflow
 
+- Only edit `README.md` and `README.zh-CN.md` when the user asks to edit `README.md`, and keep both versions in sync.
 - When working in the main checkout, once a change is done and verified,
   commit it and push to `origin/master` without asking first.
 - When the user asks you to work in a worktree, someone else is working in the
