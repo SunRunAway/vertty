@@ -13,7 +13,7 @@ Vertty is a native macOS terminal for agents, built on libghostty. It organizes 
 ## Features
 
 - **Project & session management**: organize sessions by project, track agent status, and resume past conversations.
-- **iOS remote access**: access and control sessions from an iPhone or iPad, over built-in Tailscale (sign in on both ends) or your own network.
+- **iOS remote access**: access and control sessions from an iPhone, iPad or another Mac, over built-in Tailscale (sign in on both ends) or your own network.
 - **Scheduled tasks**: run Claude Code and Codex tasks on a schedule, with natural language support for creating and managing them.
 - **Sleep prevention**: prevent sleep with the lid closed and keep the display on while tasks run.
 - **Bottom shell**: open a shell below each session that follows its current directory.
