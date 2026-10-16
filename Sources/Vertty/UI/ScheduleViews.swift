@@ -433,10 +433,6 @@ struct SchedulePanelView: View {
                     ScheduleTimeZonePicker(selection: draft.timing.timeZoneID)
                 }
             }
-            Text("Times follow the selected zone, including daylight saving changes.")
-                .font(.system(size: 12))
-                .foregroundStyle(.tertiary)
-                .padding(.leading, 4)
             Text(nextLine)
                 .font(.system(size: 12.5))
                 .foregroundStyle(.tertiary)

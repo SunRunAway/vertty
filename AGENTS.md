@@ -2,6 +2,9 @@
 
 ## Workflow
 
+- README files are the user's advertising space. Do not edit them when adding
+  features; change them only when the user explicitly asks. Put implementation
+  documentation in `DEVELOPER.md` or `docs/`.
 - When working in the main checkout, once a change is done and verified,
   commit it and push to `origin/master` without asking first.
 - When the user asks you to work in a worktree, someone else is working in the
