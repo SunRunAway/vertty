@@ -1,5 +1,6 @@
 import GhosttyTerminal
 import UIKit
+import UniformTypeIdentifiers
 
 /// The bar under the terminal. It shows the keys a phone keyboard lacks and,
 /// at the right end, the key that brings the keyboard up and puts it away;
@@ -32,10 +33,8 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
         Key(label: "Tab", image: "arrow.right.to.line", accessibility: NSLocalizedString("Tab", comment: "Key"), press: TerminalKeyPress(.tab)),
         Key(label: "⇧Tab", image: nil, accessibility: NSLocalizedString("Shift-Tab", comment: "Key"), press: TerminalKeyPress(.tab, modifiers: .shift)),
         Key(label: "^C", image: nil, accessibility: NSLocalizedString("Control-C", comment: "Key"), press: TerminalKeyPress(.c, modifiers: .ctrl)),
-        Key(label: "←", image: "arrowtriangle.left.fill", accessibility: NSLocalizedString("Left Arrow", comment: "Key"), press: TerminalKeyPress(.arrowLeft)),
         Key(label: "↓", image: "arrowtriangle.down.fill", accessibility: NSLocalizedString("Down Arrow", comment: "Key"), press: TerminalKeyPress(.arrowDown)),
         Key(label: "↑", image: "arrowtriangle.up.fill", accessibility: NSLocalizedString("Up Arrow", comment: "Key"), press: TerminalKeyPress(.arrowUp)),
-        Key(label: "→", image: "arrowtriangle.right.fill", accessibility: NSLocalizedString("Right Arrow", comment: "Key"), press: TerminalKeyPress(.arrowRight)),
     ]
 
     let composer = ComposerTextView()
@@ -46,6 +45,19 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
     /// Brings the keyboard up and puts it away, always at the right end:
     /// the last of the keys, and beside the field while it shows.
     private let keysToggle = UIButton(type: .system)
+    /// The system's paste key: one the app draws itself would have iOS ask
+    /// for permission on every paste.
+    private lazy var pasteKey: UIPasteControl = {
+        let config = UIPasteControl.Configuration()
+        config.displayMode = .iconOnly
+        config.cornerStyle = .capsule
+        config.baseBackgroundColor = UIColor.systemGray5.withAlphaComponent(0.92)
+        config.baseForegroundColor = .label
+        let key = UIPasteControl(configuration: config)
+        key.target = pasteTarget
+        return key
+    }()
+    private lazy var pasteTarget = PasteTarget { [weak self] providers in self?.paste(providers) }
     private let fieldToggleCapsule = TerminalInputBar.makeCapsule()
     private let fieldToggle = UIButton(type: .system)
     private var composerHeight: NSLayoutConstraint!
@@ -95,7 +107,7 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
     private func setUpKeys() {
         styleKey(keysToggle)
         keysToggle.addAction(UIAction { [weak self] _ in self?.toggleKeyboard() }, for: .touchUpInside)
-        let row = UIStackView(arrangedSubviews: Self.keys.map(makeKey) + [keysToggle])
+        let row = UIStackView(arrangedSubviews: Self.keys.map(makeKey) + [pasteKey, keysToggle])
         row.translatesAutoresizingMaskIntoConstraints = false
         row.axis = .horizontal
         row.distribution = .fillEqually
@@ -253,7 +265,7 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
         fieldToggleCapsule.alpha = fieldCapsule.alpha
         let up = keyboardIsUp()
         let icon = UIImage(systemName: up ? "keyboard.chevron.compact.down" : "keyboard",
-                           withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))
+                           withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold))
         let label = up ? NSLocalizedString("Hide Keyboard", comment: "Key") : NSLocalizedString("Show Keyboard", comment: "Key")
         for toggle in [keysToggle, fieldToggle] {
             toggle.setImage(icon, for: .normal)
@@ -263,6 +275,23 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
     }
 
     func focus() { composer.becomeFirstResponder() }
+
+    /// Text goes into the field, which then shows with the keyboard up, to
+    /// be edited before it's sent. A picture or file goes to the terminal,
+    /// which pastes it as its path.
+    private func paste(_ providers: [NSItemProvider]) {
+        guard let text = providers.first(where: { $0.canLoadObject(ofClass: NSString.self) }) else {
+            terminal?.paste(nil)
+            return
+        }
+        _ = text.loadObject(ofClass: NSString.self) { [weak self] object, _ in
+            guard let string = object as? String else { return }
+            DispatchQueue.main.async {
+                self?.focus()
+                self?.composer.insertText(string)
+            }
+        }
+    }
 
     private func toggleKeyboard() {
         if keyboardIsUp() { hideKeyboard() } else { focus() }
@@ -275,6 +304,7 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
     /// A key, by its label, for the debug driver.
     func debugPress(_ label: String) {
         if label == "keyboard" { return toggleKeyboard() }
+        if label == "paste" { return paste([NSItemProvider(object: "pasted" as NSString)]) }
         if let key = Self.keys.first(where: { $0.label.lowercased() == label.lowercased() }) { press(key.press) }
     }
 
@@ -318,6 +348,21 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
     func gestureRecognizer(_ gesture: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
         true
     }
+}
+
+/// What the paste key pastes into.
+private final class PasteTarget: UIResponder {
+    private let onPaste: ([NSItemProvider]) -> Void
+
+    init(onPaste: @escaping ([NSItemProvider]) -> Void) {
+        self.onPaste = onPaste
+        super.init()
+        pasteConfiguration = UIPasteConfiguration(acceptableTypeIdentifiers: [
+            UTType.text.identifier, UTType.image.identifier, UTType.fileURL.identifier,
+        ])
+    }
+
+    override func paste(itemProviders: [NSItemProvider]) { onPaste(itemProviders) }
 }
 
 /// The bar's text field. With nothing typed it passes what has no text to

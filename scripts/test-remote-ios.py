@@ -13,6 +13,7 @@ xcodebuild -project iOS/Vertty.xcodeproj -scheme Vertty \\
     -destination 'platform=iOS Simulator,name=iPhone 17' \\
     -derivedDataPath build/ios-dd build
 
+INPUT_ONLY=1 stops after the input bar's checks (typing, keys, paste).
 SIM_DEVICE picks the simulator (default "iPhone 17"; an iPad such as
 "iPad Air 11-inch (M4)" runs the same checks in the side-by-side layout).
 A simulator this script boots is shut down again at the end.
@@ -297,6 +298,15 @@ try:
     print("PASS with nothing typed, Return, Backspace, the bar's keys and space-bar sliding reach the session",
           flush=True)
 
+    # The paste key pastes text into the field, to edit before sending.
+    drive("key paste")
+    wait(lambda: composer() == "pasted" and terminal("bar") == "field", "the paste key didn't fill the field")
+    count = len(inputs())
+    drive("send")
+    wait(lambda: [h for h, _ in inputs()[count:]][-2:] == ["706173746564", "0d"], "the pasted text didn't send")
+    wait(lambda: terminal("bar") == "keys", "the field didn't empty after sending")
+    print("PASS the paste key fills the field", flush=True)
+
     # Typing goes into the field, which takes the keys' place (an IME
     # composition already does); Return there is a line break. Send pastes
     # it all, then presses Enter.
@@ -329,6 +339,8 @@ try:
     drive("send")
     wait(lambda: any(h.startswith("6472616674") for h, _ in inputs()[count:]), "the draft didn't send")
     print("PASS a draft stays in the field while the keyboard is away", flush=True)
+    if os.environ.get("INPUT_ONLY"):
+        sys.exit(0)
 
     # Typing on the computer takes the session to the computer's size; the
     # iPhone shows it at that grid (scaled down when bigger), and typing on
