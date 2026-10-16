@@ -12,9 +12,7 @@ Vertty is a native macOS terminal supporting Claude Code and Codex, built on lib
 
 ## Features
 
-- **Projects and sessions**: organize Claude Code and Codex sessions by project, with branch, worktree and PR information.
-- **Status and notifications**: track agent status in real time, with unread indicators and system notifications for task updates.
-- **History and restore**: search and resume past sessions, and automatically save open sessions.
+- **Session management**: organize sessions by project, track agent status, and resume past conversations.
 - **Remote control**: access and control sessions from an iPhone, iPad or another Mac.
 - **Scheduled tasks**: run Claude Code and Codex tasks on a schedule, with natural language support for creating and managing them.
 - **Sleep prevention**: prevent sleep with the lid closed and keep the display on while tasks run.
