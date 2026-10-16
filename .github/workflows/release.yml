@@ -20,6 +20,12 @@ jobs:
         with:
           version: 0.15.2
 
+      # The embedded Tailscale device (VerttyKit/Tailnet) is Go.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: VerttyKit/Tailnet/go.mod
+          cache-dependency-path: VerttyKit/Tailnet/go.sum
+
       - name: Ghostty revision
         id: ghostty
         run: echo "sha=$(git rev-parse HEAD:vendor/ghostty)" >> "$GITHUB_OUTPUT"
