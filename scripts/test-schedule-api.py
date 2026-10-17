@@ -73,9 +73,11 @@ try:
     assert 'panel=-' in state() and 'schedulesShown=false' in state()
     saved = lambda: json.loads((support / 'schedules.json').read_text())['tasks']
     assert saved()[0]['id'] == task_id
+    assert saved()[0]['projectPath'] == str(project)
     edited = call('edit', {'task_id': task_id, 'name': 'Updated'})
     assert edited['task']['name'] == 'Updated' and edited['url'] == url
     assert saved()[0]['name'] == 'Updated'
+    assert saved()[0]['projectPath'] == str(project)
     call('edit', {'task_id': task_id, 'prompt': ''}, ok=False)
     assert saved()[0]['name'] == 'Updated'
     drive('openurl ' + url)
@@ -152,6 +154,30 @@ try:
         path.rmdir()
         backup.rename(path)
     print('PASS persistence failures return errors and roll back all three mutations', flush=True)
+
+    # Startup backfills an old task; removing its project and re-adding the same
+    # directory must recover it even though no agent has ever run.
+    app.terminate()
+    app.wait(timeout=10)
+    data = json.loads(path.read_text())
+    survivor = next(t for t in data['tasks'] if t['id'] == live)
+    survivor.pop('projectPath')
+    path.write_text(json.dumps(data))
+    app = testapp.launch(env, str(root / 'app.log'))
+    wait(lambda: next(t for t in saved() if t['id'] == live).get('projectPath') == str(project))
+    before = next(t for t in saved() if t['id'] == live)
+    app.terminate()
+    app.wait(timeout=10)
+    (support / 'state.json').write_text(json.dumps({'projects': [], 'tabs': []}))
+    app = testapp.launch(env, str(root / 'app.log'))
+    wait(lambda: (support / 'hook.sock').exists() and 'schedulesShown=' in state())
+    drive('addproject ' + str(project))
+    wait(lambda: next(t for t in saved() if t['id'] == live)['projectID'] != before['projectID'])
+    after = next(t for t in saved() if t['id'] == live)
+    assert after == dict(before, projectID=after['projectID'])
+    assert call('show', {'task_id': live})['task']['project']['path'] == str(project)
+    assert not json.loads(path.read_text())['runs']
+    print('PASS startup path backfill and never-run task recovery after project re-add', flush=True)
 finally:
     app.terminate()
     app.wait(timeout=10)

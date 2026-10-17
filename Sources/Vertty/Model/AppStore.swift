@@ -237,6 +237,7 @@ final class AppStore: ObservableObject {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         guard url.path != project.path else { return }
         updateProject(project.id) { $0.path = url.path }
+        schedules.rememberProjectPath(project.id, path: url.path)
         refreshHistory()
     }
 

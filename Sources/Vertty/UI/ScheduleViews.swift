@@ -894,6 +894,7 @@ extension AppStore {
         guard let panel = schedulePanel else { return nil }
         if let problem = schedulePanelProblems.first { return problem }
         var t = panel.draft
+        t.projectPath = project(t.projectID)?.path
         t.name = t.name.trimmingCharacters(in: .whitespacesAndNewlines)
         t.prompt = t.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         if t.timing.repeatKind != .once {

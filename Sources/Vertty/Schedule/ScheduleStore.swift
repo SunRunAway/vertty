@@ -131,6 +131,7 @@ final class ScheduleStore: ObservableObject {
         t.name = edit.name
         t.prompt = edit.prompt
         t.projectID = edit.projectID
+        t.projectPath = edit.projectPath
         t.kind = edit.kind
         if edit.timing != t.timing {
             t.timing = edit.timing
@@ -205,14 +206,27 @@ final class ScheduleStore: ObservableObject {
         save()
     }
 
-    /// A project was added again after being removed: its tasks (found by the
-    /// directory their runs used) go back to it.
+    /// Backfill older tasks and follow explicit changes to a project's directory.
+    func rememberProjectPath(_ projectID: UUID, path: String) {
+        var changed = false
+        for i in tasks.indices where tasks[i].projectID == projectID && tasks[i].projectPath != path {
+            tasks[i].projectPath = path
+            changed = true
+        }
+        if changed { save() }
+    }
+
+    /// Restore tasks even before their first run. Run directories are a fallback
+    /// only for older tasks that never saved their project path.
     func projectAdded(_ projectID: UUID, path: String, known: Set<UUID>) {
         var changed = false
         for i in tasks.indices where !known.contains(tasks[i].projectID) {
             let id = tasks[i].id
-            guard runs.contains(where: { $0.taskID == id && $0.cwd == path }) else { continue }
+            let matches = tasks[i].projectPath.map { $0 == path }
+                ?? runs.contains(where: { $0.taskID == id && $0.cwd == path })
+            guard matches else { continue }
             tasks[i].projectID = projectID
+            tasks[i].projectPath = path
             changed = true
         }
         if changed { save() }

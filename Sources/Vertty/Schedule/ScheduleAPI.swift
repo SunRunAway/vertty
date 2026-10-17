@@ -125,6 +125,7 @@ extension AppStore {
             t.timing.weekdays = []
         }
         if let project { t.projectID = project.id }
+        if let path = self.project(t.projectID)?.path { t.projectPath = path }
         if let kind { t.kind = kind }
         if let v = str("name") { t.name = v }
         if let v = f["prompt"] as? String { t.prompt = v.trimmingCharacters(in: .whitespacesAndNewlines) }

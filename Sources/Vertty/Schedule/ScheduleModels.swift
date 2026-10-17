@@ -139,6 +139,8 @@ struct ScheduleTask: Codable, Identifiable, Equatable {
     var id = UUID()
     var name: String
     var projectID: UUID
+    /// Kept after project removal so re-adding its directory can restore the link.
+    var projectPath: String?
     var kind: AgentKind
     var prompt: String
     var timing: ScheduleTiming

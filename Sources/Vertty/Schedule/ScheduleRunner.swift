@@ -8,6 +8,9 @@ import Foundation
 extension AppStore {
     func startSchedules() {
         schedules.load()
+        for project in projects {
+            schedules.rememberProjectPath(project.id, path: project.path)
+        }
         scheduleTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
             self?.runDueSchedules()
         }

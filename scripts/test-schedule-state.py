@@ -131,6 +131,70 @@ assert(persisted.task(fixed.id)!.nextPlan! > Date())
 assert(persisted.task(fixed.id)!.timing.hour == 9)
 print("PASS: legacy decoding, region persistence, DST transitions, weekdays, weekly, once and system-zone changes")
 
+// A never-run task survives removal, restart and re-addition with a new project ID.
+let oldProject = UUID(), newProject = UUID()
+let projectPath = AppPaths.support.appendingPathComponent("project").path
+var unrun = ScheduleTask(name: "Never run", projectID: oldProject, projectPath: projectPath,
+    kind: .codex, prompt: "hello", timing: ScheduleTiming(repeatKind: .daily))
+assert(store.create(unrun))
+let relinked = ScheduleStore()
+relinked.load()
+let beforeRelink = relinked.task(unrun.id)!
+relinked.projectAdded(newProject, path: projectPath + "-other", known: [])
+assert(relinked.task(unrun.id) == beforeRelink)
+relinked.projectAdded(newProject, path: projectPath, known: [oldProject])
+assert(relinked.task(unrun.id) == beforeRelink) // Never steal from an existing project.
+relinked.projectAdded(newProject, path: projectPath, known: [])
+var expected = beforeRelink
+expected.projectID = newProject
+assert(relinked.task(unrun.id) == expected) // Preserve every other field, including nextPlan.
+let reloaded = ScheduleStore()
+reloaded.load()
+assert(reloaded.task(unrun.id) == expected)
+
+// Legacy tasks decode without a path and get it from their existing project.
+var legacyTask = unrun
+legacyTask.id = UUID()
+legacyTask.projectPath = nil
+assert(reloaded.create(legacyTask))
+let legacyReloaded = ScheduleStore()
+legacyReloaded.load()
+assert(legacyReloaded.task(legacyTask.id)!.projectPath == nil)
+legacyReloaded.rememberProjectPath(oldProject, path: projectPath)
+legacyReloaded.projectAdded(newProject, path: projectPath, known: [])
+assert(legacyReloaded.task(legacyTask.id)!.projectID == newProject)
+
+// A changed directory supersedes historical run paths, including for bound tasks.
+let movedPath = projectPath + "-moved"
+legacyReloaded.modify(unrun.id) { $0.sessionID = "existing-session" }
+let history = ScheduleRun(taskID: unrun.id, trigger: .manual, state: .replied,
+    kind: .codex, cwd: projectPath)
+legacyReloaded.add(history)
+legacyReloaded.rememberProjectPath(newProject, path: movedPath)
+let beforeMove = legacyReloaded.task(unrun.id)!
+let movedProject = UUID()
+legacyReloaded.projectAdded(movedProject, path: projectPath, known: [])
+assert(legacyReloaded.task(unrun.id) == beforeMove)
+legacyReloaded.projectAdded(movedProject, path: movedPath, known: [])
+assert(legacyReloaded.task(unrun.id)!.sessionID == "existing-session")
+assert(legacyReloaded.task(unrun.id)!.projectID == movedProject)
+assert(legacyReloaded.run(history.id) == history)
+
+// Older orphaned tasks still recover through their run history.
+legacyTask.id = UUID()
+assert(legacyReloaded.create(legacyTask))
+legacyReloaded.add(ScheduleRun(taskID: legacyTask.id, trigger: .manual, state: .replied,
+    kind: .codex, cwd: projectPath))
+legacyReloaded.projectAdded(newProject, path: projectPath, known: [])
+assert(legacyReloaded.task(legacyTask.id)!.projectID == newProject)
+assert(legacyReloaded.task(legacyTask.id)!.projectPath == projectPath)
+var reassigned = legacyReloaded.task(legacyTask.id)!
+reassigned.projectID = movedProject
+reassigned.projectPath = movedPath
+assert(legacyReloaded.applyEdit(reassigned) == nil)
+assert(legacyReloaded.task(legacyTask.id)!.projectPath == movedPath)
+print("PASS: project re-add before first run, persistence, legacy recovery, directory edits and session preservation")
+
 '''
     path = root / 'main.swift'
     path.write_text(source)
