@@ -177,7 +177,19 @@ build/Vertty.app/Contents/MacOS/Vertty
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
-版本号取自标签，写进 `Info.plist` 的 `CFBundleShortVersionString`。libghostty 按 Ghostty 版本和补丁缓存，补丁不变时不会重新编译。在 Actions 页面手动运行这个 workflow 只编译、上传构建产物，不发 Release。用户通过 `scripts/install.sh` 安装最新的 Release。
+版本号使用稳定的 `major.minor.patch` 标签，同时写进 `CFBundleShortVersionString` 和 `CFBundleVersion`；本地构建使用最近的发布标签，也可用 `VERTTY_VERSION` 指定。libghostty 按 Ghostty 版本和补丁缓存，补丁不变时不会重新编译。在 Actions 页面手动运行这个 workflow 只编译、上传构建产物，不发 Release。用户通过 Homebrew 或 `scripts/install.sh` 首次安装。
+
+### macOS 应用内更新
+
+Sparkle 自动检查更新，菜单也可手动检查或关闭自动检查。用户确认后才下载、安装并重启；不允许静默安装。重启走现有的退出确认，正在工作的 agent 仍会触发提示，取消退出就推迟安装。升级后的会话恢复沿用普通重启行为。
+
+更新清单为 `https://github.com/SunRunAway/vertty/releases/latest/download/appcast.xml`，ZIP 下载地址固定到具体 Release。CI 用 Sparkle 的 `generate_appcast` 签署 ZIP 和清单，再与 ZIP 一起发布。`SUPublicEDKey` 是应用内的验证公钥；对应私钥保存在 macOS Keychain 的 `dev.vertty.Vertty` account，并作为仓库 Actions secret `SPARKLE_PRIVATE_KEY` 提供给发布步骤。不要把私钥提交到 Git。必须保留这把密钥，当前未使用 Developer ID 签名，丢失私钥后不能直接给已安装用户换公钥。
+
+首次发布更新器之前，v0.7.1 的 Release 附带已签名的空清单，让本地构建可以正常检查更新。Homebrew tap 的同步脚本只在清单包含当前 ZIP 的更新条目时写入 `auto_updates true`，不会提前把不含更新器的旧版标成自更新应用。
+
+打包保留 Sparkle 框架和辅助程序原有的签名，只对 Vertty 的可执行文件和外层应用做 ad-hoc 签名。Brew 的 `postflight_steps` 仍用于首次安装和 Brew 升级；Sparkle 安装器自己处理新应用的 quarantine，不调用 Brew。旧版需要先通过 Brew 或手动安装一次包含更新器的版本。
+
+普通 debug driver 测试不启动更新器。`scripts/test-updates.py` 使用临时应用标识、状态目录、密钥和本机 feed，并通过 `VERTTY_TEST_UPDATES=1` 显式开启，验证签名拒绝、替换与重启，不连接正式更新源。
 
 ## 文档
 

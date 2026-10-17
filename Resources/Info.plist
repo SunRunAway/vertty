@@ -36,6 +36,18 @@
     </array>
     <key>CFBundleVersion</key>
     <string>1</string>
+    <key>SUFeedURL</key>
+    <string>https://github.com/SunRunAway/vertty/releases/latest/download/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>4H+HqbtXRETM3J9N1KYPmiMyS43nRiu5F8xC6AnPQ5M=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUAllowsAutomaticUpdates</key>
+    <false/>
+    <key>SUVerifyUpdateBeforeExtraction</key>
+    <true/>
+    <key>SURequireSignedFeed</key>
+    <true/>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>LSApplicationCategoryType</key>

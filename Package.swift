@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     dependencies: [
         .package(path: "VerttyKit"),
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0"),
     ],
     targets: [
         .target(
@@ -16,13 +17,14 @@ let package = Package(
             name: "Vertty",
             dependencies: [
                 "GhosttyC",
+                .product(name: "Sparkle", package: "Sparkle"),
                 .product(name: "VerttyRemote", package: "VerttyKit"),
                 .product(name: "VerttyTailnet", package: "VerttyKit"),
                 .product(name: "VerttyUI", package: "VerttyKit"),
             ],
             path: "Sources/Vertty",
             linkerSettings: [
-                .unsafeFlags(["-L", "build/ghostty/lib"]),
+                .unsafeFlags(["-L", "build/ghostty/lib", "-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"]),
                 .linkedLibrary("ghostty"),
                 .linkedLibrary("c++"),
                 .linkedLibrary("sqlite3"),

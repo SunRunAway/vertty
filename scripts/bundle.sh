@@ -27,12 +27,17 @@ BIN="$(swift build -c release --show-bin-path)"
 
 APP="$ROOT/build/Vertty.app"
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/bin"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/bin" "$APP/Contents/Frameworks"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
-# Release builds stamp the version from the git tag (v1.2.3 -> 1.2.3).
-if [ -n "${VERTTY_VERSION:-}" ]; then
-  plutil -replace CFBundleShortVersionString -string "$VERTTY_VERSION" "$APP/Contents/Info.plist"
+# Local builds use the last release version; releases pass their exact tag version.
+VERSION="${VERTTY_VERSION:-$(git describe --tags --match 'v[0-9]*' --abbrev=0 | sed 's/^v//')}"
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "error: VERTTY_VERSION must be a stable major.minor.patch version" >&2
+  exit 1
 fi
+plutil -replace CFBundleShortVersionString -string "$VERSION" "$APP/Contents/Info.plist"
+plutil -replace CFBundleVersion -string "$VERSION" "$APP/Contents/Info.plist"
+cp -R "$BIN/Sparkle.framework" "$APP/Contents/Frameworks/"
 cp "$BIN/Vertty" "$APP/Contents/MacOS/Vertty"
 cp "$BIN/vertty-sleep" "$APP/Contents/MacOS/vertty-sleep"
 cp "$BIN/vertty-hook" "$APP/Contents/MacOS/vertty-hook"
@@ -49,5 +54,10 @@ chmod +x "$APP/Contents/Resources/bin/"*
 cp -R build/ghostty/share/ghostty "$APP/Contents/Resources/ghostty"
 cp -R build/ghostty/share/terminfo "$APP/Contents/Resources/terminfo"
 
-codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || echo "warning: ad-hoc codesign failed"
+# Preserve Sparkle's signed helpers. Sign our executables first, then the outer bundle.
+for executable in "$APP/Contents/MacOS/"*; do
+  codesign --force --sign - "$executable"
+done
+codesign --force --sign - "$APP"
+codesign --verify --deep --strict "$APP"
 echo "Built $APP"

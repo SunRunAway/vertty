@@ -4,6 +4,7 @@ import UserNotifications
 import GhosttyC
 import VerttyRemote
 import VerttyTailnet
+import Sparkle
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, GhosttyRuntimeDelegate,
     UNUserNotificationCenterDelegate, NSMenuDelegate, NSMenuItemValidation {
@@ -15,6 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     private var pendingScheduleURL: URL?
     private var hookServer: HookServer?
     private var debugSnapshot: DebugSnapshot?
+    private let updaterController = SPUStandardUpdaterController(
+        startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
     private var fileMenu: NSMenu?
     /// The "Remote Connections" submenu: Via Tailscale and Own Network,
     /// each on or off, then the details (see updateRemoteInfoItems).
@@ -92,6 +95,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         }
         DispatchQueue.main.async { self.sleepProtection.start() }
         displayAwake.start()
+        // Scratch instances only contact a feed when an update test explicitly opts in.
+        let environment = ProcessInfo.processInfo.environment
+        if environment["VERTTY_DEBUG_SNAPSHOT"] == nil || environment["VERTTY_TEST_UPDATES"] == "1" {
+            updaterController.startUpdater()
+        }
+    }
+
+    @objc private func toggleAutomaticUpdateChecks() {
+        let updater = updaterController.updater
+        updater.automaticallyChecksForUpdates.toggle()
     }
 
     @objc private func toggleSleepProtection() { sleepProtection.toggle() }
@@ -115,7 +128,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
-        if menuItem.action == #selector(setNewProjectAgent(_:)) {
+        if menuItem.action == #selector(toggleAutomaticUpdateChecks) {
+            menuItem.state = updaterController.updater.automaticallyChecksForUpdates ? .on : .off
+        } else if menuItem.action == #selector(setNewProjectAgent(_:)) {
             menuItem.state = (menuItem.representedObject as? String) == store.globalDefaultKind.rawValue ? .on : .off
         } else if menuItem.action == #selector(toggleSidebar) {
             menuItem.title = store.sidebarVisible ? String(localized: "Hide Sidebar") : String(localized: "Show Sidebar")
@@ -233,6 +248,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
 
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: String(localized: "About Vertty"), action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        let updateItem = NSMenuItem(title: String(localized: "Check for Updates…"),
+                                   action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)), keyEquivalent: "")
+        updateItem.target = updaterController
+        appMenu.addItem(updateItem)
+        appMenu.addItem(item("Automatically Check for Updates", #selector(toggleAutomaticUpdateChecks), ""))
         appMenu.addItem(.separator())
         let agentMenu = NSMenu()
         for kind in AgentKind.allCases {

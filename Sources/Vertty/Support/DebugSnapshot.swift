@@ -79,6 +79,23 @@ final class DebugSnapshot {
         var target: TabSession?
         var targetShell = false
         for line in content.split(separator: "\n").map(String.init) {
+            if line == "checkupdates", let menu = NSApp.mainMenu?.items.first?.submenu,
+               let index = menu.items.firstIndex(where: { $0.action == NSSelectorFromString("checkForUpdates:") }) {
+                RunLoop.main.perform(inModes: [.default, .modalPanel]) { menu.performActionForItem(at: index) }
+                continue
+            }
+            if line.hasPrefix("windowbutton ") {
+                let parts = line.split(separator: " ", maxSplits: 2).map(String.init)
+                if parts.count == 3, let number = Int(parts[1]),
+                   let targetWindow = NSApp.windows.first(where: { $0.windowNumber == number && $0.isVisible }),
+                   let view = targetWindow.contentView,
+                   let button = Self.buttons(in: view).first(where: { $0.title == parts[2] && $0.isEnabled }) {
+                    // An install action may synchronously enter the quit confirmation's
+                    // modal loop. Let this timer return so it can keep driving that loop.
+                    RunLoop.main.perform(inModes: [.default, .modalPanel]) { button.performClick(nil) }
+                }
+                continue
+            }
             // Window-local points from the top left; never clicks another app.
             if line.hasPrefix("click ") || line.hasPrefix("cmdclick "), let window {
                 let parts = line.split(separator: " ")
@@ -422,8 +439,14 @@ final class DebugSnapshot {
         }
 
         var lines: [String] = ["windowSize=\(view.bounds.width),\(view.bounds.height)"]
+        lines.append("pid=\(getpid()) version=\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "-")")
         for auxiliary in NSApp.windows where auxiliary.isVisible && auxiliary !== window {
             lines.append("window=\(auxiliary.windowNumber) class=\(type(of: auxiliary)) size=\(auxiliary.contentView?.bounds.size ?? .zero)")
+            if let content = auxiliary.contentView {
+                for button in Self.buttons(in: content) where !button.title.isEmpty {
+                    lines.append("windowbutton=\(auxiliary.windowNumber) enabled=\(button.isEnabled) title=\(button.title)")
+                }
+            }
             shots.append((CGWindowID(auxiliary.windowNumber), "window-\(auxiliary.windowNumber).png"))
         }
         lines.append("sidebarVisible=\(store.sidebarVisible) sidebarWidth=\(store.sidebarWidth)")
