@@ -14,6 +14,8 @@ xcodebuild -project iOS/Vertty.xcodeproj -scheme Vertty \\
     -derivedDataPath build/ios-dd build
 
 INPUT_ONLY=1 stops after the input bar's checks (typing, keys, paste).
+PASTE_DIAGNOSTICS=1 also checks persistent paste logs, injected hidden/target
+faults, background/foreground events, relaunch, and log rotation (simulator only).
 SIM_DEVICE picks the simulator (default "iPhone 17"; an iPad such as
 "iPad Air 11-inch (M4)" runs the same checks in the side-by-side layout).
 A simulator this script boots is shut down again at the end.
@@ -232,6 +234,14 @@ try:
     # A state.txt left by an earlier run would pass for this one's.
     for name in ("input.txt", "state.txt"):
         (debug_dir / name).unlink(missing_ok=True)
+    paste_log = container / "Documents" / "paste-control.jsonl"
+    if os.environ.get("PASTE_DIAGNOSTICS"):
+        simctl("terminate", udid, BUNDLE, check=False)
+        paste_log.parent.mkdir(parents=True, exist_ok=True)
+        # Existing logs must survive startup; a full file rotates on the first write.
+        paste_log.write_bytes(b" " * (2 * 1024 * 1024))
+        for index in range(1, 4):
+            Path(str(paste_log) + f".{index}").write_text(f"previous-{index}\n")
     launch()
     wait(lambda: (debug_dir / "state.txt").exists(), "the app's debug driver never started")
 
@@ -339,6 +349,40 @@ try:
     drive("send")
     wait(lambda: any(h.startswith("6472616674") for h, _ in inputs()[count:]), "the draft didn't send")
     print("PASS a draft stays in the field while the keyboard is away", flush=True)
+    if os.environ.get("PASTE_DIAGNOSTICS"):
+        def paste_entries():
+            return [json.loads(line) for line in read(paste_log).splitlines() if line.strip()]
+
+        def recorded(event):
+            return [entry for entry in paste_entries() if entry["event"] == event]
+
+        assert Path(str(paste_log) + ".1").stat().st_size == 2 * 1024 * 1024
+        assert Path(str(paste_log) + ".2").read_text() == "previous-1\n"
+        assert Path(str(paste_log) + ".3").read_text() == "previous-2\n"
+        assert not Path(str(paste_log) + ".4").exists()
+        for command in ("diagnostic-hide-paste", "diagnostic-detach-target", "diagnostic-restore-paste"):
+            drive("key " + command)
+            wait(lambda: recorded(command), "missing diagnostic event " + command)
+        assert recorded("diagnostic-hide-paste")[-1]["control"]["hidden"] is True
+        assert recorded("diagnostic-hide-paste")[-1]["effectiveHidden"] is True
+        assert recorded("diagnostic-detach-target")[-1]["targetMatches"] is False
+        restored = recorded("diagnostic-restore-paste")[-1]
+        assert restored["control"]["hidden"] is False and restored["targetMatches"] is True
+        assert restored["ancestors"] and restored["control"]["children"]
+        assert any(e.get("mode") == "field" and e["effectiveHidden"] for e in paste_entries())
+        assert recorded("pasteCallback") and recorded("pasteTextLoaded")
+        assert all(word not in read(paste_log) for word in ("hello", "pasted", "draft")), "text leaked into diagnostics"
+        # A real app lifecycle transition, not the debug driver's network simulation.
+        simctl("launch", udid, "com.apple.Preferences")
+        wait(lambda: recorded("UIApplicationDidEnterBackgroundNotification"), "background not persisted")
+        simctl("launch", udid, BUNDLE)
+        wait(lambda: recorded("UIApplicationDidBecomeActiveNotification.settled"), "foreground not persisted")
+        old_runs = {e["run"] for e in recorded("launch")}
+        launch()
+        wait(lambda: len({e["run"] for e in recorded("launch")}) > len(old_runs), "relaunch lost logs")
+        assert recorded("diagnostic-hide-paste"), "old events lost after relaunch"
+        (root / "paste-control.jsonl").write_text(read(paste_log))
+        print("PASS paste diagnostics capture injected faults, lifecycle, rotation, and survive relaunch without text", flush=True)
     if os.environ.get("INPUT_ONLY"):
         sys.exit(0)
 

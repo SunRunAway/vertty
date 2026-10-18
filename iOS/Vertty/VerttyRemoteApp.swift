@@ -145,6 +145,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         keepRemoteLog()
+        PasteDiagnostics.record("launch", state: [
+            "schema": 1, "os": ProcessInfo.processInfo.operatingSystemVersionString,
+            "version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
+            "build": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "",
+        ], flush: true)
         #if DEBUG
             DebugDriver.shared.start()
         #endif

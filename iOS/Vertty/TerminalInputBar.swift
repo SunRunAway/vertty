@@ -61,6 +61,11 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
     private let fieldToggleCapsule = TerminalInputBar.makeCapsule()
     private let fieldToggle = UIButton(type: .system)
     private var composerHeight: NSLayoutConstraint!
+    private let diagnosticID = UUID().uuidString
+    private var diagnosticTimer: Timer?
+    private var diagnosticState: Data?
+    private var diagnosticTime: TimeInterval = 0
+
     private(set) var mode = Mode.keys
 
     /// Whether the software keyboard is up, and putting it away: the owner
@@ -81,6 +86,80 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
         swipe.delegate = self
         addGestureRecognizer(swipe)
         update()
+        for name in [UIApplication.willResignActiveNotification, UIApplication.didEnterBackgroundNotification,
+                     UIApplication.willEnterForegroundNotification, UIApplication.didBecomeActiveNotification,
+                     UIApplication.didReceiveMemoryWarningNotification, UIApplication.userDidTakeScreenshotNotification,
+                     UIResponder.keyboardWillChangeFrameNotification, UIResponder.keyboardDidChangeFrameNotification,
+                     UIPasteboard.changedNotification] {
+            NotificationCenter.default.addObserver(self, selector: #selector(diagnosticNotification(_:)), name: name, object: nil)
+        }
+        diagnosePaste("created", force: true)
+    }
+
+    deinit {
+        diagnosticTimer?.invalidate()
+        NotificationCenter.default.removeObserver(self)
+        PasteDiagnostics.record("destroyed", state: ["bar": diagnosticID])
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        diagnosticTimer?.invalidate()
+        diagnosticTimer = nil
+        if window != nil {
+            let timer = Timer(timeInterval: 2, repeats: true) { [weak self] _ in
+                guard UIApplication.shared.applicationState == .active else { return }
+                self?.diagnosePaste("sample")
+            }
+            timer.tolerance = 0.5
+            RunLoop.main.add(timer, forMode: .common)
+            diagnosticTimer = timer
+        }
+        diagnosePaste("window", force: true)
+    }
+
+    @objc private func diagnosticNotification(_ notification: Notification) {
+        let event = notification.name.rawValue
+        diagnosePaste(event, force: true, flush: true)
+        // UIKit's system subviews can settle after the notification itself.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self, self.window != nil, UIApplication.shared.applicationState == .active else { return }
+            self.diagnosePaste(event + ".settled", force: true)
+        }
+    }
+
+    private func diagnosePaste(_ event: String, force: Bool = false, flush: Bool = false) {
+        var ancestors: [[String: Any]] = []
+        var ancestor = pasteKey.superview
+        var visible = pasteKey.convert(pasteKey.bounds, to: window)
+        var hidden = pasteKey.isHidden
+        var alpha = pasteKey.alpha
+        while let view = ancestor {
+            ancestors.append(PasteDiagnostics.view(view))
+            hidden = hidden || view.isHidden
+            alpha *= view.alpha
+            if view.clipsToBounds { visible = visible.intersection(view.convert(view.bounds, to: window)) }
+            ancestor = view.superview
+        }
+        if let window { visible = visible.intersection(window.bounds) }
+        let state: [String: Any] = [
+            "bar": diagnosticID, "mode": mode == .keys ? "keys" : "field",
+            "appState": UIApplication.shared.applicationState.rawValue,
+            "sceneState": window?.windowScene?.activationState.rawValue ?? -1,
+            "keyboardUp": keyboardIsUp(), "composerFocused": composer.isFirstResponder,
+            "composerHasText": composer.hasText, "enabled": pasteKey.isEnabled,
+            "targetMatches": pasteKey.target === pasteTarget,
+            "acceptedTypes": pasteTarget.pasteConfiguration?.acceptableTypeIdentifiers ?? [],
+            "effectiveHidden": hidden, "effectiveAlpha": alpha,
+            "clippedRect": NSCoder.string(for: visible),
+            "control": PasteDiagnostics.view(pasteKey, depth: 4), "ancestors": ancestors,
+        ]
+        let data = try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys])
+        let now = ProcessInfo.processInfo.systemUptime
+        guard force || data != diagnosticState || now - diagnosticTime >= 60 else { return }
+        diagnosticState = data
+        diagnosticTime = now
+        PasteDiagnostics.record(event, state: state, flush: flush)
     }
 
     required init?(coder: NSCoder) { fatalError("not supported") }
@@ -222,6 +301,7 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
     override func layoutSubviews() {
         super.layoutSubviews()
         fitComposer()
+        diagnosePaste("layout")
     }
 
     /// The field grows with its lines, up to `maxLines`, then scrolls.
@@ -272,6 +352,7 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
             toggle.accessibilityLabel = label
         }
         fitComposer()
+        diagnosePaste("update")
     }
 
     func focus() { composer.becomeFirstResponder() }
@@ -280,11 +361,14 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
     /// be edited before it's sent. A picture or file goes to the terminal,
     /// which pastes it as its path.
     private func paste(_ providers: [NSItemProvider]) {
+        diagnosePaste("pasteCallback", force: true)
         guard let text = providers.first(where: { $0.canLoadObject(ofClass: NSString.self) }) else {
             terminal?.paste(nil)
             return
         }
-        _ = text.loadObject(ofClass: NSString.self) { [weak self] object, _ in
+        _ = text.loadObject(ofClass: NSString.self) { [weak self] object, error in
+            PasteDiagnostics.record("pasteTextLoaded", state: ["success": object is String,
+                "errorDomain": (error as NSError?)?.domain ?? "", "errorCode": (error as NSError?)?.code ?? 0])
             guard let string = object as? String else { return }
             DispatchQueue.main.async {
                 self?.focus()
@@ -303,6 +387,22 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
 
     /// A key, by its label, for the debug driver.
     func debugPress(_ label: String) {
+        #if DEBUG
+            if ProcessInfo.processInfo.environment["VERTTY_DEBUG"] == "1" {
+                switch label {
+                case "diagnostic-hide-paste": pasteKey.isHidden = true
+                case "diagnostic-detach-target": pasteKey.target = nil
+                case "diagnostic-restore-paste":
+                    pasteKey.isHidden = false
+                    pasteKey.target = pasteTarget
+                default: break
+                }
+                if label.hasPrefix("diagnostic-") {
+                    diagnosePaste(label, force: true, flush: true)
+                    return
+                }
+            }
+        #endif
         if label == "keyboard" { return toggleKeyboard() }
         if label == "paste" { return paste([NSItemProvider(object: "pasted" as NSString)]) }
         if let key = Self.keys.first(where: { $0.label.lowercased() == label.lowercased() }) { press(key.press) }
