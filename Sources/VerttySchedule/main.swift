@@ -105,8 +105,9 @@ let mcpInstructions = """
 Vertty (the terminal app this session runs in) can run a prompt on a schedule: once, daily, on weekdays, or on \
 chosen days of the week, at a wall-clock time in the task's time zone (default: this Mac). A task's first run starts a new session in its project; \
 later runs resume that same session. Runs happen only while Vertty is running and the Mac is awake. Use these \
-tools for any such request ("every Saturday at 9 check dependencies", "move the dependency check to Sunday", \
-"pause that task", "what's scheduled?") instead of cron, cron tools, launchd, /loop or cloud tasks.
+tools for persistent, long-term or general scheduled work ("every Saturday at 9 check dependencies", "move the \
+dependency check to Sunday", "pause that task", "what's scheduled?"). For temporary follow-ups within this session, \
+you may use your built-in cron or /loop.
 Use timezone America/New_York (or another IANA region) to follow local daylight saving changes automatically; \
 use local to follow this Mac. Editing the zone preserves the specified wall-clock time.
 When the user says a task is done or no longer needed, end it; pause is for a break the user means to come back \
