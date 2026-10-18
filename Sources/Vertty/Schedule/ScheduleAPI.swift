@@ -131,7 +131,7 @@ extension AppStore {
         if let v = f["prompt"] as? String { t.prompt = v.trimmingCharacters(in: .whitespacesAndNewlines) }
         if let v = str("repeat") {
             guard let r = ScheduleRepeat(rawValue: v.lowercased()) else {
-                return .failure(APIError(message: "repeat must be once, daily, weekdays or weekly."))
+                return .failure(APIError(message: "repeat must be once, hourly, daily, weekdays or weekly."))
             }
             t.timing.repeatKind = r
         }

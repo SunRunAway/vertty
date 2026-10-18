@@ -19,10 +19,10 @@ usage: vertty-schedule <command> [options]
 fields:
   --name TEXT
   --prompt TEXT | --prompt-file PATH ("-" reads stdin)
-  --repeat once|daily|weekdays|weekly
+  --repeat once|hourly|daily|weekdays|weekly
   --days mon,tue,…          for weekly
   --date YYYY-MM-DD         for once
-  --time HH:MM              24-hour, in the selected time zone
+  --time HH:MM              24-hour, in the selected time zone (hourly: only MM counts)
   --timezone ZONE          e.g. America/New_York; local (default) follows this Mac
   --project PATH|NAME       default: the project of this session
   --agent claude|codex      default: this session's agent
@@ -102,8 +102,8 @@ func replyOK(_ reply: Data) -> Bool {
 // MARK: - MCP
 
 let mcpInstructions = """
-Vertty (the terminal app this session runs in) can run a prompt on a schedule: once, daily, on weekdays, or on \
-chosen days of the week, at a wall-clock time in the task's time zone (default: this Mac). A task's first run starts a new session in its project; \
+Vertty (the terminal app this session runs in) can run a prompt on a schedule: once, hourly, daily, on weekdays, or \
+on chosen days of the week, at a wall-clock time in the task's time zone (default: this Mac). A task's first run starts a new session in its project; \
 later runs resume that same session. Runs happen only while Vertty is running and the Mac is awake. Use these \
 tools for persistent, long-term or general scheduled work ("every Saturday at 9 check dependencies", "move the \
 dependency check to Sunday", "pause that task", "what's scheduled?"). For temporary follow-ups within this session, \
@@ -124,8 +124,8 @@ the context it needs (files, goals, what to report). This conversation isn't the
 let taskFields: [String: Any] = [
     "name": ["type": "string", "description": "A short name for the task."],
     "prompt": ["type": "string", "description": "What to run. It must stand alone: the task runs in a fresh session that hasn't seen this conversation."],
-    "repeat": ["type": "string", "enum": ["once", "daily", "weekdays", "weekly"]],
-    "time": ["type": "string", "description": "HH:MM, 24-hour, in the selected time zone."],
+    "repeat": ["type": "string", "enum": ["once", "hourly", "daily", "weekdays", "weekly"]],
+    "time": ["type": "string", "description": "HH:MM, 24-hour, in the selected time zone. For hourly, only the minutes count."],
     "timezone": ["type": "string", "description": "IANA time zone, e.g. America/New_York (automatically follows DST), or UTC. Default: local (follows this Mac). Edit to local to reset."],
     "days": ["type": "string", "description": "For weekly: any of mon,tue,wed,thu,fri,sat,sun, comma-separated."],
     "date": ["type": "string", "description": "For once: YYYY-MM-DD, in the future."],

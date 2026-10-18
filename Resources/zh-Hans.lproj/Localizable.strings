@@ -136,6 +136,7 @@
 "Planned for %@" = "原计划 %@";
 "Ended %@" = "结束于 %@";
 "Daily %@" = "每天 %@";
+"Hourly %@" = "每小时 %@";
 "Weekdays %@" = "工作日 %@";
 "Every %@ %@" = "每%@ %@";
 ", " = "、";
@@ -148,10 +149,12 @@
 "Project and agent are fixed once the task has its session." = "任务创建会话后，项目和 agent 不能再更改。";
 "Repeat" = "频率";
 "Once" = "单次";
+"Hourly" = "每小时";
 "Daily" = "每天";
 "Weekdays" = "工作日";
 "Weekly" = "每周";
 "Time" = "时间";
+"Minute" = "分钟";
 "Create and Enable" = "创建并启用";
 "Save" = "保存";
 "Enter a name." = "请填写名称。";

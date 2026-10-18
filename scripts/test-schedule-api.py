@@ -122,6 +122,16 @@ try:
     call('delete', {'task_id': zone_id})
     print('PASS MCP/CLI time zones, DST offsets, wall-clock preservation, validation and local reset', flush=True)
 
+    # Hourly runs at the given minute past every hour.
+    hourly = call('create', dict(fields, name='Hourly', repeat='hourly', time='00:15'))['task']
+    assert hourly['repeat'] == 'hourly' and ':15' in hourly['schedule'], hourly
+    next_run = datetime.datetime.fromisoformat(hourly['nextRun'].replace('Z', '+00:00'))
+    now = datetime.datetime.now(datetime.timezone.utc)
+    assert next_run.minute == 15 and now < next_run <= now + datetime.timedelta(hours=1), hourly
+    call('delete', {'task_id': hourly['id']})
+    assert 'once, hourly, daily' in rpc('initialize')['instructions']
+    print('PASS hourly tasks run at their minute past the next hour', flush=True)
+
     # Ending: done for good, until its schedule changes, even if it was paused.
     weekly = call('create', dict(fields, name='Ends', repeat='weekly', days='sat', time='09:00'))['task']['id']
     call('pause', {'task_id': weekly})

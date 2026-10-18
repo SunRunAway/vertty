@@ -94,6 +94,13 @@ assert(ny.next(after: instant("2026-03-08T00:00:00Z")) == instant("2026-03-08T07
 ny.hour = 1
 assert(ny.next(after: instant("2026-11-01T00:00:00Z")) == instant("2026-11-01T05:30:00Z"))
 assert(ny.next(after: instant("2026-11-01T05:30:00Z")) == instant("2026-11-02T06:30:00Z"))
+// Hourly runs at its minute past every hour; the hour repeated in fall runs once.
+ny.repeatKind = .hourly
+ny.minute = 15
+assert(ny.next(after: instant("2026-03-08T06:20:00Z")) == instant("2026-03-08T07:15:00Z"))
+assert(ny.next(after: instant("2026-11-01T05:15:00Z")) == instant("2026-11-01T07:15:00Z"))
+assert(ny.summary.hasPrefix("Hourly :15"))
+ny.minute = 30
 ny.hour = 9
 ny.repeatKind = .weekdays
 assert(ny.next(after: instant("2026-03-06T15:00:00Z")) == instant("2026-03-09T13:30:00Z"))
@@ -129,7 +136,7 @@ changedZone.timing.timeZoneID = "America/Los_Angeles"
 assert(persisted.applyEdit(changedZone) == nil)
 assert(persisted.task(fixed.id)!.nextPlan! > Date())
 assert(persisted.task(fixed.id)!.timing.hour == 9)
-print("PASS: legacy decoding, region persistence, DST transitions, weekdays, weekly, once and system-zone changes")
+print("PASS: legacy decoding, region persistence, DST transitions, hourly, weekdays, weekly, once and system-zone changes")
 
 // A never-run task survives removal, restart and re-addition with a new project ID.
 let oldProject = UUID(), newProject = UUID()

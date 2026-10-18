@@ -409,8 +409,8 @@ struct SchedulePanelView: View {
             PanelGroup(title: "Schedule") {
                 PanelRow("Repeat") {
                     PanelMenu(selection: draft.timing.repeatKind,
-                              options: [(.once, String(localized: "Once")), (.daily, String(localized: "Daily")),
-                                        (.weekdays, String(localized: "Weekdays")), (.weekly, String(localized: "Weekly"))])
+                              options: [(.once, String(localized: "Once")), (.hourly, String(localized: "Hourly")),
+                                        (.daily, String(localized: "Daily")), (.weekdays, String(localized: "Weekdays")), (.weekly, String(localized: "Weekly"))])
                 }
                 if draft.wrappedValue.timing.repeatKind == .weekly {
                     PanelRow("Days") { WeekdayPicker(weekdays: draft.timing.weekdays) }
@@ -423,11 +423,18 @@ struct SchedulePanelView: View {
                             .labelsHidden().fixedSize()
                     }
                 }
-                PanelRow("Time") {
-                    DatePicker("", selection: timeOfDay, displayedComponents: .hourAndMinute)
-                        .environment(\.timeZone, Self.clockCalendar.timeZone)
-                        .environment(\.calendar, Self.clockCalendar)
-                        .labelsHidden().fixedSize()
+                if draft.wrappedValue.timing.repeatKind == .hourly {
+                    PanelRow("Minute") {
+                        PanelMenu(selection: draft.timing.minute,
+                                  options: (0..<60).map { ($0, String(format: ":%02d", $0)) })
+                    }
+                } else {
+                    PanelRow("Time") {
+                        DatePicker("", selection: timeOfDay, displayedComponents: .hourAndMinute)
+                            .environment(\.timeZone, Self.clockCalendar.timeZone)
+                            .environment(\.calendar, Self.clockCalendar)
+                            .labelsHidden().fixedSize()
+                    }
                 }
                 PanelRow("Time Zone", divider: false) {
                     ScheduleTimeZonePicker(selection: draft.timing.timeZoneID)

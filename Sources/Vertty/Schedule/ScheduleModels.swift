@@ -2,13 +2,14 @@ import Foundation
 
 /// How often a scheduled task runs.
 enum ScheduleRepeat: String, Codable, CaseIterable, Identifiable {
-    case once, daily, weekdays, weekly
+    case once, hourly, daily, weekdays, weekly
     var id: String { rawValue }
 }
 
 /// When a task runs: wall-clock time in the selected time zone (not every 24 hours).
 struct ScheduleTiming: Codable, Equatable {
     var repeatKind: ScheduleRepeat = .weekly
+    /// Unused by .hourly, which runs at `minute` past every hour.
     var hour = 9
     var minute = 0
     /// Calendar weekdays (1 = Sunday … 7 = Saturday) for .weekly.
@@ -48,6 +49,9 @@ struct ScheduleTiming: Codable, Equatable {
         case .once:
             guard let at = onceDate, at > date else { return nil }
             return at
+        case .hourly:
+            return cal.nextDate(after: date, matching: DateComponents(minute: minute, second: 0), matchingPolicy: .nextTime,
+                                repeatedTimePolicy: .first, direction: .forward)
         case .daily:
             return nextMatch(cal, after: date, weekday: nil)
         case .weekdays:
@@ -82,7 +86,7 @@ struct ScheduleTiming: Codable, Equatable {
         }
     }
 
-    /// "Every Sat 09:00", "Weekdays 09:00", "Once Oct 17 09:00"…
+    /// "Every Sat 09:00", "Weekdays 09:00", "Hourly :15", "Once Oct 17 09:00"…
     var summary: String {
         guard let timeZoneID else { return wallTimeSummary }
         return "\(wallTimeSummary) · \(timeZoneID)"
@@ -91,6 +95,7 @@ struct ScheduleTiming: Codable, Equatable {
     private var wallTimeSummary: String {
         let time = String(format: "%02d:%02d", hour, minute)
         switch repeatKind {
+        case .hourly: return String(localized: "Hourly \(String(format: ":%02d", minute))")
         case .daily: return String(localized: "Daily \(time)")
         case .weekdays: return String(localized: "Weekdays \(time)")
         case .weekly:
