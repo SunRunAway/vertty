@@ -621,6 +621,15 @@ final class AppStore: ObservableObject {
     /// first 29 characters; the thread title is the full id until the thread has one.
     private func terminalTitleChanged(_ tab: TabSession, _ raw: String) {
         var title = raw.trimmingCharacters(in: .whitespaces)
+        // While it waits for an answer, Codex puts "[ ! ] Action Required" in
+        // front of the title and blinks it with "[ . ]" every second. It isn't
+        // part of the name; left in, the title would change every second.
+        var actionRequired = false
+        if tab.kind == .codex,
+           let range = title.range(of: #"^\[ [!.] \] Action Required( \| |$)"#, options: .regularExpression) {
+            actionRequired = true
+            title.removeSubrange(range)
+        }
         var glyph: Character?
         if let first = title.first, !first.isLetter, !first.isNumber,
            title.count > 2, title[title.index(after: title.startIndex)] == " " {
@@ -629,7 +638,7 @@ final class AppStore: ObservableObject {
         }
 
         // Any glyph other than "✳" (◐◓◑◒, braille dots, ✶✻…) is the spinner.
-        let busy: Bool? = tab.kind == .codex ? glyph != nil : glyph.map { $0 != "✳" }
+        let busy: Bool? = tab.kind == .codex ? actionRequired || glyph != nil : glyph.map { $0 != "✳" }
         if let busy {
             let wasBusy = tab.titleBusy
             tab.titleBusy = busy
