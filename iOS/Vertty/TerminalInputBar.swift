@@ -45,26 +45,31 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
     /// Brings the keyboard up and puts it away, always at the right end:
     /// the last of the keys, and beside the field while it shows.
     private let keysToggle = UIButton(type: .system)
-    /// The system's paste key: one the app draws itself would have iOS ask
-    /// for permission on every paste.
-    private lazy var pasteKey: UIPasteControl = {
+    /// Keep the native control for the lifetime of the app. If iOS retires
+    /// its rendering service, a newly created control can be blank while
+    /// the already rendered control still displays and pastes correctly.
+    /// Using the native control also preserves permission-free pasting.
+    static let sharedPasteKey: UIPasteControl = {
         let config = UIPasteControl.Configuration()
         config.displayMode = .iconOnly
         config.cornerStyle = .capsule
         config.baseBackgroundColor = UIColor.systemGray5.withAlphaComponent(0.92)
         config.baseForegroundColor = .label
         let key = UIPasteControl(configuration: config)
-        key.target = pasteTarget
+        key.translatesAutoresizingMaskIntoConstraints = false
+        key.accessibilityIdentifier = "terminal-paste"
         return key
     }()
+    private var pasteKey: UIPasteControl { Self.sharedPasteKey }
+    /// Each bar keeps its own space in the row, even before it is on screen.
+    /// Constructing an offscreen bar must not take the current bar's control.
+    private let pasteSlot = UIView()
     private lazy var pasteTarget = PasteTarget { [weak self] providers in self?.paste(providers) }
     private let fieldToggleCapsule = TerminalInputBar.makeCapsule()
     private let fieldToggle = UIButton(type: .system)
     private var composerHeight: NSLayoutConstraint!
     private let diagnosticID = UUID().uuidString
-    private var diagnosticTimer: Timer?
-    private var diagnosticState: Data?
-    private var diagnosticTime: TimeInterval = 0
+    private var pendingAttachmentLog = false
 
     private(set) var mode = Mode.keys
 
@@ -86,80 +91,56 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
         swipe.delegate = self
         addGestureRecognizer(swipe)
         update()
-        for name in [UIApplication.willResignActiveNotification, UIApplication.didEnterBackgroundNotification,
-                     UIApplication.willEnterForegroundNotification, UIApplication.didBecomeActiveNotification,
-                     UIApplication.didReceiveMemoryWarningNotification, UIApplication.userDidTakeScreenshotNotification,
-                     UIResponder.keyboardWillChangeFrameNotification, UIResponder.keyboardDidChangeFrameNotification,
-                     UIPasteboard.changedNotification] {
+        for name in [UIApplication.didBecomeActiveNotification, UIApplication.didEnterBackgroundNotification] {
             NotificationCenter.default.addObserver(self, selector: #selector(diagnosticNotification(_:)), name: name, object: nil)
         }
-        diagnosePaste("created", force: true)
     }
 
     deinit {
-        diagnosticTimer?.invalidate()
         NotificationCenter.default.removeObserver(self)
-        PasteDiagnostics.record("destroyed", state: ["bar": diagnosticID])
     }
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        diagnosticTimer?.invalidate()
-        diagnosticTimer = nil
+        pendingAttachmentLog = window != nil
         if window != nil {
-            let timer = Timer(timeInterval: 2, repeats: true) { [weak self] _ in
-                guard UIApplication.shared.applicationState == .active else { return }
-                self?.diagnosePaste("sample")
-            }
-            timer.tolerance = 0.5
-            RunLoop.main.add(timer, forMode: .common)
-            diagnosticTimer = timer
+            attachPasteKey()
+        } else if pasteKey.superview === pasteSlot {
+            // A departing bar must not detach a control the next bar owns.
+            // The target is weak; leave it alone instead of restyling the
+            // retained control by explicitly clearing it between screens.
+            pasteKey.removeFromSuperview()
+            diagnosePaste("detached")
         }
-        diagnosePaste("window", force: true)
+    }
+
+    private func attachPasteKey() {
+        if pasteKey.superview !== pasteSlot {
+            pasteKey.removeFromSuperview()
+            pasteSlot.addSubview(pasteKey)
+            NSLayoutConstraint.activate([
+                pasteKey.leadingAnchor.constraint(equalTo: pasteSlot.leadingAnchor),
+                pasteKey.trailingAnchor.constraint(equalTo: pasteSlot.trailingAnchor),
+                pasteKey.topAnchor.constraint(equalTo: pasteSlot.topAnchor),
+                pasteKey.bottomAnchor.constraint(equalTo: pasteSlot.bottomAnchor),
+            ])
+        }
+        pasteKey.target = pasteTarget
     }
 
     @objc private func diagnosticNotification(_ notification: Notification) {
-        let event = notification.name.rawValue
-        diagnosePaste(event, force: true, flush: true)
-        // UIKit's system subviews can settle after the notification itself.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            guard let self, self.window != nil, UIApplication.shared.applicationState == .active else { return }
-            self.diagnosePaste(event + ".settled", force: true)
-        }
+        guard window != nil, pasteKey.superview === pasteSlot else { return }
+        diagnosePaste(notification.name.rawValue, flush: true)
     }
 
-    private func diagnosePaste(_ event: String, force: Bool = false, flush: Bool = false) {
-        var ancestors: [[String: Any]] = []
-        var ancestor = pasteKey.superview
-        var visible = pasteKey.convert(pasteKey.bounds, to: window)
-        var hidden = pasteKey.isHidden
-        var alpha = pasteKey.alpha
-        while let view = ancestor {
-            ancestors.append(PasteDiagnostics.view(view))
-            hidden = hidden || view.isHidden
-            alpha *= view.alpha
-            if view.clipsToBounds { visible = visible.intersection(view.convert(view.bounds, to: window)) }
-            ancestor = view.superview
-        }
-        if let window { visible = visible.intersection(window.bounds) }
-        let state: [String: Any] = [
+    private func diagnosePaste(_ event: String, flush: Bool = false) {
+        PasteDiagnostics.record(event, state: [
             "bar": diagnosticID, "mode": mode == .keys ? "keys" : "field",
-            "appState": UIApplication.shared.applicationState.rawValue,
-            "sceneState": window?.windowScene?.activationState.rawValue ?? -1,
-            "keyboardUp": keyboardIsUp(), "composerFocused": composer.isFirstResponder,
-            "composerHasText": composer.hasText, "enabled": pasteKey.isEnabled,
+            "ownsPasteControl": pasteKey.superview === pasteSlot,
             "targetMatches": pasteKey.target === pasteTarget,
-            "acceptedTypes": pasteTarget.pasteConfiguration?.acceptableTypeIdentifiers ?? [],
-            "effectiveHidden": hidden, "effectiveAlpha": alpha,
-            "clippedRect": NSCoder.string(for: visible),
-            "control": PasteDiagnostics.view(pasteKey, depth: 4), "ancestors": ancestors,
-        ]
-        let data = try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys])
-        let now = ProcessInfo.processInfo.systemUptime
-        guard force || data != diagnosticState || now - diagnosticTime >= 60 else { return }
-        diagnosticState = data
-        diagnosticTime = now
-        PasteDiagnostics.record(event, state: state, flush: flush)
+            "enabled": pasteKey.isEnabled,
+            "control": PasteDiagnostics.view(pasteKey),
+        ], flush: flush)
     }
 
     required init?(coder: NSCoder) { fatalError("not supported") }
@@ -186,7 +167,7 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
     private func setUpKeys() {
         styleKey(keysToggle)
         keysToggle.addAction(UIAction { [weak self] _ in self?.toggleKeyboard() }, for: .touchUpInside)
-        let row = UIStackView(arrangedSubviews: Self.keys.map(makeKey) + [pasteKey, keysToggle])
+        let row = UIStackView(arrangedSubviews: Self.keys.map(makeKey) + [pasteSlot, keysToggle])
         row.translatesAutoresizingMaskIntoConstraints = false
         row.axis = .horizontal
         row.distribution = .fillEqually
@@ -301,7 +282,10 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
     override func layoutSubviews() {
         super.layoutSubviews()
         fitComposer()
-        diagnosePaste("layout")
+        if pendingAttachmentLog, pasteKey.superview === pasteSlot, pasteKey.bounds.width > 0 {
+            pendingAttachmentLog = false
+            diagnosePaste("attached")
+        }
     }
 
     /// The field grows with its lines, up to `maxLines`, then scrolls.
@@ -352,7 +336,6 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
             toggle.accessibilityLabel = label
         }
         fitComposer()
-        diagnosePaste("update")
     }
 
     func focus() { composer.becomeFirstResponder() }
@@ -361,7 +344,7 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
     /// be edited before it's sent. A picture or file goes to the terminal,
     /// which pastes it as its path.
     private func paste(_ providers: [NSItemProvider]) {
-        diagnosePaste("pasteCallback", force: true)
+        diagnosePaste("pasteCallback")
         guard let text = providers.first(where: { $0.canLoadObject(ofClass: NSString.self) }) else {
             terminal?.paste(nil)
             return
@@ -388,19 +371,9 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
     /// A key, by its label, for the debug driver.
     func debugPress(_ label: String) {
         #if DEBUG
-            if ProcessInfo.processInfo.environment["VERTTY_DEBUG"] == "1" {
-                switch label {
-                case "diagnostic-hide-paste": pasteKey.isHidden = true
-                case "diagnostic-detach-target": pasteKey.target = nil
-                case "diagnostic-restore-paste":
-                    pasteKey.isHidden = false
-                    pasteKey.target = pasteTarget
-                default: break
-                }
-                if label.hasPrefix("diagnostic-") {
-                    diagnosePaste(label, force: true, flush: true)
-                    return
-                }
+            if ProcessInfo.processInfo.environment["VERTTY_DEBUG"] == "1", label == "diagnostic-snapshot" {
+                diagnosePaste(label, flush: true)
+                return
             }
         #endif
         if label == "keyboard" { return toggleKeyboard() }

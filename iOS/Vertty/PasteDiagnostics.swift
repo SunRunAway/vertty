@@ -1,9 +1,9 @@
 import UIKit
 import os
 
-/// Persistent metadata for a disappearing system paste control. Never reads
-/// clipboard or text fields; records no accessibility text or layer contents.
-/// View/layer metadata cannot prove that the system actually drew the icon.
+/// Sparse lifecycle and paste-result metadata. Never reads clipboard or text
+/// fields; stores no image data. Child geometry helps distinguish a retained
+/// rendered control from an empty one, but does not prove the icon is visible.
 enum PasteDiagnostics {
     private static let logger = Logger(subsystem: "dev.vertty", category: "paste-control")
     private static let queue = DispatchQueue(label: "vertty.paste-diagnostics")
@@ -65,41 +65,22 @@ enum PasteDiagnostics {
                 handle = nil
             }
         }
-        // Complete lifecycle/screenshot writes before suspension, not just enqueue them.
+        // Complete lifecycle writes before suspension, not just enqueue them.
         if flush { queue.sync {} }
     }
 
-    static func view(_ view: UIView, depth: Int = 0) -> [String: Any] {
-        var result: [String: Any] = [
-            "class": NSStringFromClass(type(of: view)),
+    static func view(_ view: UIView) -> [String: Any] {
+        [
             "id": String(describing: ObjectIdentifier(view)),
-            "frame": NSCoder.string(for: view.frame), "bounds": NSCoder.string(for: view.bounds),
-            "hidden": view.isHidden, "alpha": view.alpha,
-            "clips": view.clipsToBounds, "interactive": view.isUserInteractionEnabled,
-            "inWindow": view.window != nil, "ambiguous": view.hasAmbiguousLayout,
-            "layer": layer(view.layer, depth: depth > 0 ? 2 : 0),
+            "bounds": NSCoder.string(for: view.bounds),
+            "hidden": view.isHidden, "inWindow": view.window != nil,
+            // Only the immediate rendering views; no recursive hierarchy,
+            // ancestor, animation or presentation-layer inspection.
+            "children": view.subviews.map { child in
+                ["id": String(describing: ObjectIdentifier(child)),
+                 "bounds": NSCoder.string(for: child.bounds),
+                 "layer": ["hasContents": child.layer.contents != nil]] as [String: Any]
+            },
         ]
-        if let window = view.window {
-            result["windowRect"] = NSCoder.string(for: view.convert(view.bounds, to: window))
-        }
-        if depth > 0 { result["children"] = view.subviews.map { self.view($0, depth: depth - 1) } }
-        return result
-    }
-
-    private static func layer(_ layer: CALayer, depth: Int) -> [String: Any] {
-        var result: [String: Any] = [
-            "class": NSStringFromClass(type(of: layer)), "id": String(describing: ObjectIdentifier(layer)),
-            "hidden": layer.isHidden, "hasContents": layer.contents != nil,
-            "opacity": layer.opacity, "bounds": NSCoder.string(for: layer.bounds),
-            "position": NSCoder.string(for: layer.position), "transform": String(describing: layer.transform),
-            "clips": layer.masksToBounds, "animationKeys": layer.animationKeys() ?? [],
-        ]
-        if let presentation = layer.presentation() {
-            result["presentation"] = ["opacity": presentation.opacity,
-                                      "hidden": presentation.isHidden,
-                                      "frame": NSCoder.string(for: presentation.frame)] as [String: Any]
-        }
-        if depth > 0 { result["children"] = (layer.sublayers ?? []).map { self.layer($0, depth: depth - 1) } }
-        return result
     }
 }

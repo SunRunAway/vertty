@@ -14,8 +14,8 @@ xcodebuild -project iOS/Vertty.xcodeproj -scheme Vertty \\
     -derivedDataPath build/ios-dd build
 
 INPUT_ONLY=1 stops after the input bar's checks (typing, keys, paste).
-PASTE_DIAGNOSTICS=1 also checks persistent paste logs, injected hidden/target
-faults, background/foreground events, relaunch, and log rotation (simulator only).
+PASTE_DIAGNOSTICS=1 also checks paste control reuse, sparse persistent logs,
+background/foreground events, relaunch, and log rotation (simulator only).
 SIM_DEVICE picks the simulator (default "iPhone 17"; an iPad such as
 "iPad Air 11-inch (M4)" runs the same checks in the side-by-side layout).
 A simulator this script boots is shut down again at the end.
@@ -360,29 +360,50 @@ try:
         assert Path(str(paste_log) + ".2").read_text() == "previous-1\n"
         assert Path(str(paste_log) + ".3").read_text() == "previous-2\n"
         assert not Path(str(paste_log) + ".4").exists()
-        for command in ("diagnostic-hide-paste", "diagnostic-detach-target", "diagnostic-restore-paste"):
-            drive("key " + command)
-            wait(lambda: recorded(command), "missing diagnostic event " + command)
-        assert recorded("diagnostic-hide-paste")[-1]["control"]["hidden"] is True
-        assert recorded("diagnostic-hide-paste")[-1]["effectiveHidden"] is True
-        assert recorded("diagnostic-detach-target")[-1]["targetMatches"] is False
-        restored = recorded("diagnostic-restore-paste")[-1]
-        assert restored["control"]["hidden"] is False and restored["targetMatches"] is True
-        assert restored["ancestors"] and restored["control"]["children"]
-        assert any(e.get("mode") == "field" and e["effectiveHidden"] for e in paste_entries())
+        drive("key diagnostic-snapshot")
+        wait(lambda: recorded("diagnostic-snapshot"), "missing paste snapshot")
+        original = recorded("diagnostic-snapshot")[-1]
+        assert original["ownsPasteControl"] and original["targetMatches"]
+        assert original["control"]["children"]
         assert recorded("pasteCallback") and recorded("pasteTextLoaded")
         assert all(word not in read(paste_log) for word in ("hello", "pasted", "draft")), "text leaked into diagnostics"
+        # An idle visible bar no longer polls or writes recurring snapshots.
+        time.sleep(1)
+        idle_size = paste_log.stat().st_size
+        time.sleep(3)
+        assert paste_log.stat().st_size == idle_size, "idle bar still writes diagnostics"
+        # Navigation must move the already rendered native control to the
+        # next bar, keeping its identity and rebinding its paste target.
+        previous = original
+        for _ in range(2):
+            drive("back")
+            wait(lambda: terminal("bar") is None, "leaving didn't remove the bar")
+            # Selection clears before the navigation animation removes the
+            # outgoing controller; don't reopen while it is still on screen.
+            wait(lambda: any(e["bar"] == previous["bar"] for e in recorded("detached")),
+                 "leaving didn't detach the paste control")
+            drive("open 0")
+            wait(lambda: terminal("bar") == "keys", "reopening didn't show the bar")
+            samples = len(recorded("diagnostic-snapshot"))
+            drive("key diagnostic-snapshot")
+            wait(lambda: len(recorded("diagnostic-snapshot")) > samples, "missing reopened paste snapshot")
+            current = recorded("diagnostic-snapshot")[-1]
+            assert current["bar"] != previous["bar"], "navigation reused the old bar"
+            assert current["control"]["id"] == previous["control"]["id"], "navigation recreated the paste control"
+            assert current["ownsPasteControl"] and current["targetMatches"] and current["control"]["inWindow"]
+            previous = current
+        print("PASS navigation keeps the native paste control and rebinds it to the visible bar", flush=True)
         # A real app lifecycle transition, not the debug driver's network simulation.
         simctl("launch", udid, "com.apple.Preferences")
         wait(lambda: recorded("UIApplicationDidEnterBackgroundNotification"), "background not persisted")
         simctl("launch", udid, BUNDLE)
-        wait(lambda: recorded("UIApplicationDidBecomeActiveNotification.settled"), "foreground not persisted")
+        wait(lambda: recorded("UIApplicationDidBecomeActiveNotification"), "foreground not persisted")
         old_runs = {e["run"] for e in recorded("launch")}
         launch()
         wait(lambda: len({e["run"] for e in recorded("launch")}) > len(old_runs), "relaunch lost logs")
-        assert recorded("diagnostic-hide-paste"), "old events lost after relaunch"
+        assert recorded("diagnostic-snapshot"), "old events lost after relaunch"
         (root / "paste-control.jsonl").write_text(read(paste_log))
-        print("PASS paste diagnostics capture injected faults, lifecycle, rotation, and survive relaunch without text", flush=True)
+        print("PASS sparse paste diagnostics capture reuse, lifecycle, rotation, and survive relaunch without text", flush=True)
     if os.environ.get("INPUT_ONLY"):
         sys.exit(0)
 
