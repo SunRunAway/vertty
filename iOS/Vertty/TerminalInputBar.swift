@@ -31,7 +31,7 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
     private static let keys: [Key] = [
         Key(label: "Esc", image: nil, accessibility: NSLocalizedString("Escape", comment: "Key"), press: TerminalKeyPress(.escape)),
         Key(label: "Tab", image: "arrow.right.to.line", accessibility: NSLocalizedString("Tab", comment: "Key"), press: TerminalKeyPress(.tab)),
-        Key(label: "⇧Tab", image: nil, accessibility: NSLocalizedString("Shift-Tab", comment: "Key"), press: TerminalKeyPress(.tab, modifiers: .shift)),
+        Key(label: "⇧←", image: nil, accessibility: NSLocalizedString("Shift-Left Arrow", comment: "Key"), press: TerminalKeyPress(.arrowLeft, modifiers: .shift)),
         Key(label: "^C", image: nil, accessibility: NSLocalizedString("Control-C", comment: "Key"), press: TerminalKeyPress(.c, modifiers: .ctrl)),
         Key(label: "↓", image: "arrowtriangle.down.fill", accessibility: NSLocalizedString("Down Arrow", comment: "Key"), press: TerminalKeyPress(.arrowDown)),
         Key(label: "↑", image: "arrowtriangle.up.fill", accessibility: NSLocalizedString("Up Arrow", comment: "Key"), press: TerminalKeyPress(.arrowUp)),

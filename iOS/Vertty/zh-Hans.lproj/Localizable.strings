@@ -3,7 +3,7 @@
 "Send" = "发送";
 "Escape" = "Esc";
 "Tab" = "Tab";
-"Shift-Tab" = "Shift-Tab";
+"Shift-Left Arrow" = "Shift-左箭头";
 "Control-C" = "Control-C";
 "Down Arrow" = "下箭头";
 "Up Arrow" = "上箭头";

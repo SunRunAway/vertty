@@ -296,7 +296,7 @@ try:
     # With nothing typed, Return and Backspace are the terminal's, as are
     # the bar's keys and sliding on the space bar (Left presses).
     for command, sent, what in (("enter", "0d", "Return"), ("backspace", "7f", "Backspace"),
-                                ("key esc", "1b", "Esc"), ("key ⇧tab", "1b5b5a", "Shift-Tab"),
+                                ("key esc", "1b", "Esc"), ("key ⇧←", "1b5b313b3244", "Shift-Left"),
                                 ("key ^c", "03", "Ctrl+C"), ("key ↓", "1b5b42", "Down"),
                                 ("slide -2", "1b5b44", "sliding on the space bar")):
         count = len(inputs())
