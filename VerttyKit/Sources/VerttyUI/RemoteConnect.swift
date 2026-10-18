@@ -25,8 +25,9 @@ public extension RemoteEndpoint {
                 RemoteLog.note("tailnet: didn't start (\(error))")
                 throw ConnectFailure(unreachable)
             }
+            let found = try await tailnet.waitForComputer(id: id, hostName: hostName)
             let computers = Tailnet.describe(tailnet.computers)
-            guard let device = tailnet.computer(id: id, hostName: hostName) else {
+            guard let device = found else {
                 RemoteLog.note("tailnet: \(hostName)/\(id) not found among \(tailnet.devices.count) devices, computers=\(computers)")
                 throw ConnectFailure(String(localized: "This computer is no longer on your Tailscale network.", bundle: .verttyUIResources))
             }

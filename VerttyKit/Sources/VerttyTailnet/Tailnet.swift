@@ -260,6 +260,19 @@ public final class Tailnet: ObservableObject {
         devices.first { $0.id == id } ?? computers.first { $0.hostName == hostName }
     }
 
+    /// The computer, once it's listed and online: right after the device
+    /// starts it reports running with its saved login before the list of
+    /// devices comes in (a few seconds). Whatever is listed by the timeout.
+    @MainActor
+    public func waitForComputer(id: String, hostName: String, timeout: TimeInterval = 10) async throws -> Device? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while true {
+            let device = computer(id: id, hostName: hostName)
+            if device?.online == true || Date() > deadline || state != .running { return device }
+            try await Task.sleep(nanoseconds: 250_000_000)
+        }
+    }
+
     /// Connects to `device`:`port` and returns a port on 127.0.0.1 that
     /// takes one connection to it, for a short while.
     public func dial(_ device: Device, port: UInt16, timeout: TimeInterval = 10) async throws -> UInt16 {

@@ -258,7 +258,11 @@ try:
     simctl("io", udid, "screenshot", str(root / "terminal.png"))
     print("PASS the card's terminal opens and typing round-trips over Tailscale", flush=True)
 
+    # The state the app wrote before is stale once it's started again.
+    simctl("terminate", udid, BUNDLE)
+    (debug_dir / "state.txt").unlink(missing_ok=True)
     launch()
+    wait(lambda: (debug_dir / "state.txt").exists(), "started again, the app's debug driver didn't start")
     wait(lambda: status() == "connected" and card_id in phone(),
          "started again, the app didn't connect to the computer through Tailscale", 90)
     print("PASS started again, the app connects to the same computer through Tailscale", flush=True)
