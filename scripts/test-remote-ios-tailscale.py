@@ -7,8 +7,9 @@ simulator with its debug driver. Both sign in with a Tailscale auth key from
 TS_AUTHKEY (tsnet reads it from the environment; the simulator app gets it
 as SIMCTL_CHILD_TS_AUTHKEY); use a key for test devices only (reusable,
 ephemeral, no tags). Checks that the app lists the computer, connects,
-drives the card, connects again through Tailscale when started again, and
-signs out. Build first as for scripts/test-remote-ios.py.
+drives the card, connects again through Tailscale when started again (and
+keeps trying while the computer is away), and signs out. Build first as
+for scripts/test-remote-ios.py.
 
     TS_AUTHKEY="$(cat <key file>)" python3 scripts/test-remote-ios-tailscale.py
 """
@@ -266,6 +267,24 @@ try:
     wait(lambda: status() == "connected" and card_id in phone(),
          "started again, the app didn't connect to the computer through Tailscale", 90)
     print("PASS started again, the app connects to the same computer through Tailscale", flush=True)
+
+    # Started again while the computer can't be reached: no error, it
+    # keeps trying, and connects once the computer is back.
+    def server_drive(line):
+        inbox = server_snap / "input.txt"
+        wait(lambda: not inbox.exists(), "the server didn't take its last command")
+        inbox.write_text(line + "\n")
+    simctl("terminate", udid, BUNDLE)
+    server_drive("remotemode tailscale")
+    wait(lambda: tailnet_field(server_state_txt(), "state") == "stopped", "the server's Tailscale device didn't stop")
+    (debug_dir / "state.txt").unlink(missing_ok=True)
+    launch()
+    wait(lambda: status() == "reconnecting", "started again, the app didn't try to connect")
+    # Past one attempt's wait for the computer (20 s) and the retry after it.
+    assert not settle(lambda: status() != "reconnecting", 30), "it stopped trying:\n" + phone()
+    server_drive("remotemode tailscale")
+    wait(lambda: status() == "connected" and card_id in phone(), "the app didn't connect once the computer was back", 120)
+    print("PASS started again while the computer is away, it keeps trying and connects once it's back", flush=True)
 
     drive("disconnect")
     prefs = container / "Library" / "Preferences" / f"{BUNDLE}.plist"

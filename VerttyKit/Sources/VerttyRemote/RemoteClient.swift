@@ -19,7 +19,8 @@ public final class RemoteClient: ObservableObject {
         /// Connecting because the user asked to.
         case connecting
         case connected
-        /// The connection dropped; trying again on its own.
+        /// The connection dropped, or the app started again while it was
+        /// connected; trying again on its own until it connects.
         case reconnecting
         /// Another device connected to the computer. Stays this way until
         /// the user connects again.
@@ -43,7 +44,12 @@ public final class RemoteClient: ObservableObject {
     /// Off while the iPhone app is in the background: a dropped connection
     /// waits for resumeIfDropped().
     public var reconnectsAutomatically = true {
-        didSet { if reconnectsAutomatically { resumeIfDropped() } else { cancelRetry() } }
+        didSet {
+            // Set again unchanged (the app becoming active as it starts),
+            // it leaves the attempt under way alone.
+            guard reconnectsAutomatically != oldValue else { return }
+            if reconnectsAutomatically { resumeIfDropped() } else { cancelRetry() }
+        }
     }
 
     private let platform: Remote.ClientPlatform
@@ -82,10 +88,11 @@ public final class RemoteClient: ObservableObject {
 
     /// Connects again as the connection that was given `token`, as when the
     /// app starts after being quit while connected: refused, as replaced, if
-    /// another device connected since.
+    /// another device connected since. Like a dropped connection, it keeps
+    /// trying until it connects (the computer may not be reachable yet).
     public func connect(resuming token: String) {
         self.token = token
-        status = .connecting
+        status = .reconnecting
         start()
     }
 

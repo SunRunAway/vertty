@@ -16,22 +16,17 @@ public extension RemoteEndpoint {
         return RemoteEndpoint(name: name, detail: "Tailscale: \(hostName)", unreachable: unreachable) {
             let tailnet = Tailnet.shared
             RemoteLog.note("tailnet: finding \(hostName)/\(id), state=\(tailnet.state)")
+            // Not listed isn't gone: right after starting, the list can
+            // still be the cached one. Unreachable this time; the client
+            // tries again if it's reconnecting.
+            let device: Tailnet.Device
             do {
-                try await tailnet.waitUntilRunning()
+                device = try await tailnet.waitForComputer(id: id, hostName: hostName)
             } catch Tailnet.Failure.notSignedIn, Tailnet.Failure.notStarted {
                 RemoteLog.note("tailnet: not signed in or not started, state=\(tailnet.state)")
                 throw ConnectFailure(String(localized: "Sign in to Tailscale to connect to this computer.", bundle: .verttyUIResources))
             } catch {
-                RemoteLog.note("tailnet: didn't start (\(error))")
-                throw ConnectFailure(unreachable)
-            }
-            let computers = Tailnet.describe(tailnet.computers)
-            guard let device = tailnet.computer(id: id, hostName: hostName) else {
-                RemoteLog.note("tailnet: \(hostName)/\(id) not found among \(tailnet.devices.count) devices, computers=\(computers)")
-                throw ConnectFailure(String(localized: "This computer is no longer on your Tailscale network.", bundle: .verttyUIResources))
-            }
-            guard device.online else {
-                RemoteLog.note("tailnet: \(device.dnsName)/\(device.id) offline, computers=\(computers)")
+                RemoteLog.note("tailnet: \(hostName)/\(id) not listed online (\(error)), state=\(tailnet.state), among \(tailnet.devices.count) devices, computers=\(Tailnet.describe(tailnet.computers))")
                 throw ConnectFailure(unreachable)
             }
             do {

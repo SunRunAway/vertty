@@ -36,11 +36,6 @@ import (
 func init() {
 	// Don't upload the device's logs to Tailscale.
 	os.Setenv("TS_NO_LOGS_NO_SUPPORT", "true")
-	// Started again, Tailscale would report running at once with the
-	// network map it cached on disk, before the live one comes in; the
-	// cached one lists no other devices, so the computer to connect to
-	// looked gone. Without it, running means the list is the live one.
-	os.Setenv("TS_USE_CACHED_NETMAP", "false")
 	// On the Mac, Tailscale's peer API (Taildrop and the like) would also
 	// listen on a port of every interface, where the firewall asks about
 	// it. When that listener can't be made, tsnet serves the peer API in

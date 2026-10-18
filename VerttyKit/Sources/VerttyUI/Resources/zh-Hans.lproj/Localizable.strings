@@ -71,7 +71,6 @@
 /* Connecting: Tailscale or the user's own network. */
 "Can't reach the computer over Tailscale. Check that it's on and that Via Tailscale is checked under Remote Connections in its Vertty menu." = "无法通过 Tailscale 连接这台电脑。请确认它已开机，并且它的 Vertty 菜单“远程连接”中选了“通过 Tailscale”。";
 "Sign in to Tailscale to connect to this computer." = "请先登录 Tailscale，再连接这台电脑。";
-"This computer is no longer on your Tailscale network." = "这台电脑已不在你的 Tailscale 网络中。";
 "Tailscale" = "Tailscale";
 "Sign in with the same Tailscale account as Vertty on your computer. You don't need the Tailscale app." = "登录与电脑上 Vertty 相同的 Tailscale 账号，无需安装 Tailscale App。";
 "Address" = "地址";

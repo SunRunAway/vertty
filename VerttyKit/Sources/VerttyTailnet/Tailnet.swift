@@ -238,26 +238,31 @@ public final class Tailnet: ObservableObject {
 
     // MARK: - Connecting
 
-    /// Waits for the device to be up; fails if it needs signing in.
-    @MainActor
-    public func waitUntilRunning(timeout: TimeInterval = 20) async throws {
-        let deadline = Date().addingTimeInterval(timeout)
-        while true {
-            switch state {
-            case .running: return
-            case .needsLogin: throw Failure.notSignedIn
-            case .stopped: throw Failure.notStarted
-            case .failed(let reason): throw Failure.unreachable(reason)
-            case .starting: break
-            }
-            if Date() > deadline { throw Failure.unreachable("Tailscale didn't start in time.") }
-            try await Task.sleep(nanoseconds: 250_000_000)
-        }
-    }
-
     /// The computer with this id, or else this name (it signed in again).
     public func computer(id: String, hostName: String) -> Device? {
         devices.first { $0.id == id } ?? computers.first { $0.hostName == hostName }
+    }
+
+    /// Waits for the device to be up and the computer to be listed and
+    /// online (fails if the device needs signing in): Tailscale can only
+    /// reach a device it lists. Started again, it reports running from the
+    /// network map it cached, which may list no other devices, until the
+    /// live one comes in a few seconds later.
+    @MainActor
+    public func waitForComputer(id: String, hostName: String, timeout: TimeInterval = 20) async throws -> Device {
+        let deadline = Date().addingTimeInterval(timeout)
+        while true {
+            switch state {
+            case .needsLogin: throw Failure.notSignedIn
+            case .stopped: throw Failure.notStarted
+            case .failed(let reason): throw Failure.unreachable(reason)
+            case .running:
+                if let device = computer(id: id, hostName: hostName), device.online { return device }
+            case .starting: break
+            }
+            if Date() > deadline { throw Failure.notFound }
+            try await Task.sleep(nanoseconds: 250_000_000)
+        }
     }
 
     /// Connects to `device`:`port` and returns a port on 127.0.0.1 that
