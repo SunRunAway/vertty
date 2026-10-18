@@ -182,7 +182,7 @@ git tag v0.2.0 && git push origin v0.2.0
 
 ### macOS 应用内更新
 
-Sparkle 自动检查更新，菜单也可手动检查或关闭自动检查。用户确认后才下载、安装并重启；不允许静默安装。重启走现有的退出确认，正在工作的 agent 仍会触发提示，取消退出就推迟安装。升级后的会话恢复沿用普通重启行为。
+Sparkle 默认自动检查、后台下载并验证更新，在用户正常退出时安装，不会为了更新主动退出应用。标准更新窗口里的自动下载安装复选框默认勾选，用户可以取消；已保存的用户选择优先于默认值。菜单也可手动检查或关闭自动检查。手动选择安装并重启时，仍走现有的退出确认，正在工作的 agent 会触发提示，取消退出就推迟安装。升级后的会话恢复沿用普通重启行为。
 
 更新清单为 `https://github.com/SunRunAway/vertty/releases/latest/download/appcast.xml`，ZIP 下载地址固定到具体 Release。CI 用 Sparkle 的 `generate_appcast` 签署 ZIP 和清单，再与 ZIP 一起发布。`SUPublicEDKey` 是应用内的验证公钥；对应私钥保存在 macOS Keychain 的 `dev.vertty.Vertty` account，并作为仓库 Actions secret `SPARKLE_PRIVATE_KEY` 提供给发布步骤。不要把私钥提交到 Git。必须保留这把密钥，当前未使用 Developer ID 签名，丢失私钥后不能直接给已安装用户换公钥。
 

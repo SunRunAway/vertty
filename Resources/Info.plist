@@ -43,7 +43,9 @@
     <key>SUEnableAutomaticChecks</key>
     <true/>
     <key>SUAllowsAutomaticUpdates</key>
-    <false/>
+    <true/>
+    <key>SUAutomaticallyUpdate</key>
+    <true/>
     <key>SUVerifyUpdateBeforeExtraction</key>
     <true/>
     <key>SURequireSignedFeed</key>
