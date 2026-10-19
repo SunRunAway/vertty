@@ -189,6 +189,21 @@
 "Vertty quit during the run." = "运行期间 Vertty 退出了。";
 
 "Closed-Lid Sleep Protection While Tasks Run" = "任务运行时防合盖睡眠";
+"Continuous Closed-Lid Sleep Protection" = "持续防合盖睡眠";
+"Off" = "关闭";
+"15 Minutes" = "15 分钟";
+"30 Minutes" = "30 分钟";
+"1 Hour" = "1 小时";
+"2 Hours" = "2 小时";
+"3 Hours" = "3 小时";
+"6 Hours" = "6 小时";
+"12 Hours" = "12 小时";
+"24 Hours" = "24 小时";
+"Indefinitely" = "无限期";
+"Until %@" = "持续至 %@";
+"Ends when Vertty quits" = "退出 Vertty 时结束";
+"Keep your Mac awake with the lid closed?" = "合盖时保持 Mac 唤醒？";
+"Your Mac stays awake with the lid closed for the selected duration, even when no tasks are running. Protection ends when you turn it off or quit Vertty. Administrator authorization allows this Mac’s administrator accounts to run only these two commands without a password:\n\n/usr/bin/pmset -a disablesleep 1 — prevent sleep\n/usr/bin/pmset -a disablesleep 0 — restore sleep" = "在所选时长内，即使没有任务运行，合盖也不会让 Mac 睡眠。关闭此功能或退出 Vertty 时结束保护。管理员授权仅允许本机管理员账号免密执行以下两条命令：\n\n/usr/bin/pmset -a disablesleep 1（禁止睡眠）\n/usr/bin/pmset -a disablesleep 0（恢复睡眠）";
 "Don’t Let the Display Turn Off While Tasks Run" = "任务运行时不允许屏幕关闭";
 "Closed-Lid Sleep Protection While Tasks Run: Not Authorized…" = "任务运行时防合盖睡眠：未授权…";
 "Keep tasks running with the lid closed?" = "合盖时继续运行任务？";

@@ -212,11 +212,15 @@ defaults write dev.vertty.Vertty AppleLanguages '("en")'   # 恢复：defaults d
 
 `SleepProtection` 在状态目录保存两个标记：`sleep-asked` 表示用户已经做过决定（选了「不允许」，或成功授权过一次），之后启动不再询问；`sleep-off` 表示从菜单关掉了。每次启动检查 `/private/etc/sudoers.d/vertty_sleep` 存在且内容与 Vertty 的规则一致：已授权就开启（除非 `sleep-off`）；未授权且没有 `sleep-asked` 才弹出询问。不会借用 Amphetamine 的授权文件跳过安装。规则文件为 0444，允许应用只读校验，不含秘密。取消管理员授权或授权失败不写任何标记。菜单项是开关：开启时显示打勾的「任务运行时防合盖睡眠」，点击关闭并写入 `sleep-off`；已授权但关闭时不打勾，点击直接开启；未授权时显示「任务运行时防合盖睡眠：未授权…」，点击弹出询问。出错不另设状态，不弹错误框、不发通知。管理员授权把应用内的静态文件 `Resources/vertty-sleep.sudoers` 复制到固定路径，允许管理员组执行 `/usr/bin/pmset -a disablesleep 1/0` 的规则，经 visudo 校验后原子安装，不授权其他命令。
 
-`vertty-sleep` 是普通用户进程，按「租约」工作，只在有任务时存在。App 每秒判断一次：有卡片在工作中且进程未退出，就算有任务。从空闲变为有任务时启动守护程序，它设 `disablesleep 1` 后在 stdout 输出 `active`，然后阻塞读 stdin；全部空闲时 App 立即关闭管道，守护程序读到 EOF 恢复后退出。App 崩溃或强制退出时管道同样关闭；管道写端设为 close-on-exec，终端里的 shell 不会继承它。App 卡死时不释放。空闲期间不执行 pmset，外部设的 1 不会被改。设 1 不受 Amphetamine 影响；恢复为 0 前查询运行中的 Amphetamine，只有 `session is active` 和 `closed display mode enabled` 都为 true 才跳过，查询被拒绝、超时或失败时也恢复为 0。租约期间守护程序每 5 秒检查一次，被改回 0（如 Amphetamine 启动、退出或结束会话时）就重新设 1，结果输出 `active` 或 `error`。守护程序非零退出或输出 `error` 时，App 重新校验授权，规则失效就显示为未授权。Amphetamine 自动化授权由 App 在启动（或授权成功）时请求，守护程序只查询、不弹授权框。此机制只覆盖 Vertty 管理的卡片和任务，不跟踪已脱离卡片的独立后台作业。
+`vertty-sleep` 是普通用户进程，按「租约」工作，只在任务保护或持续保护需要它时存在。App 每秒判断一次：有卡片在工作中且进程未退出，就算有任务。任务保护开启且有任务，或持续保护开启时，启动同一个守护程序，它设 `disablesleep 1` 后在 stdout 输出 `active`，然后阻塞读 stdin；两种保护都不再需要时 App 立即关闭管道，守护程序读到 EOF 恢复后退出。App 崩溃或强制退出时管道同样关闭；管道写端设为 close-on-exec，终端里的 shell 不会继承它。App 卡死时不释放。没有保护租约时不执行 pmset，外部设的 1 不会被改。设 1 不受 Amphetamine 影响；恢复为 0 前查询运行中的 Amphetamine，只有 `session is active` 和 `closed display mode enabled` 都为 true 才跳过，查询被拒绝、超时或失败时也恢复为 0。租约期间守护程序每 5 秒检查一次，被改回 0（如 Amphetamine 启动、退出或结束会话时）就重新设 1，结果输出 `active` 或 `error`。守护程序非零退出或输出 `error` 时，App 重新校验授权，规则失效就显示为未授权。Amphetamine 自动化授权由 App 在启动（或授权成功）时请求，守护程序只查询、不弹授权框。任务运行状态只覆盖 Vertty 管理的卡片和任务，不跟踪已脱离卡片的独立后台作业。
+
+「持续防合盖睡眠」子菜单提供关闭、15 分钟、30 分钟、1 小时、2 小时、3 小时、6 小时、12 小时、24 小时和无限期。选择后立即生效，不依赖任务；定时项从选择（需要授权时从授权成功）开始计时，菜单显示截止时间，再次选择会重新计时。持续保护与任务保护独立，共用一份授权和一条租约：任意一方仍需要保护就不释放，定时到期不影响运行中的任务保护。两种模式都沿用同一守护程序的 Amphetamine 检查。持续保护只在本次应用运行期间有效，退出或崩溃时释放，重启不恢复；快速关闭再开启时等待旧守护程序恢复并退出后才启动新的，避免旧恢复覆盖新保护。
 
 `python3 scripts/test-sleep-protection.py` 用真实守护程序、模拟 pmset 和隔离 AppKit 实例验证租约、恢复、Amphetamine 状态组合、首次询问和真实终端状态；加 `--watchdog-only` 只验证守护程序，不打开窗口。测试实例默认完全跳过电源功能；同时指定 `VERTTY_SUPPORT_DIR`、`VERTTY_DEBUG_SNAPSHOT`、`VERTTY_SLEEP_TEST_DIR` 才运行模拟电源后端，绝不触发真实提权。debug driver 的 `alertbutton <从 0 开始的索引>` 点击当前模态框按钮；`alert.txt` 和 `alert.png` 输出按钮列表及截图。自动测试不验证物理合盖和真实管理员密码输入。
 
 `python3 scripts/test-sleep-failure-menu.py` 无窗口验证真实控制器与 `NSMenuItem`：授权失败、取消、授权成功后的打勾状态，以及运行出错时授权仍在则保持、授权失效则显示为未授权。不打开询问框、不执行真实提权或 pmset。
+
+`python3 scripts/test-continuous-sleep.py` 无窗口验证真实子菜单操作、全部时长、定时到期、两种保护交接、快速重开、独立授权、退出恢复和 Amphetamine 兼容；只操作隔离目录中的模拟电源状态。
 
 ### 任务运行时不允许屏幕关闭
 

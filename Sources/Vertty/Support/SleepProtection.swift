@@ -3,19 +3,25 @@ import CoreServices
 
 /// A menu toggle. Launch asks only until the user has decided once (Don't Allow, or a
 /// successful authorization); authorization itself is checked on every launch.
-final class SleepProtection {
+final class SleepProtection: NSObject {
     weak var menuItem: NSMenuItem? { didSet { updateMenu() } }
+    private weak var continuousMenuItem: NSMenuItem?
+    private weak var untilItem: NSMenuItem?
     weak var window: NSWindow?
     private(set) var authorized = false { didSet { updateMenu() } }
     private(set) var on = false { didSet { updateMenu() } }
+    /// nil is off; zero is indefinite; positive values are seconds from selection.
+    private(set) var continuousDuration: TimeInterval?
+    private(set) var continuousUntil: Date?
+    private let now: () -> Date
     private let store: AppStore
     private var timer: Timer?
     /// The running lease; closing `input` ends it and restores sleep.
     private var lease: Process?
     private var input: FileHandle?
-    /// Tasks are running and a lease is held.
+    /// Either task activity or a manual session needs a lease.
     private var active = false
-    private var checking = false
+    private var checking = false { didSet { updateMenu() } }
     private let queue = DispatchQueue(label: "vertty.sleep")
     /// The user has decided once: never ask at launch again.
     private var asked: URL { AppPaths.support.appendingPathComponent("sleep-asked") }
@@ -27,7 +33,62 @@ final class SleepProtection {
               let path = ProcessInfo.processInfo.environment["VERTTY_SLEEP_TEST_DIR"] else { return nil }
         return URL(fileURLWithPath: path)
     }
-    init(store: AppStore) { self.store = store }
+    init(store: AppStore, now: @escaping () -> Date = Date.init) {
+        self.store = store
+        self.now = now
+        super.init()
+    }
+
+    func makeContinuousMenuItem() -> NSMenuItem {
+        let parent = NSMenuItem(title: String(localized: "Continuous Closed-Lid Sleep Protection"), action: nil, keyEquivalent: "")
+        let submenu = NSMenu()
+        submenu.autoenablesItems = false
+        let until = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        until.isEnabled = false
+        submenu.addItem(until)
+        untilItem = until
+        let choices: [(String.LocalizationValue, Int)] = [
+            ("Off", -1), ("15 Minutes", 900), ("30 Minutes", 1800),
+            ("1 Hour", 3600), ("2 Hours", 7200), ("3 Hours", 10800),
+            ("6 Hours", 21600), ("12 Hours", 43200), ("24 Hours", 86400),
+            ("Indefinitely", 0)
+        ]
+        for (title, seconds) in choices {
+            let choice = NSMenuItem(title: String(localized: title), action: #selector(selectContinuous(_:)), keyEquivalent: "")
+            choice.tag = seconds
+            choice.target = self
+            submenu.addItem(choice)
+            if seconds == -1 { submenu.addItem(.separator()) }
+        }
+        submenu.addItem(.separator())
+        let note = NSMenuItem(title: String(localized: "Ends when Vertty quits"), action: nil, keyEquivalent: "")
+        note.isEnabled = false
+        submenu.addItem(note)
+        parent.submenu = submenu
+        continuousMenuItem = parent
+        updateMenu()
+        return parent
+    }
+
+    @objc private func selectContinuous(_ sender: NSMenuItem) {
+        guard !checking, !isTest || fixture != nil else { return }
+        if sender.tag < 0 {
+            continuousDuration = nil
+            continuousUntil = nil
+            monitor()
+        } else if authorized {
+            enableContinuous(TimeInterval(sender.tag))
+        } else {
+            configure(continuousDuration: TimeInterval(sender.tag))
+        }
+    }
+
+    private func enableContinuous(_ duration: TimeInterval) {
+        authorized = true
+        continuousDuration = duration
+        continuousUntil = duration > 0 ? now().addingTimeInterval(duration) : nil
+        monitor()
+    }
 
     func start() {
         // Ordinary debug instances must never touch real power settings or authorization.
@@ -45,7 +106,8 @@ final class SleepProtection {
         guard !checking, !isTest || fixture != nil else { return }
         if on {
             try? Data().write(to: off, options: .atomic)
-            stop()
+            on = false
+            monitor()
         } else if authorized {
             try? FileManager.default.removeItem(at: off)
             enable()
@@ -53,10 +115,15 @@ final class SleepProtection {
             configure()
         }
     }
-    private func configure() {
+    private func configure(continuousDuration: TimeInterval? = nil) {
         let alert = NSAlert()
-        alert.messageText = String(localized: "Keep tasks running with the lid closed?")
-        alert.informativeText = String(localized: "Your Mac stays awake with the lid closed while tasks run, then returns to normal sleep when they finish. Administrator authorization allows this Mac’s administrator accounts to run only these two commands without a password:\n\n/usr/bin/pmset -a disablesleep 1 — prevent sleep\n/usr/bin/pmset -a disablesleep 0 — restore sleep")
+        if continuousDuration != nil {
+            alert.messageText = String(localized: "Keep your Mac awake with the lid closed?")
+            alert.informativeText = String(localized: "Your Mac stays awake with the lid closed for the selected duration, even when no tasks are running. Protection ends when you turn it off or quit Vertty. Administrator authorization allows this Mac’s administrator accounts to run only these two commands without a password:\n\n/usr/bin/pmset -a disablesleep 1 — prevent sleep\n/usr/bin/pmset -a disablesleep 0 — restore sleep")
+        } else {
+            alert.messageText = String(localized: "Keep tasks running with the lid closed?")
+            alert.informativeText = String(localized: "Your Mac stays awake with the lid closed while tasks run, then returns to normal sleep when they finish. Administrator authorization allows this Mac’s administrator accounts to run only these two commands without a password:\n\n/usr/bin/pmset -a disablesleep 1 — prevent sleep\n/usr/bin/pmset -a disablesleep 0 — restore sleep")
+        }
         alert.addButton(withTitle: String(localized: "Allow"))
         alert.addButton(withTitle: String(localized: "Don’t Allow"))
         let handle = { [self] (answer: NSApplication.ModalResponse) in
@@ -64,7 +131,7 @@ final class SleepProtection {
             if answer == .alertSecondButtonReturn {
                 try? Data().write(to: asked, options: .atomic)
             } else if answer == .alertFirstButtonReturn {
-                authorize()
+                authorize(continuousDuration: continuousDuration)
             }
         }
         // A sheet on the window doesn't bring Vertty to the front and take focus.
@@ -94,7 +161,7 @@ final class SleepProtection {
         return Self.hasInstalledRule(at: Self.ruleURL)
     }
     /// What Allow does: install the rule (or confirm it), then enable.
-    func authorize() {
+    func authorize(continuousDuration: TimeInterval? = nil) {
         checking = true
         queue.async {
             var success = false
@@ -120,8 +187,15 @@ final class SleepProtection {
                 // A cancelled or failed authorization records nothing.
                 if ok {
                     try? Data().write(to: self.asked, options: .atomic)
-                    try? FileManager.default.removeItem(at: self.off)
-                    self.enable()
+                    if let continuousDuration {
+                        // Authorizing the manual mode must not enable task protection on
+                        // the next launch if it was off before authorization.
+                        if !self.on { try? Data().write(to: self.off, options: .atomic) }
+                        self.enableContinuous(continuousDuration)
+                    } else {
+                        try? FileManager.default.removeItem(at: self.off)
+                        self.enable()
+                    }
                 }
             }
         }
@@ -132,15 +206,33 @@ final class SleepProtection {
             ? String(localized: "Closed-Lid Sleep Protection While Tasks Run")
             : String(localized: "Closed-Lid Sleep Protection While Tasks Run: Not Authorized…")
         menuItem?.state = on ? .on : .off
+        continuousMenuItem?.state = continuousDuration == nil ? .off : .on
+        for item in continuousMenuItem?.submenu?.items ?? [] where item.action == #selector(selectContinuous(_:)) {
+            item.state = (continuousDuration.map { $0 == TimeInterval(item.tag) } ?? (item.tag == -1)) ? .on : .off
+            item.isEnabled = !checking
+        }
+        untilItem?.isHidden = continuousUntil == nil
+        if let continuousUntil {
+            let end = DateFormatter.localizedString(from: continuousUntil, dateStyle: .short, timeStyle: .short)
+            untilItem?.title = String(format: String(localized: "Until %@"), end)
+        }
     }
     /// Authorization is in place: start following task activity.
     private func enable() {
         authorized = true
         on = true
-        guard timer == nil else { return }
-        requestAmphetamineConsent()
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.tick() }
-        if let timer { RunLoop.main.add(timer, forMode: .common); RunLoop.main.add(timer, forMode: .modalPanel) }
+        monitor()
+    }
+    private func monitor() {
+        if on || continuousDuration != nil {
+            if timer == nil {
+                requestAmphetamineConsent()
+                timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.tick() }
+                if let timer { RunLoop.main.add(timer, forMode: .common); RunLoop.main.add(timer, forMode: .modalPanel) }
+            }
+        } else {
+            timer?.invalidate(); timer = nil
+        }
         tick()
     }
     /// The helper failed. Show the actual state: unauthorized if the rule is gone.
@@ -158,9 +250,16 @@ final class SleepProtection {
         }
     }
     private func tick() {
-        if store.workingAgentCount > 0 {
-            // Each busy period starts one lease.
-            if !active { active = true; spawn() }
+        if let continuousUntil, now() >= continuousUntil {
+            continuousDuration = nil
+            self.continuousUntil = nil
+            if !on { timer?.invalidate(); timer = nil }
+        }
+        updateMenu()
+        if continuousDuration != nil || (on && store.workingAgentCount > 0) {
+            // Both modes share one lease. Wait for a previous helper to finish restoring
+            // before starting another, including rapid Off -> On menu selections.
+            if !active { active = true; if lease == nil { spawn() } }
         } else if active {
             active = false
             endLease()
@@ -185,8 +284,11 @@ final class SleepProtection {
         p.terminationHandler = { [weak self] p in
             DispatchQueue.main.async {
                 guard let self else { return }
-                if self.lease === p { self.lease = nil; try? self.input?.close(); self.input = nil }
+                guard self.lease === p else { return }
+                let wasEnding = self.input == nil
+                self.lease = nil; try? self.input?.close(); self.input = nil
                 if p.terminationStatus != 0 { self.recheck() }
+                if wasEnding && self.active { self.spawn() }
             }
         }
         do { try p.run() } catch { recheck(); return }
@@ -194,10 +296,13 @@ final class SleepProtection {
     }
     private func endLease() {
         try? input?.close(); input = nil
-        lease = nil // The helper sees EOF and restores sleep on its own.
+        // Keep the process until it exits, so its restore cannot race a new lease.
     }
     func stop() {
         on = false
+        continuousDuration = nil
+        continuousUntil = nil
+        updateMenu()
         timer?.invalidate(); timer = nil
         active = false
         endLease()
