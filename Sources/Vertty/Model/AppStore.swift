@@ -200,6 +200,7 @@ final class AppStore: ObservableObject {
     func addProjectViaPanel() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = true
         panel.prompt = String(localized: "Add Project")
