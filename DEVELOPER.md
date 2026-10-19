@@ -66,7 +66,7 @@ Claude 的历史来自项目自己的会话记录目录、`git worktree list` �
 | 信息 | 来源 |
 |---|---|
 | 标题 | Claude 写到终端标题的内容（`✳ xxx` / `◑ xxx`）；也会读会话记录 `~/.claude/projects/*/<id>.jsonl` 里的 `custom-title` / `ai-title` |
-| 状态 | 终端标题前面的状态符号：`✳` 空闲，其他转圈符号表示工作中。一轮回复结束、但还有后台 shell 命令在跑时（`~/.claude/sessions/<pid>.json` 的 `status` 为 `shell`），也算工作中。hooks 补充：`Notification` → 等你确认，`SessionEnd` → 已退出 |
+| 状态 | 终端标题前面的状态符号：`✳` 空闲，其他转圈符号表示工作中。一轮回复结束、但还有后台 shell 命令在跑时（`~/.claude/sessions/<pid>.json` 的 `status` 为 `shell`），卡片也算运行中（退出确认、防睡眠、屏幕常亮都计入），图标转圈；但有未读时仍显示蓝点。hooks 补充：`Notification` → 等你确认，`SessionEnd` → 已退出 |
 | 系统通知 | Claude Code 自己发出的终端通知（OSC 9/777），由 Vertty 转成 macOS 通知 |
 | 分支 | 会话自身记录的分支：Claude transcript 的 `gitBranch`，Codex `threads` 的 `git_branch`。不读取共享工作目录的当前 HEAD，避免其他会话切分支覆盖旧卡片 |
 | worktree | 对会话 cwd 执行 `git rev-parse`，并结合 Claude 的 `worktree-state` |

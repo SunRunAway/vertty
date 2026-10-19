@@ -612,9 +612,8 @@ final class AppStore: ObservableObject {
     // MARK: - Titles & status
 
     /// Claude Code prefixes its terminal title with a status glyph: a spinner
-    /// while working, "✳" otherwise. This is the source of working / idle (besides
-    /// background shell commands, see refreshLiveSessions): it also covers turns
-    /// that end without a Stop hook (Esc). "✳" also shows
+    /// while working, "✳" otherwise. This is the only source of working / idle:
+    /// it also covers turns that end without a Stop hook (Esc). "✳" also shows
     /// while Claude waits for an answer or a permission, so needing you comes
     /// from the Notification hook.
     /// Codex's title (as set by ClaudeLauncher) is "<spinner> <thread title> | <id>…",
@@ -817,15 +816,7 @@ final class AppStore: ObservableObject {
                     let entry = live[tab.id]
                     let lastPID = self.livePIDs[tab.id]
                     self.livePIDs[tab.id] = entry?.pid
-                    // A turn that ended with a background shell command still
-                    // running (title back to "✳") shows as working until it's done.
-                    let shell = entry?.status == "shell"
-                    if shell, tab.status == .idle {
-                        tab.status = .working
-                    } else if !shell, tab.backgroundShell, tab.status == .working, !tab.titleBusy {
-                        tab.status = .idle
-                    }
-                    tab.backgroundShell = shell
+                    tab.backgroundShell = entry?.status == "shell"
                     guard let entry else {
                         // Its Claude exited (a hooked one already said so with SessionEnd).
                         if lastPID != nil { tab.status = .exited }
@@ -1093,7 +1084,9 @@ final class AppStore: ObservableObject {
     }
 
     var workingAgentCount: Int {
-        tabs.filter { $0.status == .working && ($0.surface.map { !$0.processExited } ?? false) }.count
+        tabs.filter {
+            ($0.status == .working || $0.backgroundShell) && ($0.surface.map { !$0.processExited } ?? false)
+        }.count
     }
 }
 

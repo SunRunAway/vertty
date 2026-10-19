@@ -14,7 +14,7 @@ struct SessionCard<Store: SidebarStore>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Touch.size(3)) {
             HStack(spacing: Touch.size(7)) {
-                StatusIndicator(status: card.status, attention: card.attention, kind: card.kind)
+                StatusIndicator(status: card.shownStatus, attention: card.attention, kind: card.kind)
                 AgentIcon(kind: card.kind, size: Touch.size(11))
                 if let task = store.scheduleName(for: card) {
                     Image(systemName: "clock")

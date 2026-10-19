@@ -116,7 +116,7 @@ final class RemoteBridge {
         c.worktree = tab.worktree ?? ""
         c.prNumber = UInt32(tab.prNumber ?? 0)
         c.prState = tab.prState ?? ""
-        c.status = Self.status(tab.status)
+        c.status = Self.status(tab.shownStatus)
         c.running = tab.surface.map { !$0.processExited } ?? false
         c.sessionID = tab.sessionID
         c.attention = tab.attention

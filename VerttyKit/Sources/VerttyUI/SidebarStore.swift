@@ -15,6 +15,18 @@ public protocol SessionCardModel: ObservableObject, Identifiable where ID == UUI
     var status: SessionStatus { get }
     /// Finished in the background and not looked at yet (the blue dot).
     var attention: Bool { get }
+    /// Claude's turn is over, but a background shell command it started still runs.
+    var backgroundShell: Bool { get }
+}
+
+public extension SessionCardModel {
+    var backgroundShell: Bool { false }
+
+    /// The status icon: a background shell command spins like work, but
+    /// doesn't hide the blue dot.
+    var shownStatus: SessionStatus {
+        status == .idle && backgroundShell && !attention ? .working : status
+    }
 }
 
 /// What the sidebar offers besides browsing, starting, resuming and closing
