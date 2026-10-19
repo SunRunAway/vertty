@@ -11,6 +11,9 @@ enum LiveSessions {
         let sessionID: String
         let cwd: String?
         let startedAt: Double
+        /// What Claude Code says it's doing: "busy", "idle", or "shell" when a
+        /// turn has ended with a background shell command still running.
+        let status: String?
     }
 
     static let dir = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/sessions")
@@ -37,7 +40,8 @@ enum LiveSessions {
             live.insert(key)
             guard let tab = tab(of: pid, key: key) else { continue }
             let entry = Entry(pid: pid, sessionID: sessionID, cwd: obj["cwd"] as? String,
-                              startedAt: (obj["startedAt"] as? NSNumber)?.doubleValue ?? started)
+                              startedAt: (obj["startedAt"] as? NSNumber)?.doubleValue ?? started,
+                              status: obj["status"] as? String)
             if let other = result[tab], other.startedAt <= entry.startedAt { continue }
             result[tab] = entry
         }

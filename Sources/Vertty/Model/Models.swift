@@ -27,6 +27,8 @@ final class TabSession: ObservableObject, Identifiable {
     var terminalTitle: String?
     /// Whether Claude's last terminal title carried its working spinner.
     var titleBusy = false
+    /// Whether Claude has ended its turn with a background shell command still running.
+    var backgroundShell = false
     var transcript: TranscriptInfo?
     var hooksActive = false
     /// The thread Codex shows in its terminal title: its id, or the first part of
