@@ -42,6 +42,7 @@ let controller = SleepProtection(store: store, now: { clock })
 let tasks = NSMenuItem(title: "", action: nil, keyEquivalent: "")
 controller.menuItem = tasks
 let parent = controller.makeContinuousMenuItem()
+let menuTitle = String(localized: "Continuous Closed-Lid Sleep Protection")
 let choices = parent.submenu!.items.filter { $0.action != nil }
 let durations = [900, 1800, 3600, 7200, 10800, 21600, 43200, 86400]
 precondition(choices.map(\\.tag) == [-1] + durations + [0])
@@ -75,14 +76,21 @@ for duration in durations {
     choose(duration)
     precondition(selected(duration) && parent.state == .on)
     precondition(controller.continuousUntil == clock.addingTimeInterval(Double(duration)))
+    precondition(parent.title == menuTitle + String(format: " %02d:%02d", duration / 3600, duration % 3600 / 60))
     precondition(!parent.submenu!.items[0].isHidden && !parent.submenu!.items[0].title.isEmpty)
 }
 clock = clock.addingTimeInterval(10)
 choose(86400)
 precondition(controller.continuousUntil == clock.addingTimeInterval(86400), "reselect did not restart deadline")
-clock = clock.addingTimeInterval(86400)
+clock = clock.addingTimeInterval(15 * 3600 + 30 * 60)
+wait("countdown did not refresh") { parent.title == menuTitle + " 08:30" }
+clock = clock.addingTimeInterval(7 * 3600 + 31 * 60)
+wait("countdown below one hour did not refresh") { parent.title == menuTitle + " 00:59" }
+clock = clock.addingTimeInterval(59 * 60 - 1)
+wait("last partial minute rounded down") { parent.title == menuTitle + " 00:01" }
+clock = clock.addingTimeInterval(1)
 wait("deadline did not release idle protection") { selected(-1) && read("value") == "0" }
-precondition(parent.state == .off && parent.submenu!.items[0].isHidden)
+precondition(parent.state == .off && parent.submenu!.items[0].isHidden && parent.title == menuTitle)
 print("PASS all durations, selection, renewed deadline and expiry while idle")
 
 choose(0)
@@ -90,6 +98,7 @@ wait("indefinite did not acquire") { read("value") == "1" }
 clock = clock.addingTimeInterval(366 * 86400)
 settle()
 precondition(selected(0) && controller.continuousUntil == nil && read("value") == "1")
+precondition(parent.title == menuTitle + " ♾️")
 precondition(parent.submenu!.items[0].isHidden)
 // Turning task mode on/off while busy must preserve the manual lease.
 store.workingAgentCount = 1

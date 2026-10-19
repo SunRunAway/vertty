@@ -206,6 +206,17 @@ final class SleepProtection: NSObject {
             ? String(localized: "Closed-Lid Sleep Protection While Tasks Run")
             : String(localized: "Closed-Lid Sleep Protection While Tasks Run: Not Authorized…")
         menuItem?.state = on ? .on : .off
+        let title = String(localized: "Continuous Closed-Lid Sleep Protection")
+        let continuousTitle: String
+        if let continuousUntil {
+            let minutes = Int(ceil(max(0, continuousUntil.timeIntervalSince(now())) / 60))
+            continuousTitle = title + String(format: " %02d:%02d", minutes / 60, minutes % 60)
+        } else {
+            continuousTitle = title + (continuousDuration == nil ? "" : " ♾️")
+        }
+        // Reuse the task/deadline check, but only change the label at minute boundaries
+        // or when the selected mode changes.
+        if continuousMenuItem?.title != continuousTitle { continuousMenuItem?.title = continuousTitle }
         continuousMenuItem?.state = continuousDuration == nil ? .off : .on
         for item in continuousMenuItem?.submenu?.items ?? [] where item.action == #selector(selectContinuous(_:)) {
             item.state = (continuousDuration.map { $0 == TimeInterval(item.tag) } ?? (item.tag == -1)) ? .on : .off
