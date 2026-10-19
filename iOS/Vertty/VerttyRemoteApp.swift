@@ -30,6 +30,7 @@ struct VerttyRemoteApp: App {
                 if backgrounded {
                     backgrounded = false
                     store.viewportChanged(force: true)
+                    store.markSelectedRead()
                 }
             case .background:
                 backgrounded = true

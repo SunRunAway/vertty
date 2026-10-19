@@ -79,7 +79,8 @@ func handle(_ msg: Remote.ServerMessage) {
         emit(["event": "state",
               "projects": s.projects.map { ["id": $0.id, "name": $0.name, "kind": $0.defaultKind.rawValue] },
               "cards": s.cards.map { ["id": $0.id, "project": $0.projectID, "title": $0.title,
-                                      "status": $0.status.rawValue, "running": $0.running, "session": $0.sessionID] },
+                                      "status": $0.status.rawValue, "running": $0.running, "session": $0.sessionID,
+                                      "attention": $0.attention] },
               "history": s.history.map { ["project": $0.projectID, "sessions": $0.sessions.map(\.sessionID),
                                           "more": $0.moreAvailable] },
               "confirmClose": s.confirmClose])
@@ -183,6 +184,8 @@ DispatchQueue.global().async {
                 send { $0.openTerminal.cardID = a[1]; $0.openTerminal.size = size(a[2], a[3]) }
             case "leave":
                 send { $0.leaveTerminal.cardID = a[1] }
+            case "read":
+                send { $0.readTerminal.cardID = a[1] }
             case "viewport":
                 send { $0.viewport.cardID = a[1]; $0.viewport.size = size(a[2], a[3]) }
             case "align":

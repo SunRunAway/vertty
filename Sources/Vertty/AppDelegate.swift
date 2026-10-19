@@ -234,6 +234,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
+        RemoteWindowController.key?.store.markSelectedRead()
         if let tab = store.selectedTab, tab.attention {
             tab.attention = false
             store.updateDockBadge()

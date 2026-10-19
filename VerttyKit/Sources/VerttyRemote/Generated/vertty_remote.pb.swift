@@ -462,6 +462,14 @@ public struct Vertty_Remote_ClientMessage: Sendable {
     set {body = .searchHistory(newValue)}
   }
 
+  public var readTerminal: Vertty_Remote_ReadTerminal {
+    get {
+      if case .readTerminal(let v)? = body {return v}
+      return Vertty_Remote_ReadTerminal()
+    }
+    set {body = .readTerminal(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public enum OneOf_Body: Equatable, Sendable {
@@ -478,6 +486,7 @@ public struct Vertty_Remote_ClientMessage: Sendable {
     case alignForInput(Vertty_Remote_AlignForInput)
     case input(Vertty_Remote_TerminalInput)
     case searchHistory(Vertty_Remote_SearchHistory)
+    case readTerminal(Vertty_Remote_ReadTerminal)
 
   }
 
@@ -820,11 +829,27 @@ public struct Vertty_Remote_Card: Sendable {
   /// The agent's session id; empty for a Codex session not saved yet.
   public var sessionID: String = String()
 
-  /// Finished in the background and not looked at on the computer yet.
+  /// Finished in the background and not looked at locally or remotely yet.
   public var attention: Bool = false
 
   /// The PR's web page; empty when there is no PR.
   public var prURL: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+/// Acknowledges the open terminal only while it is displayed in the foreground.
+/// Opening a stream alone is not reading (it may reconnect in the background).
+/// The server clears attention and broadcasts State without selecting the card
+/// locally. Ignored if this connection no longer has that terminal open.
+public struct Vertty_Remote_ReadTerminal: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var cardID: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -1264,6 +1289,7 @@ extension Vertty_Remote_ClientMessage: SwiftProtobuf.Message, SwiftProtobuf._Mes
     10: .standard(proto: "align_for_input"),
     11: .same(proto: "input"),
     12: .standard(proto: "search_history"),
+    13: .standard(proto: "read_terminal"),
   ]
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -1416,6 +1442,19 @@ extension Vertty_Remote_ClientMessage: SwiftProtobuf.Message, SwiftProtobuf._Mes
           self.body = .searchHistory(v)
         }
       }()
+      case 13: try {
+        var v: Vertty_Remote_ReadTerminal?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .readTerminal(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .readTerminal(v)
+        }
+      }()
       default: break
       }
     }
@@ -1473,6 +1512,10 @@ extension Vertty_Remote_ClientMessage: SwiftProtobuf.Message, SwiftProtobuf._Mes
     case .searchHistory?: try {
       guard case .searchHistory(let v)? = self.body else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 12)
+    }()
+    case .readTerminal?: try {
+      guard case .readTerminal(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 13)
     }()
     case nil: break
     }
@@ -2202,6 +2245,38 @@ extension Vertty_Remote_Card: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
     if lhs.sessionID != rhs.sessionID {return false}
     if lhs.attention != rhs.attention {return false}
     if lhs.prURL != rhs.prURL {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Vertty_Remote_ReadTerminal: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ReadTerminal"
+  public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
+    1: .standard(proto: "card_id"),
+  ]
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.cardID) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.cardID.isEmpty {
+      try visitor.visitSingularStringField(value: self.cardID, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Vertty_Remote_ReadTerminal, rhs: Vertty_Remote_ReadTerminal) -> Bool {
+    if lhs.cardID != rhs.cardID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

@@ -70,6 +70,7 @@ report()
 # Tracks the mouse (SGR reports), as Claude Code does.
 os.write(1, b"\\x1b[?1000h\\x1b[?1006h\\x1b[1;32mgreen prompt\\x1b[0m > ")
 tty.setraw(0)
+notification_count = 0
 while True:
     b = os.read(0, 1024)
     if not b:
@@ -77,6 +78,9 @@ while True:
     c, r = os.get_terminal_size(0)
     os.write(log, f"input {{b.hex()}} {{c}}x{{r}}\\n".encode())
     os.write(1, ("GOT " + b.hex() + "\\r\\n").encode())
+    if b"!" in b:
+        notification_count += 1
+        os.write(1, f"\\x1b]9;Agent needs you {{notification_count}}\\x07".encode())
 """
 for name in ("claude", "codex"):
     p = bin_dir / name
@@ -257,6 +261,10 @@ try:
     wait(lambda: status() == "connected" and card_id in phone(), "the app didn't connect and list the card")
     print("PASS the app connects and lists the server's card", flush=True)
 
+    server_drive(f"to {card_id}", "text !")
+    wait(lambda: "attention=true" in phone() and "attention=true" in read(server_snap / "state.txt"),
+         "unopened card wasn't unread on both devices")
+
     drive("open 0")
     wait(lambda: "green prompt" in phone(), "the card's terminal didn't open")
     # An existing card opens for reading, without the keyboard. The size
@@ -270,6 +278,14 @@ try:
     assert terminal("config") == "ok", phone()
     simctl("io", udid, "screenshot", str(root / "terminal.png"))
     print(f"PASS opening shows the terminal at the device's size ({own}), without the keyboard", flush=True)
+    wait(lambda: "attention=false" in phone() and "attention=false" in read(server_snap / "state.txt"),
+         "opening on the phone didn't mark the card read on both devices")
+    server_drive(f"to {card_id}", "text !")
+    wait(lambda: "Agent needs you 2" in read(root / "server.log"), "second notification wasn't delivered")
+    time.sleep(1)
+    wait(lambda: "attention=false" in phone() and "attention=false" in read(server_snap / "state.txt"),
+         "new output while reading on the phone stayed unread")
+    print("PASS opening and reading new output on the phone clears shared unread state", flush=True)
 
     # A tap on the terminal is only a click for the program; the keyboard
     # stays away.
@@ -434,8 +450,15 @@ try:
     simctl("launch", udid, "com.apple.Preferences")
     time.sleep(3)
     assert last_size() == local, read(agent_log)
+    server_drive(f"to {card_id}", "text !")
+    wait(lambda: "attention=true" in read(server_snap / "state.txt"), "background phone cleared unread output")
+    time.sleep(1)
+    assert "attention=true" in read(server_snap / "state.txt"), "background connection marked output read"
     simctl("launch", udid, BUNDLE)
     own = settled_size("coming back to the foreground didn't take the iPhone's size")
+    wait(lambda: "attention=false" in phone() and "attention=false" in read(server_snap / "state.txt"),
+         "returning to the phone didn't clear unread output")
+    print("PASS background output stays unread until the phone returns to the foreground", flush=True)
     server_drive(f"to {card_id}", "text z")
     wait(lambda: input_size("7a") == local, "typing on the computer didn't take its size back")
     print("PASS going to the background keeps the size; coming back takes it", flush=True)
@@ -487,9 +510,7 @@ try:
     # Started again after that: it doesn't take the connection back.
     (debug_dir / "state.txt").unlink(missing_ok=True)
     launch()
-    wait(lambda: status() is not None, "the app's debug driver didn't start again")
-    time.sleep(2)
-    assert status() == "none", phone()
+    wait(lambda: status() == "none", "restarting after replacement didn't show the address screen")
     print("PASS started again after being replaced, it waits on the address screen", flush=True)
     print(f"Screenshots: {root}", flush=True)
 finally:

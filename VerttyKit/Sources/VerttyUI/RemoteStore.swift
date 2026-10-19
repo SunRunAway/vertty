@@ -97,6 +97,7 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
 
     // The terminal of the selected card.
     private weak var display: RemoteTerminalDisplay?
+    private var hasSnapshot = false
     /// The grid the terminal has now, as it last reported.
     private var appliedGrid: Remote.TerminalSize?
     /// A snapshot waiting for the terminal to take its size, with the
@@ -117,6 +118,9 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
         // Republish the client's changes, and rebuild from each State.
         client.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &subscriptions)
         client.$state.sink { [weak self] state in self?.apply(state) }.store(in: &subscriptions)
+        client.$status.sink { [weak self] status in
+            if status != .connected { self?.hasSnapshot = false }
+        }.store(in: &subscriptions)
     }
 
     public var state: Remote.State { client.state }
@@ -138,6 +142,7 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
         if let selected = selectedCardID, !allCards.contains(where: { $0.id == selected }), client.hasState {
             selectedCardID = nil
         }
+        markSelectedRead()
     }
 
     public func project(_ id: UUID) -> Project? { projects.first { $0.id == id } }
@@ -395,9 +400,19 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
     }
 
     private func resetStream() {
+        hasSnapshot = false
         awaiting = nil
         queued = []
         awaitingTimeout?.cancel()
+    }
+
+    /// Also called when the app/window returns to the foreground. A connection
+    /// or selection alone is not enough: the terminal must actually be shown.
+    public func markSelectedRead() {
+        guard hasSnapshot, awaiting == nil, display != nil,
+              let card = selectedCard, card.attention,
+              client.openCardID == card.id.uuidString, isViewing(card.id) else { return }
+        client.readTerminal()
     }
 
     /// The display area changed size, or the app came back to the
@@ -478,6 +493,8 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
         let data = queued
         queued = []
         for d in data { display?.feed(d) }
+        hasSnapshot = true
+        markSelectedRead()
     }
 
     // MARK: - Notifications

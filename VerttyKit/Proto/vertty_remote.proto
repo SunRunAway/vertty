@@ -123,6 +123,7 @@ message ClientMessage {
     AlignForInput align_for_input = 10;
     TerminalInput input = 11;
     SearchHistory search_history = 12;
+    ReadTerminal read_terminal = 13;
   }
 }
 
@@ -278,10 +279,18 @@ message Card {
   bool running = 10;
   // The agent's session id; empty for a Codex session not saved yet.
   string session_id = 11;
-  // Finished in the background and not looked at on the computer yet.
+  // Finished in the background and not looked at locally or remotely yet.
   bool attention = 12;
   // The PR's web page; empty when there is no PR.
   string pr_url = 13;
+}
+
+// Acknowledges the open terminal only while it is displayed in the foreground.
+// Opening a stream alone is not reading (it may reconnect in the background).
+// The server clears attention and broadcasts State without selecting the card
+// locally. Ignored if this connection no longer has that terminal open.
+message ReadTerminal {
+  string card_id = 1;
 }
 
 message ProjectHistory {

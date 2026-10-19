@@ -362,6 +362,14 @@ public final class RemoteClient: ObservableObject {
         send(msg)
     }
 
+    /// The foreground client has displayed the open terminal.
+    public func readTerminal() {
+        guard let open = openCard, status == .connected else { return }
+        var msg = Remote.ClientMessage()
+        msg.readTerminal.cardID = open.id
+        send(msg)
+    }
+
     public func leaveTerminal() {
         guard let open = openCard else { return }
         openCard = nil

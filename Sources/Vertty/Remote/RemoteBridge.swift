@@ -183,6 +183,11 @@ final class RemoteBridge {
         case .input(let r):
             guard let a = attached, a.tab.id.uuidString == r.cardID else { return }
             a.surface.writePTY(r.data)
+        case .readTerminal(let r):
+            guard let a = attached, a.tab.id.uuidString == r.cardID, a.tab.attention else { return }
+            a.tab.attention = false
+            store.updateDockBadge()
+            sendStateIfChanged()
         case .hello, nil:
             break
         }

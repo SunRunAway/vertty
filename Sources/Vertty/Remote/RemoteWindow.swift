@@ -88,6 +88,7 @@ final class RemoteWindowController: NSObject, NSWindowDelegate {
 
     func windowDidBecomeKey(_ notification: Notification) {
         terminal.focus()
+        store.markSelectedRead()
     }
 }
 

@@ -50,6 +50,7 @@ def report(*_):
 signal.signal(signal.SIGWINCH, report)
 report()
 tty.setraw(0)
+notification_count = 0
 while True:
     b = os.read(0, 1024)
     if not b:
@@ -58,7 +59,8 @@ while True:
     os.write(log, f"input {{b.hex()}} {{c}}x{{r}}\\n".encode())
     os.write(1, ("GOT " + b.hex() + "\\r\\n").encode())
     if b"!" in b:
-        os.write(1, b"\\x1b]9;Agent needs you\\x07")
+        notification_count += 1
+        os.write(1, f"\\x1b]9;Agent needs you {{notification_count}}\\x07".encode())
 """
 for name in ("claude", "codex"):
     p = bin_dir / name
@@ -250,12 +252,27 @@ with (root / "app.log").open("w") as log:
         print("PASS the menu shows the port and who is connected", flush=True)
 
         # Opening a card puts the session at the client's size.
+        drive(f"to {card_id}", "text !")
+        a.wait_state(lambda e: e["cards"][0]["attention"], "fixture didn't become unread")
+        selection = next(line for line in state().splitlines() if line.startswith("selected:"))
         a.cmd(f"open {card_id} 40 12")
         a.expect(lambda e: e["event"] == "snapshot" and e["cols"] == 40 and e["rows"] == 12,
                  "no snapshot at the client's size")
         wait(lambda: agent_size() == "40x12", "agent not resized to the client's size")
         wait(lambda: tab_grid(card_id) == "40x12", "local terminal not at the remote size")
         print("PASS open puts the session at the remote size", flush=True)
+
+        # A stream can open while a phone is backgrounded. Only an explicit
+        # foreground read clears attention, without changing local selection.
+        time.sleep(0.5)
+        assert "attention=true" in state(), "opening a stream marked the card read"
+        a.cmd(f"read {card_id}")
+        a.wait_state(lambda e: not e["cards"][0]["attention"], "read didn't reach remote state")
+        wait(lambda: "attention=false" in state(), "read didn't clear the local card")
+        wait(lambda: not json.loads((support / "state.json").read_text())["tabs"][0].get("unread", False),
+             "read wasn't persisted")
+        assert selection in state(), "reading remotely changed local selection"
+        print("PASS explicit read clears and persists shared attention without selecting locally", flush=True)
 
         a.cmd(f"align {card_id} 40 12")
         a.cmd(f"input {card_id} hi\\r")
@@ -304,6 +321,20 @@ with (root / "app.log").open("w") as log:
         wait(lambda: agent_size() == local_size and "remoteGrid=-" in state(),
              "leaving didn't restore the local size")
         print("PASS leaving restores the local size", flush=True)
+
+        drive(f"to {card_id}", "text !")
+        a.wait_state(lambda e: e["cards"][0]["attention"], "new output after leaving wasn't unread")
+        wait(lambda: "attention=true" in state(), "local snapshot didn't show new attention")
+        a.cmd(f"read {card_id}")
+        time.sleep(1.5)
+        assert a.last_state["cards"][0]["attention"] and "attention=true" in state(), \
+            "read after leaving cleared new attention"
+        a.cmd(f"open {card_id} 40 12")
+        a.expect(lambda e: e["event"] == "snapshot", "couldn't reopen unread card")
+        a.cmd(f"read {card_id}")
+        a.wait_state(lambda e: not e["cards"][0]["attention"], "reopened card stayed unread")
+        a.cmd(f"leave {card_id}")
+        print("PASS new output after leaving is unread and a stale read is ignored", flush=True)
 
         # New session: a retry with the same operation id doesn't create another.
         a.cmd(f"new {project_id} op-1")
