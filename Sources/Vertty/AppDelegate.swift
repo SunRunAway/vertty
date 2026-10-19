@@ -262,10 +262,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         }
         addSubmenu(appMenu, "Default Agent for New Projects", agentMenu)
         appMenu.addItem(.separator())
+        appMenu.addItem(sleepProtection.makeContinuousMenuItem())
         let sleepItem = item("Closed-Lid Sleep Protection While Tasks Run: Not Authorized…", #selector(toggleSleepProtection), "")
         sleepProtection.menuItem = sleepItem
         appMenu.addItem(sleepItem)
-        appMenu.addItem(sleepProtection.makeContinuousMenuItem())
         appMenu.addItem(item("Don’t Let the Display Turn Off While Tasks Run", #selector(toggleDisplayAwake), ""))
         let modes: [(String.LocalizationValue, RemoteServer.Mode)] = [("Via Tailscale", .tailscale), ("Own Network", .direct)]
         for (title, mode) in modes {
