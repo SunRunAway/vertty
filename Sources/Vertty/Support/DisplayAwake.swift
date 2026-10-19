@@ -1,7 +1,7 @@
 import AppKit
 import IOKit.pwr_mgt
 
-/// "Don't Let the Display Turn Off": while tasks run, hold a display-sleep assertion
+/// "Don't Let the Display Turn Off While Tasks Run": hold a display-sleep assertion
 /// (like `caffeinate -d`). No authorization needed. Off unless the marker file exists.
 final class DisplayAwake {
     private let store: AppStore

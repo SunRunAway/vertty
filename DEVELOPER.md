@@ -218,6 +218,6 @@ defaults write dev.vertty.Vertty AppleLanguages '("en")'   # 恢复：defaults d
 
 `python3 scripts/test-sleep-failure-menu.py` 无窗口验证真实控制器与 `NSMenuItem`：授权失败、取消、授权成功后的打勾状态，以及运行出错时授权仍在则保持、授权失效则显示为未授权。不打开询问框、不执行真实提权或 pmset。
 
-### 不允许屏幕关闭
+### 任务运行时不允许屏幕关闭
 
 `DisplayAwake` 独立于防合盖睡眠。状态目录有 `display-awake` 标记时开启（菜单项打勾）；开启后 App 每秒判断一次，有卡片在工作中就持有一个 `PreventUserIdleDisplaySleep` 电源断言（同 `caffeinate -d`），全部空闲时立即释放，退出时也释放。不需要授权，不碰 pmset。`python3 scripts/test-display-awake.py` 无窗口验证开关、任务开始持有断言、空闲和关闭时释放。
