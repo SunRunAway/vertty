@@ -126,9 +126,10 @@
                     .input,
                     "touch scroll ended velocity=\(String(format: "%.2f", velocity.x))x\(String(format: "%.2f", velocity.y))",
                 )
-                if !usesInlineTextSelection || momentumScroll.scrollsLocally || surface?.isMouseCaptured != true {
-                    startMomentumScrolling(velocity: velocity)
-                }
+                // A program that captures the mouse (Claude Code's
+                // fullscreen TUI) gets the fling as wheel events too, as a
+                // trackpad's momentum does on the Mac.
+                startMomentumScrolling(velocity: velocity)
 
             case .cancelled, .failed:
                 TerminalDebugLog.log(.input, "touch scroll cancelled")
