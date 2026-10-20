@@ -60,7 +60,8 @@
 - Which agents (Claude / Codex) new sessions can start is one global setting,
   Vertty ▸ Enabled Agents (both by default, at least one stays on). Each
   project row has a new-session button per enabled agent; there is no
-  per-project default kind. ⌘T starts the first enabled agent.
+  per-project default setting. ⌘T starts the agent last started in the
+  project (new or resumed, not by a schedule), else the first enabled one.
 - After ⌘Q the Dock can keep showing Vertty as running in the background while
   processes it spawned (e.g. shell plugin helpers) are still alive. That isn't a
   Vertty bug, and it would happen the same in any terminal. Don't kill

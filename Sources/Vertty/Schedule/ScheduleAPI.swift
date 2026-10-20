@@ -116,7 +116,7 @@ extension AppStore {
                 return .failure(APIError(message: "Say which project (--project): this isn't inside a Vertty project."))
             }
             project = p
-            t = ScheduleTask(name: "", projectID: p.id, kind: kind ?? source?.kind ?? defaultKind, prompt: "",
+            t = ScheduleTask(name: "", projectID: p.id, kind: kind ?? source?.kind ?? defaultKind(p), prompt: "",
                              timing: ScheduleTiming())
             // No made-up schedule: the agent should ask rather than leave these out.
             guard str("repeat") != nil, str("time") != nil else {

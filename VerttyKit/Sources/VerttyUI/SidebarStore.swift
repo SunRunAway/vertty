@@ -63,8 +63,7 @@ public protocol SidebarStore: ObservableObject {
 
     func cards(of project: Project) -> [Card]
     func toggleExpanded(_ project: Project)
-    /// The agents new sessions can start, never empty; the first is the
-    /// default (⌘T, and a new session that names no kind).
+    /// The agents new sessions can start, never empty, in AgentKind order.
     var enabledKinds: [AgentKind] { get }
 
     func select(_ card: Card)
@@ -114,6 +113,18 @@ public extension SidebarStore {
 }
 
 public extension SidebarStore {
+    /// What ⌘T, and a new session that names no kind, start in a project: the
+    /// agent last started there, else the first enabled one.
+    func defaultKind(_ project: Project) -> AgentKind {
+        project.lastKind.flatMap { enabledKinds.contains($0) ? $0 : nil } ?? enabledKinds.first ?? .claude
+    }
+
+    /// The enabled agents, the project's default first (the File menu's order).
+    func kindsDefaultFirst(_ project: Project) -> [AgentKind] {
+        let first = defaultKind(project)
+        return [first] + enabledKinds.filter { $0 != first }
+    }
+
     /// Whether a session passes the project's search (always, when not searching).
     func isShown(_ project: Project, title: String, sessionID: String) -> Bool {
         PromptSnippet.matches(query(for: project) ?? "", title: title, sessionID: sessionID)

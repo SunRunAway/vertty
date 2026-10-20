@@ -794,7 +794,8 @@ public struct Vertty_Remote_Project: Sendable {
   public var path: String = String()
 
   /// What a new session starts when NewSession leaves `kind` unset: the
-  /// first of State.enabled_kinds, the same for every project.
+  /// agent of the session last started in the project while it is enabled,
+  /// else the first of State.enabled_kinds.
   public var defaultKind: Vertty_Remote_AgentKind = .unspecified
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()

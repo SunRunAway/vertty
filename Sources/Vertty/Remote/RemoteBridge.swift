@@ -89,7 +89,7 @@ final class RemoteBridge {
             rp.id = p.id.uuidString
             rp.name = p.name
             rp.path = p.path
-            rp.defaultKind = Self.kind(store.defaultKind)
+            rp.defaultKind = Self.kind(store.defaultKind(p))
             return rp
         }
         state.enabledKinds = store.enabledKinds.map(Self.kind)

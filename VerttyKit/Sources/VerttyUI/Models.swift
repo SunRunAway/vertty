@@ -6,12 +6,16 @@ public struct Project: Codable, Identifiable, Hashable {
     public var name: String
     public var path: String
     public var expanded = true
+    /// The agent of the session last started here (new or resumed): what ⌘T
+    /// starts while it's enabled.
+    public var lastKind: AgentKind?
 
-    public init(id: UUID = UUID(), name: String, path: String, expanded: Bool = true) {
+    public init(id: UUID = UUID(), name: String, path: String, expanded: Bool = true, lastKind: AgentKind? = nil) {
         self.id = id
         self.name = name
         self.path = path
         self.expanded = expanded
+        self.lastKind = lastKind
     }
 
     public var color: Color { ProjectPalette.color(for: id) }

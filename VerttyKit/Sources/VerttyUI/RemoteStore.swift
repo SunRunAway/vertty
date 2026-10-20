@@ -130,7 +130,9 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
     private func apply(_ state: Remote.State) {
         projects = state.projects.compactMap { p in
             guard let id = UUID(uuidString: p.id) else { return nil }
-            return Project(id: id, name: p.name, path: p.path, expanded: !collapsed.contains(id))
+            // The server already picked the default; it stands in for the last kind.
+            let kind = p.defaultKind == .unspecified ? nil : AgentKind(p.defaultKind)
+            return Project(id: id, name: p.name, path: p.path, expanded: !collapsed.contains(id), lastKind: kind)
         }
         let kinds = state.enabledKinds.filter { $0 == .claude || $0 == .codex }.map(AgentKind.init)
         enabledKinds = kinds.isEmpty ? AgentKind.allCases : kinds

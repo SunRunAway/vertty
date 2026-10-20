@@ -377,16 +377,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         }
         store.newSession()
     }
-    /// The second enabled agent's session (the File menu's second item).
+    /// The File menu's second item: the enabled agent that isn't the project's default.
     @objc private func newOtherSession() {
         if let remote = RemoteWindowController.key {
-            if let p = remote.store.currentProject, let kind = remote.store.enabledKinds.dropFirst().first {
+            if let p = remote.store.currentProject, let kind = remote.store.kindsDefaultFirst(p).dropFirst().first {
                 remote.store.newSession(in: p, kind: kind)
             }
             return
         }
-        guard let kind = store.enabledKinds.dropFirst().first else { return }
-        store.newSession(kind: kind)
+        guard let p = store.currentProject, let kind = store.kindsDefaultFirst(p).dropFirst().first else { return }
+        store.newSession(in: p, kind: kind)
     }
     @objc private func connectRemote() { RemoteConnectWindowController.show() }
 
@@ -453,12 +453,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         }
     }
 
-    /// The File menu has a "New … Session" per enabled agent, the default's
-    /// first (⌘T); the remote computer's agents while its window is key.
+    /// The File menu has a "New … Session" per enabled agent, the current
+    /// project's default first (⌘T); the remote computer's while its window is key.
     func menuNeedsUpdate(_ menu: NSMenu) {
         if menu === remoteMenu { return updateRemoteInfoItems() }
         guard menu === fileMenu else { return }
-        let kinds = RemoteWindowController.key?.store.enabledKinds ?? store.enabledKinds
+        let kinds: [AgentKind]
+        if let remote = RemoteWindowController.key?.store {
+            kinds = remote.currentProject.map(remote.kindsDefaultFirst) ?? remote.enabledKinds
+        } else {
+            kinds = store.currentProject.map(store.kindsDefaultFirst) ?? store.enabledKinds
+        }
         for (i, item) in newSessionItems.enumerated() {
             item.isHidden = i >= kinds.count
             if i < kinds.count {

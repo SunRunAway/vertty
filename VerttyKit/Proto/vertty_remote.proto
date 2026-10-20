@@ -262,7 +262,8 @@ message Project {
   string name = 2;
   string path = 3;
   // What a new session starts when NewSession leaves `kind` unset: the
-  // first of State.enabled_kinds, the same for every project.
+  // agent of the session last started in the project while it is enabled,
+  // else the first of State.enabled_kinds.
   AgentKind default_kind = 4;
 }
 

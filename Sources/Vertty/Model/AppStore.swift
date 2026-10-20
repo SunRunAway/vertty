@@ -132,9 +132,6 @@ final class AppStore: ObservableObject {
         refreshHistory()  // Codex's history depends on the shell's CODEX_HOME.
     }
 
-    /// What ⌘T and a new session that names no kind start, in every project.
-    var defaultKind: AgentKind { enabledKinds.first ?? .claude }
-
     /// Turns an agent on or off; the last one enabled stays on.
     func setEnabled(_ kind: AgentKind, _ enabled: Bool) {
         let kinds = AgentKind.allCases.filter { $0 == kind ? enabled : enabledKinds.contains($0) }
@@ -278,21 +275,23 @@ final class AppStore: ObservableObject {
             addProjectViaPanel()
             return
         }
-        let kind = kind ?? defaultKind
+        let kind = kind ?? defaultKind(project)
         // Codex can't be given a session id; it gets one once its thread shows up.
         let sessionID = kind == .claude ? UUID().uuidString.lowercased() : ""
         let tab = TabSession(projectID: project.id, kind: kind, sessionID: sessionID, cwd: project.path)
         insertAtTopOfProject(tab)
+        started(tab)
         select(tab)
     }
 
     /// A new session started for a remote client: shown at the top of its
     /// project, but the local selection stays where it is.
     func newSessionInBackground(in project: Project, kind: AgentKind?) -> TabSession {
-        let kind = kind ?? defaultKind
+        let kind = kind ?? defaultKind(project)
         let sessionID = kind == .claude ? UUID().uuidString.lowercased() : ""
         let tab = TabSession(projectID: project.id, kind: kind, sessionID: sessionID, cwd: project.path)
         insertAtTopOfProject(tab)
+        started(tab)
         launch(tab)
         return tab
     }
@@ -302,6 +301,7 @@ final class AppStore: ObservableObject {
         let tab = TabSession(projectID: project.id, kind: kind, sessionID: sessionID, cwd: project.path,
                              title: title ?? String(localized: "New Session"))
         insertAtTopOfProject(tab)
+        started(tab)
         launch(tab)
         refreshHistory()
         return tab
@@ -320,7 +320,14 @@ final class AppStore: ObservableObject {
         let tab = TabSession(projectID: project.id, kind: summary.kind, sessionID: summary.id, cwd: project.path,
                              title: summary.title)
         insertAtTopOfProject(tab)
+        started(tab)
         select(tab)
+    }
+
+    /// The user started this session (not a scheduled run): ⌘T in its
+    /// project starts its agent from now on.
+    private func started(_ tab: TabSession) {
+        updateProject(tab.projectID) { $0.lastKind = tab.kind }
     }
 
     /// New and resumed sessions go to the top of their project's cards, matching

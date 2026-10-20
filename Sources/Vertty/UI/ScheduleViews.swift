@@ -988,7 +988,7 @@ extension AppStore {
         var timing = ScheduleTiming()
         let c = timing.calendar.dateComponents([.weekday], from: Date().addingTimeInterval(86400))
         timing.weekdays = [c.weekday ?? 7]
-        let task = ScheduleTask(name: "", projectID: project.id, kind: defaultKind, prompt: "", timing: timing)
+        let task = ScheduleTask(name: "", projectID: project.id, kind: defaultKind(project), prompt: "", timing: timing)
         schedulePanel = SchedulePanel(taskID: nil, draft: Self.formDraft(task))
     }
 
