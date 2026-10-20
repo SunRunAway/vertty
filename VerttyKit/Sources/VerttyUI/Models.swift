@@ -6,15 +6,12 @@ public struct Project: Codable, Identifiable, Hashable {
     public var name: String
     public var path: String
     public var expanded = true
-    /// What ⌘T and the new-session button start here (the global default when unset).
-    public var defaultKind: AgentKind?
 
-    public init(id: UUID = UUID(), name: String, path: String, expanded: Bool = true, defaultKind: AgentKind? = nil) {
+    public init(id: UUID = UUID(), name: String, path: String, expanded: Bool = true) {
         self.id = id
         self.name = name
         self.path = path
         self.expanded = expanded
-        self.defaultKind = defaultKind
     }
 
     public var color: Color { ProjectPalette.color(for: id) }

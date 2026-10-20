@@ -16,7 +16,6 @@ enum ShellEnvironment {
     private static let lock = NSLock()
     private static var _path = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
     private static var _codexHome: String?
-    private static var _installedAgents: [AgentKind]?
     private static var _remotePort: String?
 
     static var path: String {
@@ -37,12 +36,6 @@ enum ShellEnvironment {
         return ProcessInfo.processInfo.environment["VERTTY_REMOTE_PORT"] ?? _remotePort
     }
 
-    /// The agents found by the user's interactive shell; nil until loadInteractive ran.
-    static var installedAgents: [AgentKind]? {
-        lock.lock(); defer { lock.unlock() }
-        return _installedAgents
-    }
-
     static func load() {
         let marker = "__VERTTY_PATH__"
         let result = Proc.run(shell, ["-l", "-c", "printf '\(marker)%s' \"$PATH\""], timeout: 8, usePathEnv: false)
@@ -56,24 +49,18 @@ enum ShellEnvironment {
 
     /// Codex runs in each tab's interactive login shell (ClaudeLauncher.command), so
     /// read CODEX_HOME and VERTTY_REMOTE_PORT the same way: they may be set in an
-    /// rc file. Also note which agents that shell can find (its PATH, aliases and
-    /// functions may differ from the non-interactive PATH above).
+    /// rc file.
     static func loadInteractive() {
         let marker = "__VERTTY_ENV__"
-        let script = "printf '\(marker)%s\\n%s\\n%s\\n%s\\n' \"$CODEX_HOME\" "
-            + "\"$(command -v claude)\" \"$(command -v codex)\" \"$VERTTY_REMOTE_PORT\""
+        let script = "printf '\(marker)%s\\n%s\\n' \"$CODEX_HOME\" \"$VERTTY_REMOTE_PORT\""
         let result = Proc.run(shell, ["-l", "-i", "-c", script], timeout: 8, usePathEnv: false)
         guard let out = result?.stdout, let range = out.range(of: marker) else { return }
         let lines = out[range.upperBound...].split(separator: "\n", omittingEmptySubsequences: false)
             .map { String($0).trimmingCharacters(in: .whitespaces) }
-        guard lines.count >= 4 else { return }
-        var installed: [AgentKind] = []
-        if !lines[1].isEmpty { installed.append(.claude) }
-        if !lines[2].isEmpty { installed.append(.codex) }
+        guard lines.count >= 2 else { return }
         lock.lock()
         _codexHome = lines[0].nonEmpty
-        _installedAgents = installed
-        _remotePort = lines[3].nonEmpty
+        _remotePort = lines[1].nonEmpty
         lock.unlock()
     }
 

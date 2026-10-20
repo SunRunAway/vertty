@@ -57,8 +57,10 @@
   814ac47. A `claude -r` typed into a tab is tracked through
   `~/.claude/sessions` (`LiveSessions`). Before re-adding any mechanism, check
   `git log -S` for whether it was removed on purpose.
-- The default session kind (Claude / Codex) is a per-project setting, not a
-  global one.
+- Which agents (Claude / Codex) new sessions can start is one global setting,
+  Vertty ▸ Enabled Agents (both by default, at least one stays on). Each
+  project row has a new-session button per enabled agent; there is no
+  per-project default kind. ⌘T starts the first enabled agent.
 - After ⌘Q the Dock can keep showing Vertty as running in the background while
   processes it spawned (e.g. shell plugin helpers) are still alive. That isn't a
   Vertty bug, and it would happen the same in any terminal. Don't kill

@@ -66,6 +66,7 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
     public let client: RemoteClient
 
     @Published public private(set) var projects: [Project] = []
+    @Published public private(set) var enabledKinds = AgentKind.allCases
     @Published public private(set) var allCards: [RemoteCard] = []
     /// The card whose terminal is shown. Cleared, the terminal is left.
     @Published public var selectedCardID: UUID? {
@@ -129,8 +130,10 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
     private func apply(_ state: Remote.State) {
         projects = state.projects.compactMap { p in
             guard let id = UUID(uuidString: p.id) else { return nil }
-            return Project(id: id, name: p.name, path: p.path, expanded: !collapsed.contains(id), defaultKind: AgentKind(p.defaultKind))
+            return Project(id: id, name: p.name, path: p.path, expanded: !collapsed.contains(id))
         }
+        let kinds = state.enabledKinds.filter { $0 == .claude || $0 == .codex }.map(AgentKind.init)
+        enabledKinds = kinds.isEmpty ? AgentKind.allCases : kinds
         var existing = Dictionary(uniqueKeysWithValues: allCards.map { ($0.id, $0) })
         allCards = state.cards.compactMap { c in
             if let id = UUID(uuidString: c.id), let card = existing.removeValue(forKey: id) {
@@ -178,13 +181,6 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
         historyShown.removeValue(forKey: project.id)
         if collapsed.remove(project.id) == nil { collapsed.insert(project.id) }
         apply(state)
-    }
-
-    public func defaultKind(_ project: Project) -> AgentKind { project.defaultKind ?? .claude }
-
-    public func kindsDefaultFirst(_ project: Project) -> [AgentKind] {
-        let first = defaultKind(project)
-        return [first, first == .claude ? .codex : .claude]
     }
 
     public func select(_ card: RemoteCard) {

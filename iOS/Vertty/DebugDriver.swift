@@ -108,7 +108,7 @@
             var lines: [String] = []
             if let store {
                 let client = store.client
-                lines.append("status=\(client.status) server=\(client.serverName) open=\(store.selectedCardID?.uuidString ?? "-")")
+                lines.append("status=\(client.status) server=\(client.serverName) open=\(store.selectedCardID?.uuidString ?? "-") kinds=\(store.enabledKinds.map(\.rawValue).joined(separator: ","))")
                 for card in store.allCards {
                     lines.append("card \(card.id) \(card.title) status=\(card.status) attention=\(card.attention) pr=\(card.prURL ?? "-")")
                 }

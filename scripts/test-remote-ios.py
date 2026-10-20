@@ -475,6 +475,16 @@ try:
     simctl("io", udid, "screenshot", str(root / "list.png"))
     print("PASS leaving restores the computer's size", flush=True)
 
+    # The project row has a new-session button per agent the computer enables.
+    wait(lambda: "kinds=claude,codex" in phone(), "the device didn't get both agents")
+    simctl("io", udid, "screenshot", str(root / "list-both-agents.png"))
+    server_drive("toggleagent codex")
+    wait(lambda: "kinds=claude\n" in phone(), "turning Codex off on the computer didn't reach the device")
+    simctl("io", udid, "screenshot", str(root / "list-claude-only.png"))
+    server_drive("toggleagent codex")
+    wait(lambda: "kinds=claude,codex" in phone(), "turning Codex back on didn't reach the device")
+    print("PASS the device follows the computer's enabled agents", flush=True)
+
     drive("new")
     wait(lambda: phone().count("\ncard ") == 2, "the new session didn't appear")
     wait(lambda: (lambda o: o not in (None, "-", card_id))(phone().split("open=")[1].split()[0] if "open=" in phone() else None),

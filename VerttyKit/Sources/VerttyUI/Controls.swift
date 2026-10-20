@@ -38,42 +38,47 @@ public struct IconButton: View {
     }
 }
 
+/// Starts a new session of one agent: an IconButton with the agent's mark.
+public struct NewSessionButton: View {
+    let kind: AgentKind
+    let action: () -> Void
+    @State private var hover = false
+
+    public init(kind: AgentKind, action: @escaping () -> Void) {
+        self.kind = kind
+        self.action = action
+    }
+
+    public var body: some View {
+        Button(action: action) {
+            IconFace(large: false, hover: hover) { AgentIcon(kind: kind, size: Touch.size(12)) }
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .help(kind.newSessionTitle)
+    }
+}
+
 /// An icon that opens a menu, looking and hovering like an IconButton.
 public struct IconMenu<Content: View>: View {
     var systemName = "ellipsis"
     var large = false
-    /// What a click does; the menu then opens on a long press instead.
-    var primaryAction: (() -> Void)?
     let content: Content
     @State private var hover = false
 
-    public init(systemName: String = "ellipsis", large: Bool = false, primaryAction: (() -> Void)? = nil,
-                @ViewBuilder content: () -> Content) {
+    public init(systemName: String = "ellipsis", large: Bool = false, @ViewBuilder content: () -> Content) {
         self.systemName = systemName
         self.large = large
-        self.primaryAction = primaryAction
         self.content = content()
     }
 
     public var body: some View {
         // The button menu style keeps the label's frame and background; the
         // borderless one draws only the glyph.
-        Group {
-            if let primaryAction {
-                Menu {
-                    content
-                } label: {
-                    IconFace(systemName: systemName, large: large, hover: hover)
-                } primaryAction: {
-                    primaryAction()
-                }
-            } else {
-                Menu {
-                    content
-                } label: {
-                    IconFace(systemName: systemName, large: large, hover: hover)
-                }
-            }
+        Menu {
+            content
+        } label: {
+            IconFace(systemName: systemName, large: large, hover: hover)
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
@@ -86,17 +91,31 @@ public struct IconMenu<Content: View>: View {
 
 /// The glyph and hover square of an IconButton or IconMenu; the square is
 /// what takes the click.
-private struct IconFace: View {
-    let systemName: String
+private struct IconFace<Glyph: View>: View {
     let large: Bool
     let hover: Bool
+    @ViewBuilder let glyph: Glyph
 
     var body: some View {
-        Image(systemName: systemName)
-            .font(.ui(large ? 14 : 12.5, weight: .medium))
+        glyph
             .frame(width: Touch.row(large ? 32 : 24), height: Touch.row(large ? 30 : 22))
             .background(RoundedRectangle(cornerRadius: large ? 8 : 6).fill(Color.white.opacity(hover ? 0.10 : 0)))
             .contentShape(Rectangle())
+    }
+}
+
+private struct Symbol: View {
+    let name: String
+    let large: Bool
+
+    var body: some View {
+        Image(systemName: name).font(.ui(large ? 14 : 12.5, weight: .medium))
+    }
+}
+
+extension IconFace where Glyph == Symbol {
+    init(systemName: String, large: Bool, hover: Bool) {
+        self.init(large: large, hover: hover) { Symbol(name: systemName, large: large) }
     }
 }
 

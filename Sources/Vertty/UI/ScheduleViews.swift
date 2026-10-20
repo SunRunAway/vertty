@@ -369,10 +369,6 @@ struct SchedulePanelView: View {
                           options: store.projects.map { ($0.id, $0.name) },
                           fallback: String(localized: "Removed project"))
                     .disabled(fixed)
-                    .onChange(of: draft.wrappedValue.projectID) { _, id in
-                        // Another project: its own default agent.
-                        if !fixed, let p = store.project(id) { draft.wrappedValue.kind = store.defaultKind(p) }
-                    }
             }
             PanelRow("Agent") {
                 AgentIcon(kind: draft.wrappedValue.kind, size: 11)
@@ -992,7 +988,7 @@ extension AppStore {
         var timing = ScheduleTiming()
         let c = timing.calendar.dateComponents([.weekday], from: Date().addingTimeInterval(86400))
         timing.weekdays = [c.weekday ?? 7]
-        let task = ScheduleTask(name: "", projectID: project.id, kind: defaultKind(project), prompt: "", timing: timing)
+        let task = ScheduleTask(name: "", projectID: project.id, kind: defaultKind, prompt: "", timing: timing)
         schedulePanel = SchedulePanel(taskID: nil, draft: Self.formDraft(task))
     }
 

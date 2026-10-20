@@ -89,9 +89,10 @@ final class RemoteBridge {
             rp.id = p.id.uuidString
             rp.name = p.name
             rp.path = p.path
-            rp.defaultKind = Self.kind(store.defaultKind(p))
+            rp.defaultKind = Self.kind(store.defaultKind)
             return rp
         }
+        state.enabledKinds = store.enabledKinds.map(Self.kind)
         state.cards = store.orderedTabs.map(card)
         let open = Set(store.tabs.map(\.sessionID))
         state.history = store.projects.map { p in

@@ -42,14 +42,12 @@ public struct SidebarFeatures: OptionSet {
     public static let reorder = SidebarFeatures(rawValue: 1 << 1)
     /// Scheduled tasks.
     public static let schedules = SidebarFeatures(rawValue: 1 << 2)
-    /// Pick a project's default session kind.
-    public static let defaultKindSetting = SidebarFeatures(rawValue: 1 << 3)
     /// Show directories in Finder and copy their paths (they're on this Mac).
     public static let localFiles = SidebarFeatures(rawValue: 1 << 4)
     /// Close every other session.
     public static let closeOthers = SidebarFeatures(rawValue: 1 << 5)
 
-    public static let local: SidebarFeatures = [.manageProjects, .reorder, .schedules, .defaultKindSetting, .localFiles, .closeOthers]
+    public static let local: SidebarFeatures = [.manageProjects, .reorder, .schedules, .localFiles, .closeOthers]
 }
 
 /// Everything the sidebar shows and does: this Mac's sessions (AppStore) or
@@ -65,8 +63,9 @@ public protocol SidebarStore: ObservableObject {
 
     func cards(of project: Project) -> [Card]
     func toggleExpanded(_ project: Project)
-    func defaultKind(_ project: Project) -> AgentKind
-    func kindsDefaultFirst(_ project: Project) -> [AgentKind]
+    /// The agents new sessions can start, never empty; the first is the
+    /// default (⌘T, and a new session that names no kind).
+    var enabledKinds: [AgentKind] { get }
 
     func select(_ card: Card)
     func newSession(in project: Project, kind: AgentKind?)
@@ -93,7 +92,6 @@ public protocol SidebarStore: ObservableObject {
     func renameProject(_ project: Project)
     func changeProjectDirectory(_ project: Project)
     func removeProject(_ project: Project)
-    func setDefaultKind(_ kind: AgentKind, for project: Project)
     func newScheduledTask(in project: Project)
     func moveProject(_ id: UUID, before target: UUID)
     func moveCard(_ id: UUID, before target: UUID)
@@ -108,7 +106,6 @@ public extension SidebarStore {
     func renameProject(_ project: Project) {}
     func changeProjectDirectory(_ project: Project) {}
     func removeProject(_ project: Project) {}
-    func setDefaultKind(_ kind: AgentKind, for project: Project) {}
     func newScheduledTask(in project: Project) {}
     func moveProject(_ id: UUID, before target: UUID) {}
     func moveCard(_ id: UUID, before target: UUID) {}

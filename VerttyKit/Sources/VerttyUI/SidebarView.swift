@@ -171,19 +171,14 @@ private struct ProjectRow<Store: SidebarStore>: View {
             Spacer(minLength: 4)
             #if os(iOS)
             unreadCount
-            // Touch has no hover: the buttons stay, and holding New Session
-            // picks the kind.
+            // Touch has no hover: the buttons stay.
             searchButton
-            IconMenu(systemName: "square.and.pencil", primaryAction: { store.newSession(in: project, kind: nil) }) {
-                newSessionButtons
-            }
+            newSessionButtons
             #else
             if hover {
                 IconMenu { projectMenu }
                 searchButton
-                IconButton(systemName: "square.and.pencil", help: Text(store.defaultKind(project).newSessionTitle)) {
-                    store.newSession(in: project, kind: nil)
-                }
+                newSessionButtons
             } else {
                 unreadCount
             }
@@ -224,28 +219,18 @@ private struct ProjectRow<Store: SidebarStore>: View {
         }
     }
 
-    @ViewBuilder
+    /// One per enabled agent, the default at the far right.
     private var newSessionButtons: some View {
-        ForEach(store.kindsDefaultFirst(project)) { kind in
-            Button(kind.newSessionTitle) { store.newSession(in: project, kind: kind) }
+        ForEach(store.enabledKinds.reversed()) { kind in
+            NewSessionButton(kind: kind) { store.newSession(in: project, kind: kind) }
         }
     }
 
     @ViewBuilder
     private var projectMenu: some View {
-        newSessionButtons
         Button { store.openSearch(project) } label: { Text("Search Sessions", bundle: .verttyUIResources) }
         if store.features.contains(.schedules) {
             Button { store.newScheduledTask(in: project) } label: { Text("New Scheduled Task…", bundle: .verttyUIResources) }
-        }
-        if store.features.contains(.defaultKindSetting) {
-            Menu {
-                ForEach(AgentKind.allCases) { kind in
-                    Toggle(kind.name, isOn: Binding(
-                        get: { store.defaultKind(project) == kind },
-                        set: { if $0 { store.setDefaultKind(kind, for: project) } }))
-                }
-            } label: { Text("Set Default Session", bundle: .verttyUIResources) }
         }
         if store.features.contains(.localFiles) {
             Divider()

@@ -773,6 +773,10 @@ public struct Vertty_Remote_State: Sendable {
   /// server's local setting). See CloseSession.
   public var confirmClose: Bool = false
 
+  /// The agents the server offers for new sessions (its local setting), its
+  /// default first. Empty from servers that predate the setting: all of them.
+  public var enabledKinds: [Vertty_Remote_AgentKind] = []
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -789,7 +793,8 @@ public struct Vertty_Remote_Project: Sendable {
 
   public var path: String = String()
 
-  /// What a new session starts when NewSession leaves `kind` unset.
+  /// What a new session starts when NewSession leaves `kind` unset: the
+  /// first of State.enabled_kinds, the same for every project.
   public var defaultKind: Vertty_Remote_AgentKind = .unspecified
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
@@ -901,7 +906,7 @@ public struct Vertty_Remote_NewSession: Sendable {
 
   public var projectID: String = String()
 
-  /// Unset: the project's default kind.
+  /// Unset: the server's default kind.
   public var kind: Vertty_Remote_AgentKind = .unspecified
 
   /// See REPEATED REQUESTS.
@@ -2053,6 +2058,7 @@ extension Vertty_Remote_State: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
     2: .same(proto: "cards"),
     3: .same(proto: "history"),
     4: .standard(proto: "confirm_close"),
+    5: .standard(proto: "enabled_kinds"),
   ]
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -2065,6 +2071,7 @@ extension Vertty_Remote_State: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
       case 2: try { try decoder.decodeRepeatedMessageField(value: &self.cards) }()
       case 3: try { try decoder.decodeRepeatedMessageField(value: &self.history) }()
       case 4: try { try decoder.decodeSingularBoolField(value: &self.confirmClose) }()
+      case 5: try { try decoder.decodeRepeatedEnumField(value: &self.enabledKinds) }()
       default: break
       }
     }
@@ -2083,6 +2090,9 @@ extension Vertty_Remote_State: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
     if self.confirmClose != false {
       try visitor.visitSingularBoolField(value: self.confirmClose, fieldNumber: 4)
     }
+    if !self.enabledKinds.isEmpty {
+      try visitor.visitPackedEnumField(value: self.enabledKinds, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2091,6 +2101,7 @@ extension Vertty_Remote_State: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
     if lhs.cards != rhs.cards {return false}
     if lhs.history != rhs.history {return false}
     if lhs.confirmClose != rhs.confirmClose {return false}
+    if lhs.enabledKinds != rhs.enabledKinds {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

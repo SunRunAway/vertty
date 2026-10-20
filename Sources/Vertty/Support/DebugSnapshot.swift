@@ -152,13 +152,15 @@ final class DebugSnapshot {
                 if buttons.indices.contains(index) { buttons[index].performClick(nil) }
                 continue
             }
-            if line.hasPrefix("newprojectagent "),
+            if line.hasPrefix("toggleagent "),
                let menu = NSApp.mainMenu?.items.first?.submenu?.items.compactMap(\.submenu).first(where: {
-                   $0.items.contains { $0.action == NSSelectorFromString("setNewProjectAgent:") }
+                   $0.items.contains { $0.action == NSSelectorFromString("toggleAgent:") }
                }), let index = menu.items.firstIndex(where: {
-                   ($0.representedObject as? String) == String(line.dropFirst(16))
+                   ($0.representedObject as? String) == String(line.dropFirst(12))
                }) {
-                menu.performActionForItem(at: index)
+                // Like a click: a disabled item does nothing.
+                menu.update()
+                if menu.items[index].isEnabled { menu.performActionForItem(at: index) }
                 continue
             }
             if line.hasPrefix("addproject ") {
@@ -451,10 +453,18 @@ final class DebugSnapshot {
         }
         lines.append("sidebarVisible=\(store.sidebarVisible) sidebarWidth=\(store.sidebarWidth)")
         if let menu = NSApp.mainMenu?.items.first?.submenu?.items.compactMap(\.submenu).first(where: {
-            $0.items.contains { $0.action == NSSelectorFromString("setNewProjectAgent:") }
+            $0.items.contains { $0.action == NSSelectorFromString("toggleAgent:") }
         }) {
             menu.update()
-            lines.append("new-project-agent-menu: " + menu.items.map { "\($0.title)=\($0.state == .on)" }.joined(separator: ", "))
+            lines.append("enabled-agents-menu: " + menu.items.map {
+                "\($0.title)=\($0.state == .on)\($0.isEnabled ? "" : " (locked)")"
+            }.joined(separator: ", "))
+        }
+        if let file = NSApp.mainMenu?.items.first(where: { $0.submenu?.items.contains { $0.action == NSSelectorFromString("newOtherSession") } == true })?.submenu {
+            file.delegate?.menuNeedsUpdate?(file)
+            let new = ["newSession", "newOtherSession"].map(NSSelectorFromString)
+            lines.append("new-session-menu: " + file.items.filter { !$0.isHidden && $0.action.map(new.contains) == true }
+                .map { "\($0.title)\($0.keyEquivalent.isEmpty ? "" : " ⌘" + $0.keyEquivalent.uppercased())" }.joined(separator: ", "))
         }
         lines.append("projects: " + store.projects.map { "\($0.name)=\($0.path)" }.joined(separator: ", "))
         lines.append("selected: \(store.selectedTabID?.uuidString ?? "-")")

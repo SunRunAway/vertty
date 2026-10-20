@@ -214,8 +214,8 @@ def write_state():
     ]
     state = {
         "projects": [
-            {"id": STARBOARD_ID, "name": "starboard", "path": str(STARBOARD), "expanded": True, "defaultKind": "claude"},
-            {"id": ZHANGBEN_ID, "name": "小账本", "path": str(ZHANGBEN), "expanded": True, "defaultKind": "claude"},
+            {"id": STARBOARD_ID, "name": "starboard", "path": str(STARBOARD), "expanded": True},
+            {"id": ZHANGBEN_ID, "name": "小账本", "path": str(ZHANGBEN), "expanded": True},
         ],
         "tabs": tabs,
         "selectedTabID": background["id"],

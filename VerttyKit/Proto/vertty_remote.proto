@@ -252,13 +252,17 @@ message State {
   // Whether closing a card whose agent is still running asks first (the
   // server's local setting). See CloseSession.
   bool confirm_close = 4;
+  // The agents the server offers for new sessions (its local setting), its
+  // default first. Empty from servers that predate the setting: all of them.
+  repeated AgentKind enabled_kinds = 5;
 }
 
 message Project {
   string id = 1;
   string name = 2;
   string path = 3;
-  // What a new session starts when NewSession leaves `kind` unset.
+  // What a new session starts when NewSession leaves `kind` unset: the
+  // first of State.enabled_kinds, the same for every project.
   AgentKind default_kind = 4;
 }
 
@@ -315,7 +319,7 @@ message HistoryEntry {
 // window shows the new card but keeps its own selection.
 message NewSession {
   string project_id = 1;
-  // Unset: the project's default kind.
+  // Unset: the server's default kind.
   AgentKind kind = 2;
   // See REPEATED REQUESTS.
   string operation_id = 3;

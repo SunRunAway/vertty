@@ -122,16 +122,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         }
     }
 
-    @objc private func setNewProjectAgent(_ sender: NSMenuItem) {
+    @objc private func toggleAgent(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let kind = AgentKind(rawValue: raw) else { return }
-        store.setNewProjectKind(kind)
+        store.setEnabled(kind, !store.enabledKinds.contains(kind))
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         if menuItem.action == #selector(toggleAutomaticUpdateChecks) {
             menuItem.state = updaterController.updater.automaticallyChecksForUpdates ? .on : .off
-        } else if menuItem.action == #selector(setNewProjectAgent(_:)) {
-            menuItem.state = (menuItem.representedObject as? String) == store.globalDefaultKind.rawValue ? .on : .off
+        } else if menuItem.action == #selector(toggleAgent(_:)) {
+            let enabled = store.enabledKinds.contains { $0.rawValue == menuItem.representedObject as? String }
+            menuItem.state = enabled ? .on : .off
+            // At least one stays on.
+            return !enabled || store.enabledKinds.count > 1
         } else if menuItem.action == #selector(toggleSidebar) {
             menuItem.title = store.sidebarVisible ? String(localized: "Hide Sidebar") : String(localized: "Show Sidebar")
         } else if menuItem.action == #selector(toggleDisplayAwake) {
@@ -257,11 +260,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         appMenu.addItem(.separator())
         let agentMenu = NSMenu()
         for kind in AgentKind.allCases {
-            let choice = item(kind == .claude ? "Claude Code" : "Codex", #selector(setNewProjectAgent(_:)), "")
+            let choice = item(kind == .claude ? "Claude Code" : "Codex", #selector(toggleAgent(_:)), "")
             choice.representedObject = kind.rawValue
             agentMenu.addItem(choice)
         }
-        addSubmenu(appMenu, "Default Agent for New Projects", agentMenu)
+        addSubmenu(appMenu, "Enabled Agents", agentMenu)
         appMenu.addItem(.separator())
         appMenu.addItem(sleepProtection.makeContinuousMenuItem())
         let sleepItem = item("Closed-Lid Sleep Protection While Tasks Run: Not Authorized…", #selector(toggleSleepProtection), "")
@@ -374,13 +377,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         }
         store.newSession()
     }
+    /// The second enabled agent's session (the File menu's second item).
     @objc private func newOtherSession() {
         if let remote = RemoteWindowController.key {
-            if let p = remote.store.currentProject { remote.store.newSession(in: p, kind: remote.store.kindsDefaultFirst(p)[1]) }
+            if let p = remote.store.currentProject, let kind = remote.store.enabledKinds.dropFirst().first {
+                remote.store.newSession(in: p, kind: kind)
+            }
             return
         }
-        guard let p = store.currentProject else { return store.newSession() }
-        store.newSession(in: p, kind: store.kindsDefaultFirst(p)[1])
+        guard let kind = store.enabledKinds.dropFirst().first else { return }
+        store.newSession(kind: kind)
     }
     @objc private func connectRemote() { RemoteConnectWindowController.show() }
 
@@ -447,13 +453,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         }
     }
 
-    /// The File menu's first "New … Session" (⌘T) is the current project's default kind.
+    /// The File menu has a "New … Session" per enabled agent, the default's
+    /// first (⌘T); the remote computer's agents while its window is key.
     func menuNeedsUpdate(_ menu: NSMenu) {
         if menu === remoteMenu { return updateRemoteInfoItems() }
         guard menu === fileMenu else { return }
-        let kinds = store.currentProject.map(store.kindsDefaultFirst) ?? AgentKind.allCases
-        for (item, kind) in zip(newSessionItems, kinds) {
-            item.title = String(localized: kind == .claude ? "New Claude Session" : "New Codex Session")
+        let kinds = RemoteWindowController.key?.store.enabledKinds ?? store.enabledKinds
+        for (i, item) in newSessionItems.enumerated() {
+            item.isHidden = i >= kinds.count
+            if i < kinds.count {
+                item.title = String(localized: kinds[i] == .claude ? "New Claude Session" : "New Codex Session")
+            }
         }
     }
 

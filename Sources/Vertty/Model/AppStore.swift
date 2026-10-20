@@ -14,9 +14,9 @@ final class AppStore: ObservableObject {
     @Published private(set) var selectedTabID: UUID?
     /// Project of the last selected session, kept after that session closes.
     @Published private(set) var lastProjectID: UUID?
-    /// The built-in default kind, picked on first launch from which agents are installed.
-    @Published private(set) var detectedKind: AgentKind?
-    @Published private(set) var newProjectKind: AgentKind?
+    /// The agents offered for new sessions (Vertty ▸ Enabled Agents), in
+    /// AgentKind order; never empty.
+    @Published private(set) var enabledKinds = AgentKind.allCases
     @Published var history: [UUID: [SessionSummary]] = [:]
     @Published var historyVisibleCounts: [UUID: Int] = [:]
     /// Per-project session search: present while the search field is open.
@@ -86,8 +86,7 @@ final class AppStore: ObservableObject {
             tabs = state.tabs.filter { r in state.projects.contains { $0.id == r.projectID } }.map(TabSession.init(record:))
             selectedTabID = state.selectedTabID ?? tabs.first?.id
             lastProjectID = state.lastProjectID
-            detectedKind = state.detectedKind
-            newProjectKind = state.newProjectKind
+            if let kinds = state.enabledKinds, !kinds.isEmpty { enabledKinds = AgentKind.allCases.filter(kinds.contains) }
             if let w = state.sidebarWidth { sidebarWidth = CGFloat(w) }
             if let v = state.sidebarVisible { sidebarVisible = v }
             if let f = state.shellFraction { shellFraction = CGFloat(f) }
@@ -129,38 +128,25 @@ final class AppStore: ObservableObject {
 
     /// Called once the user's shell environment is known (ShellEnvironment.loadInteractive).
     func shellEnvironmentLoaded() {
-        if detectedKind == nil, let installed = ShellEnvironment.installedAgents, let first = installed.first {
-            detectedKind = first
-            scheduleSave()
-        }
-        freezeProjectDefaults()
-        scheduleSave()
         watchHistory()
         refreshHistory()  // Codex's history depends on the shell's CODEX_HOME.
     }
 
-    /// The initial default for projects added from now on.
-    var globalDefaultKind: AgentKind { newProjectKind ?? detectedKind ?? .claude }
+    /// What ⌘T and a new session that names no kind start, in every project.
+    var defaultKind: AgentKind { enabledKinds.first ?? .claude }
 
-    /// Legacy projects retain their original detected default.
-    func defaultKind(_ project: Project) -> AgentKind { project.defaultKind ?? detectedKind ?? .claude }
-
-    private func freezeProjectDefaults() {
-        for index in projects.indices where projects[index].defaultKind == nil {
-            projects[index].defaultKind = detectedKind ?? .claude
-        }
-    }
-
-    func setNewProjectKind(_ kind: AgentKind) {
-        freezeProjectDefaults()
-        newProjectKind = kind
+    /// Turns an agent on or off; the last one enabled stays on.
+    func setEnabled(_ kind: AgentKind, _ enabled: Bool) {
+        let kinds = AgentKind.allCases.filter { $0 == kind ? enabled : enabledKinds.contains($0) }
+        guard !kinds.isEmpty else { return }
+        enabledKinds = kinds
         scheduleSave()
     }
 
     @discardableResult
     func addProject(at url: URL) -> Project {
         if let existing = projects.first(where: { $0.path == url.path }) { return existing }
-        let project = Project(name: url.lastPathComponent, path: url.path, defaultKind: globalDefaultKind)
+        let project = Project(name: url.lastPathComponent, path: url.path)
         schedules.projectAdded(project.id, path: project.path, known: Set(projects.map(\.id)))
         projects.append(project)
         scheduleSave()
@@ -178,8 +164,7 @@ final class AppStore: ObservableObject {
             tabs: tabs.map(\.record),
             selectedTabID: selectedTabID,
             lastProjectID: lastProjectID,
-            detectedKind: detectedKind,
-            newProjectKind: newProjectKind,
+            enabledKinds: enabledKinds,
             sidebarWidth: Double(sidebarWidth),
             sidebarVisible: sidebarVisible,
             shellFraction: Double(shellFraction))
@@ -293,7 +278,7 @@ final class AppStore: ObservableObject {
             addProjectViaPanel()
             return
         }
-        let kind = kind ?? defaultKind(project)
+        let kind = kind ?? defaultKind
         // Codex can't be given a session id; it gets one once its thread shows up.
         let sessionID = kind == .claude ? UUID().uuidString.lowercased() : ""
         let tab = TabSession(projectID: project.id, kind: kind, sessionID: sessionID, cwd: project.path)
@@ -304,7 +289,7 @@ final class AppStore: ObservableObject {
     /// A new session started for a remote client: shown at the top of its
     /// project, but the local selection stays where it is.
     func newSessionInBackground(in project: Project, kind: AgentKind?) -> TabSession {
-        let kind = kind ?? defaultKind(project)
+        let kind = kind ?? defaultKind
         let sessionID = kind == .claude ? UUID().uuidString.lowercased() : ""
         let tab = TabSession(projectID: project.id, kind: kind, sessionID: sessionID, cwd: project.path)
         insertAtTopOfProject(tab)
@@ -325,16 +310,6 @@ final class AppStore: ObservableObject {
     /// Starts a card's agent for a remote client if it isn't running.
     func launchInBackground(_ tab: TabSession) {
         launchIfNeeded(tab)
-    }
-
-    /// Both kinds, the project's default first (the order of its "New … Session" menu items).
-    func kindsDefaultFirst(_ project: Project) -> [AgentKind] {
-        let first = defaultKind(project)
-        return [first] + AgentKind.allCases.filter { $0 != first }
-    }
-
-    func setDefaultKind(_ kind: AgentKind, for project: Project) {
-        updateProject(project.id) { $0.defaultKind = kind }
     }
 
     func resumeSession(_ summary: SessionSummary, in project: Project) {
