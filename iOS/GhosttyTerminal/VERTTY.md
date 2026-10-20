@@ -27,3 +27,6 @@ as the Mac app, and it isn't checked in. Vertty's changes:
   text "Esc" rather than a glyph, and
   `UITerminalView.inputAccessoryShowsDismissKey` pins a key that hides the
   software keyboard to the bar's trailing edge, outside the scrolling keys.
+- Touch scrolling tracks the finger 1:1 (points times the display scale,
+  since Ghostty reads precision offsets in pixels) and coasts with
+  UIScrollView's normal deceleration.

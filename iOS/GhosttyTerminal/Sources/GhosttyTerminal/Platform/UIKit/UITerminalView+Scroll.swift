@@ -37,8 +37,6 @@
     }
 
     extension UITerminalView {
-        static let touchScrollMultiplier: CGFloat = 3.0
-
         @objc func handleScrollWheelGesture(_ gesture: UIPanGestureRecognizer) {
             guard pointer.session.reported == nil else { return }
             switch gesture.state {
@@ -154,7 +152,9 @@
                 core.requestImmediateTick()
                 return
             }
-            let multiplier = Self.touchScrollMultiplier
+            // Ghostty reads a precision offset in pixels; scaling the
+            // finger's points by the display scale keeps content under it.
+            let multiplier = resolvedDisplayScale()
             let mods = TerminalScrollModifiers(precision: true, momentum: momentum)
             surface?.sendMouseScroll(x: Double(delta.x * multiplier), y: Double(delta.y * multiplier), mods: mods.rawValue)
         }
@@ -180,9 +180,10 @@
 
         @objc func momentumScrollFrame(_ link: CADisplayLink) {
             let dt = link.targetTimestamp - link.timestamp
-            // 0.92 per 1/60 s, scaled to the frame so a flick travels the
-            // same distance at 120 Hz as at 60 Hz.
-            let decay = CGFloat(pow(0.92, dt * 60))
+            // UIScrollView's normal deceleration (per millisecond), scaled to
+            // the frame so a flick travels the same distance at any refresh
+            // rate.
+            let decay = pow(UIScrollView.DecelerationRate.normal.rawValue, dt * 1000)
 
             momentumScroll.velocity.x *= decay
             momentumScroll.velocity.y *= decay
