@@ -107,10 +107,35 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
         // always takes the typing.
         if Self.hasHardwareKeyboard {
             terminal.acquireProgrammaticFocus()
-        } else if store.opensWithKeyboard(cardID) {
+        }
+        if let kept = store.takeKeptScreen(cardID) {
+            goOn(kept)
+        } else if !Self.hasHardwareKeyboard, store.opensWithKeyboard(cardID) {
             bar.focus()
         }
         attachIfReady()
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        keepScreen()
+    }
+
+    /// Going away while the card stays selected: another screen for the card
+    /// replaces this one and goes on with the typing. It may already be up.
+    private func keepScreen() {
+        guard store.selectedCardID == cardID else { return }
+        let kept = RemoteStore.KeptScreen(cardID: cardID, draft: bar.draft, keyboardUp: keyboardIsUp)
+        if let next = Self.current, next !== self, next.cardID == cardID {
+            next.goOn(kept)
+        } else {
+            store.keptScreen = kept
+        }
+    }
+
+    private func goOn(_ kept: RemoteStore.KeptScreen) {
+        bar.draft = kept.draft
+        if kept.keyboardUp, !Self.hasHardwareKeyboard { bar.focus() }
     }
 
     // MARK: - Keyboard

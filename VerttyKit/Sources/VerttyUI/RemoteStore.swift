@@ -216,6 +216,30 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
         return card(id)?.status == .needsInput
     }
 
+    /// The typing on a terminal screen that went away while its card stayed
+    /// selected: the screen is being rebuilt (an iPhone folding or unfolding,
+    /// an iPad window crossing size classes), and the next one goes on with it.
+    public struct KeptScreen {
+        public let cardID: UUID
+        public let draft: String
+        public let keyboardUp: Bool
+
+        public init(cardID: UUID, draft: String, keyboardUp: Bool) {
+            self.cardID = cardID
+            self.draft = draft
+            self.keyboardUp = keyboardUp
+        }
+    }
+
+    /// Dropped when the selection changes.
+    public var keptScreen: KeptScreen?
+
+    public func takeKeptScreen(_ id: UUID) -> KeptScreen? {
+        guard let kept = keptScreen, kept.cardID == id else { return nil }
+        keptScreen = nil
+        return kept
+    }
+
     public func resumeSession(_ summary: SessionSummary, in project: Project) {
         var entry = Remote.HistoryEntry()
         entry.sessionID = summary.id
@@ -378,6 +402,7 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
     }
 
     private func selectionChanged() {
+        keptScreen = nil
         resetStream()
         if selectedCardID == nil {
             client.leaveTerminal()

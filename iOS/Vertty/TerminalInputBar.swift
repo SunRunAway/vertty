@@ -340,6 +340,15 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
 
     func focus() { composer.becomeFirstResponder() }
 
+    /// What's typed and not sent yet.
+    var draft: String {
+        get { composer.text ?? "" }
+        set {
+            composer.text = newValue
+            update()
+        }
+    }
+
     /// Text goes into the field, which then shows with the keyboard up, to
     /// be edited before it's sent. A picture or file goes to the terminal,
     /// which pastes it as its path.
