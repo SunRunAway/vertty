@@ -49,6 +49,17 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
     private var cell: (width: CGFloat, height: CGFloat)?
     /// The session's grid on the computer, from the last snapshot.
     private var sessionGrid: Remote.TerminalSize?
+    /// The phone stands half open.
+    private var halfOpen = false
+    /// The terminal ends at the bar, or, half open and folded across the
+    /// middle like a laptop, at the fold (and above the bar).
+    private lazy var toBar = container.bottomAnchor.constraint(equalTo: bar.topAnchor)
+    private lazy var aboveBar = container.bottomAnchor.constraint(lessThanOrEqualTo: bar.topAnchor)
+    private lazy var toFold: NSLayoutConstraint = {
+        let c = container.bottomAnchor.constraint(equalTo: view.topAnchor)
+        c.priority = .defaultHigh
+        return c
+    }()
 
     init(cardID: UUID, store: RemoteStore) {
         self.cardID = cardID
@@ -71,7 +82,7 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
             container.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             container.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
             container.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
-            container.bottomAnchor.constraint(equalTo: bar.topAnchor),
+            toBar,
             bar.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
             bar.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
             bar.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor),
@@ -98,6 +109,11 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
         // Any touch on this screen, a tap, a scroll or a key on the bar,
         // takes the session to the iPhone's size.
         view.addGestureRecognizer(TouchWatcher { [weak self] in self?.store.willInteract() })
+        if #available(iOS 27.1, *) {
+            view.addInteraction(UIHingeInteraction { [weak self] _, update in
+                self?.hingeChanged(halfOpen: update.hinge?.status == .partiallyOpen)
+            })
+        }
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -136,6 +152,34 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
     private func goOn(_ kept: RemoteStore.KeptScreen) {
         bar.draft = kept.draft
         if kept.keyboardUp, !Self.hasHardwareKeyboard { bar.focus() }
+    }
+
+    // MARK: - Fold
+
+    /// Half open is for typing: the keyboard comes up.
+    private func hingeChanged(halfOpen: Bool) {
+        guard halfOpen != self.halfOpen else { return }
+        self.halfOpen = halfOpen
+        view.setNeedsLayout()
+        if halfOpen, !Self.hasHardwareKeyboard { bar.focus() }
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        // The fold runs across the middle of the screen while it's upright.
+        var fold: CGFloat?
+        if halfOpen, let window = view.window, window.bounds.height > window.bounds.width {
+            fold = view.convert(CGPoint(x: 0, y: window.bounds.midY), from: window).y
+        }
+        if let fold, toFold.constant != fold { toFold.constant = fold }
+        guard toBar.isActive != (fold == nil) else { return }
+        if fold == nil {
+            NSLayoutConstraint.deactivate([aboveBar, toFold])
+            toBar.isActive = true
+        } else {
+            toBar.isActive = false
+            NSLayoutConstraint.activate([aboveBar, toFold])
+        }
     }
 
     // MARK: - Keyboard
