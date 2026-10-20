@@ -23,10 +23,12 @@ public struct RemoteWorkspace<Terminal: View>: View {
     public var body: some View {
         Group {
             #if os(iOS)
-            if sizeClass == .compact {
-                compact
-            } else {
-                regular
+            GeometryReader { geometry in
+                if sizeClass == .compact || geometry.size.width < Self.sideBySideWidth {
+                    compact
+                } else {
+                    regular
+                }
             }
             #else
             regular
@@ -84,6 +86,11 @@ public struct RemoteWorkspace<Terminal: View>: View {
     }
 
     #if os(iOS)
+    /// Narrower than this, the sidebar would leave the terminal too little
+    /// room beside it: an unfolded iPhone held upright (669 points) is laid
+    /// out as an iPhone, an iPad mini upright (744) still side by side.
+    private static var sideBySideWidth: CGFloat { 700 }
+
     private var compact: some View {
         NavigationStack(path: Binding(
             get: { store.selectedCardID.map { [$0] } ?? [] },
