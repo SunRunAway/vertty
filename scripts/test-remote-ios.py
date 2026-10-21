@@ -38,8 +38,6 @@ APP = ROOT / "build/ios-dd/Build/Products/Debug-iphonesimulator/Vertty.app"
 PROBE = ROOT / "VerttyKit/.build/debug/remote-probe"
 BUNDLE = "dev.vertty.remote"
 DEVICE = os.environ.get("SIM_DEVICE", "iPhone 17")
-# With the keyboard up, an iPad has the bar's keys in the keyboard's shortcuts bar.
-KEYS_UP = "keyboard" if DEVICE.startswith("iPad") else "keys"
 
 
 def free_port():
@@ -312,7 +310,7 @@ try:
     # The bar's keyboard key brings the keyboard up.
     drive("key keyboard")
     wait(lambda: terminal("keyboard") == "true", "the keyboard key didn't bring up the keyboard")
-    assert terminal("bar") == KEYS_UP, phone()
+    assert terminal("bar") == "keys", phone()
     own = settled_size("session not at the size with the keyboard up")
     simctl("io", udid, "screenshot", str(root / "keyboard-keys.png"))
     # With the keyboard up too, a tap only clicks: the keyboard stays.
@@ -332,7 +330,7 @@ try:
         wait(lambda: any(h.startswith(sent) for h, _ in inputs()[count:]), f"{what} with nothing typed didn't reach the agent")
         assert all(size == own for _, size in inputs()[count:]), read(agent_log)
     wait(lambda: re.search(r"GOT (..)*7f", phone()), "the echo didn't show on the iPhone")
-    assert terminal("bar") == KEYS_UP and composer() == "", phone()
+    assert terminal("bar") == "keys" and composer() == "", phone()
     print("PASS with nothing typed, Return, Backspace, the bar's keys and space-bar sliding reach the session",
           flush=True)
 
@@ -342,7 +340,7 @@ try:
     count = len(inputs())
     drive("send")
     wait(lambda: [h for h, _ in inputs()[count:]][-2:] == ["706173746564", "0d"], "the pasted text didn't send")
-    wait(lambda: terminal("bar") == KEYS_UP, "the field didn't empty after sending")
+    wait(lambda: terminal("bar") == "keys", "the field didn't empty after sending")
     print("PASS the paste key fills the field", flush=True)
 
     # Typing goes into the field, which takes the keys' place (an IME
@@ -361,7 +359,7 @@ try:
     sent = [h for h, _ in inputs()[count:]]
     assert "".join(sent[:-1]) in ("68690de4bda0e5a5bd", "68690ae4bda0e5a5bd") and sent[-1] == "0d", sent
     assert all(size == own for _, size in inputs()[count:]), read(agent_log)
-    wait(lambda: terminal("bar") == KEYS_UP and composer() == "", "the field didn't empty after sending")
+    wait(lambda: terminal("bar") == "keys" and composer() == "", "the field didn't empty after sending")
     print("PASS typing fills the field in the keys' place; sending pastes it and presses Enter", flush=True)
 
     # Put away with something typed (the keyboard key beside the field),
