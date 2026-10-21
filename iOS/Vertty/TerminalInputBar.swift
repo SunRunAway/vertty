@@ -8,6 +8,9 @@ import UniformTypeIdentifiers
 /// typing goes into and a send key take the other keys' place. The keyboard always belongs
 /// to that field (`composer`), even while the keys show, so switching
 /// between the two never moves the focus or breaks an IME composition.
+/// The iPad's keyboard has a shortcuts bar: while it's up, the keys go
+/// there, the bar gives its room back to the terminal, and the field shows
+/// over the terminal's bottom.
 final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDelegate {
     /// The height the bar takes from the terminal. A field taller than one
     /// line grows up over the terminal instead, so typing never resizes the
@@ -19,7 +22,10 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
     private static let maxKeyWidth: CGFloat = 56
     private static let maxLines: CGFloat = 5
 
-    enum Mode { case keys, field }
+    /// `keyboard`: the keys are in the keyboard's shortcuts bar.
+    enum Mode { case keys, field, keyboard }
+
+    private static let keysInKeyboard = UIDevice.current.userInterfaceIdiom == .pad
 
     private struct Key {
         let label: String
@@ -72,6 +78,10 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
     private var pendingAttachmentLog = false
 
     private(set) var mode = Mode.keys
+    private var barHeight: NSLayoutConstraint!
+    /// The keys in the keyboard's shortcuts bar, making room for its
+    /// candidates while something is typed.
+    private let keyboardKeys = UIBarButtonItemGroup(barButtonItems: [], representativeItem: nil)
 
     /// Whether the software keyboard is up, and putting it away: the owner
     /// knows whether the terminal took it instead (a hardware keyboard).
@@ -84,7 +94,8 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
         translatesAutoresizingMaskIntoConstraints = false
         setUpKeys()
         setUpField()
-        heightAnchor.constraint(equalToConstant: Self.height).isActive = true
+        barHeight = heightAnchor.constraint(equalToConstant: Self.height)
+        barHeight.isActive = true
 
         // A swipe down on the bar puts the keyboard away.
         let swipe = UIPanGestureRecognizer(target: self, action: #selector(swiped(_:)))
@@ -218,6 +229,27 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
         return button
     }
 
+    /// A key in the shortcuts bar: an image, as a title there is cut short,
+    /// with a little room on each side, as the bar packs its items tight
+    /// (and scales them down to fit its narrow end).
+    private func makeKeyboardKey(_ key: Key) -> UIBarButtonItem {
+        let symbol = key.image.flatMap {
+            UIImage(systemName: $0, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))
+        }
+        let text = NSAttributedString(string: key.label, attributes: [.font: UIFont.monospacedSystemFont(ofSize: 15, weight: .semibold)])
+        let content = symbol?.size ?? text.size()
+        let size = CGSize(width: ceil(content.width) + 8, height: ceil(content.height))
+        let origin = CGPoint(x: (size.width - content.width) / 2, y: (size.height - content.height) / 2)
+        let image = UIGraphicsImageRenderer(size: size).image { _ in
+            if let symbol { symbol.draw(at: origin) } else { text.draw(at: origin) }
+        }.withRenderingMode(.alwaysTemplate)
+        let item = UIBarButtonItem(primaryAction: UIAction(image: image) { [weak self] _ in
+            self?.press(key.press)
+        })
+        item.accessibilityLabel = key.accessibility
+        return item
+    }
+
     private func setUpField() {
         composer.translatesAutoresizingMaskIntoConstraints = false
         composer.delegate = self
@@ -235,6 +267,12 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
         composer.smartInsertDeleteType = .no
         composer.inlinePredictionType = .no
         composer.terminal = terminal
+        if Self.keysInKeyboard {
+            keyboardKeys.barButtonItems = Self.keys.map(makeKeyboardKey)
+            let shortcuts = composer.inputAssistantItem
+            shortcuts.allowsHidingShortcuts = false
+            shortcuts.trailingBarButtonGroups += [keyboardKeys]
+        }
 
         var send = UIButton.Configuration.filled()
         send.cornerStyle = .capsule
@@ -315,14 +353,18 @@ final class TerminalInputBar: UIView, UITextViewDelegate, UIGestureRecognizerDel
     // MARK: - State
 
     /// The field while the keyboard is up and something is typed (an IME
-    /// composition counts), the keys otherwise.
+    /// composition counts), the keys otherwise: in the keyboard while it's
+    /// up on the iPad, here otherwise.
     private func update() {
-        let mode: Mode = composer.isFirstResponder && composer.hasText ? .field : .keys
+        let inKeyboard = Self.keysInKeyboard && composer.isFirstResponder
+        let mode: Mode = composer.isFirstResponder && composer.hasText ? .field : inKeyboard ? .keyboard : .keys
         if mode != self.mode {
             self.mode = mode
             setNeedsLayout()
         }
-        keysCapsule.isHidden = mode == .field
+        keysCapsule.isHidden = mode != .keys
+        keyboardKeys.isHidden = mode != .keyboard
+        barHeight.constant = inKeyboard ? 0 : Self.height
         // Transparent rather than hidden: the field has to stay able to
         // take the keyboard.
         fieldCapsule.alpha = mode == .field ? 1 : 0
