@@ -109,6 +109,8 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
         // Any touch on this screen, a tap, a scroll or a key on the bar,
         // takes the session to the iPhone's size.
         view.addGestureRecognizer(TouchWatcher { [weak self] in self?.store.willInteract() })
+        NotificationCenter.default.addObserver(self, selector: #selector(keyboardDidShow),
+                                               name: UIResponder.keyboardDidShowNotification, object: nil)
         if #available(iOS 27.1, *) {
             view.addInteraction(UIHingeInteraction { [weak self] _, update in
                 self?.hingeChanged(halfOpen: update.hinge?.status == .partiallyOpen)
@@ -141,7 +143,7 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
     /// replaces this one and goes on with the typing. It may already be up.
     private func keepScreen() {
         guard store.selectedCardID == cardID else { return }
-        let kept = RemoteStore.KeptScreen(cardID: cardID, draft: bar.draft, keyboardUp: keyboardIsUp)
+        let kept = RemoteStore.KeptScreen(cardID: cardID, draft: bar.draft, keyboardUp: keyboardIsUp || keyboardWanted)
         if let next = Self.current, next !== self, next.cardID == cardID {
             next.goOn(kept)
         } else {
@@ -195,7 +197,17 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
         bar.composer.isFirstResponder || (terminal.isFirstResponder && !Self.hasHardwareKeyboard)
     }
 
+    /// The keyboard came up and the user hasn't put it away. Folding the
+    /// phone puts it away before the screen is rebuilt for the other
+    /// display; the next screen brings it back.
+    private var keyboardWanted = false
+
+    @objc private func keyboardDidShow() {
+        if keyboardIsUp { keyboardWanted = true }
+    }
+
     private func hideKeyboard() {
+        keyboardWanted = false
         bar.composer.resignFirstResponder()
         if terminal.isFirstResponder, !Self.hasHardwareKeyboard { terminal.resignFirstResponder() }
     }
@@ -333,6 +345,7 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
     /// simulator has the Mac's); it also puts away the terminal's focus a
     /// hardware keyboard gave it.
     func debugHideKeyboard() {
+        keyboardWanted = false
         bar.composer.resignFirstResponder()
         terminal.resignFirstResponder()
     }
