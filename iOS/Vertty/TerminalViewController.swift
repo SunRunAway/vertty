@@ -156,17 +156,16 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
 
     // MARK: - Fold
 
-    /// Half open is for typing: the keyboard comes up.
     private func hingeChanged(halfOpen: Bool) {
         guard halfOpen != self.halfOpen else { return }
         self.halfOpen = halfOpen
         view.setNeedsLayout()
-        if halfOpen, !Self.hasHardwareKeyboard { bar.focus() }
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        // The fold runs across the middle of the screen while it's upright.
+        // Half open with the screen upright, the fold runs across its middle
+        // (a laptop); sideways it runs down the middle (a book).
         var fold: CGFloat?
         if halfOpen, let window = view.window, window.bounds.height > window.bounds.width {
             fold = view.convert(CGPoint(x: 0, y: window.bounds.midY), from: window).y
@@ -179,6 +178,10 @@ final class TerminalViewController: UIViewController, TerminalSurfaceGridResizeD
         } else {
             toBar.isActive = false
             NSLayoutConstraint.activate([aboveBar, toFold])
+            // Held like a laptop is for typing: the keyboard comes up.
+            if !Self.hasHardwareKeyboard {
+                DispatchQueue.main.async { [weak self] in self?.bar.focus() }
+            }
         }
     }
 
