@@ -50,6 +50,16 @@ def simctl(*args, check=True):
     return subprocess.run(["xcrun", "simctl", *args], capture_output=True, text=True, check=check).stdout
 
 
+def forget_connection():
+    """Clears the address and connection the run saved in the app, so the
+    next person to open it doesn't find this run's random port."""
+    container = simctl("get_app_container", udid, BUNDLE, "data", check=False).strip()
+    if container:
+        prefs = f"{container}/Library/Preferences/{BUNDLE}"
+        for key in ("RemoteAddress", "RemoteTailnetComputer", "RemoteConnectionToken"):
+            simctl("spawn", udid, "defaults", "delete", prefs, key, check=False)
+
+
 root = Path(tempfile.mkdtemp(dir="/private/tmp", prefix="vertty-remote-ios-"))
 print(f"Scratch artifacts: {root}", flush=True)
 home, project, bin_dir = root / "home", root / "project", root / "bin"
@@ -527,6 +537,7 @@ finally:
     if probe:
         probe.terminate()
     simctl("terminate", udid, BUNDLE, check=False)
+    forget_connection()
     if server:
         server.terminate()
         try:

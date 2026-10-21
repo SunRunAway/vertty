@@ -45,6 +45,16 @@ def simctl(*args, check=True):
     return subprocess.run(["xcrun", "simctl", *args], capture_output=True, text=True, check=check).stdout
 
 
+def forget_connection():
+    """Clears the address and connection the run saved in the app, so the
+    next person to open it doesn't find this run's random port."""
+    container = simctl("get_app_container", udid, BUNDLE, "data", check=False).strip()
+    if container:
+        prefs = f"{container}/Library/Preferences/{BUNDLE}"
+        for key in ("RemoteAddress", "RemoteTailnetComputer", "RemoteConnectionToken"):
+            simctl("spawn", udid, "defaults", "delete", prefs, key, check=False)
+
+
 def tailnet_line(text):
     for line in text.splitlines():
         if line.startswith("tailnet "):
@@ -303,6 +313,7 @@ finally:
     if server:
         sign_out(server_snap / "input.txt", lambda: read(server_snap / "state.txt"))
     simctl("terminate", udid, BUNDLE, check=False)
+    forget_connection()
     if server:
         server.terminate()
         try:
