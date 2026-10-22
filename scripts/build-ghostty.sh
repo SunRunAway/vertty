@@ -22,4 +22,9 @@ zig build \
   -Di18n=false \
   --prefix "$ROOT/build/ghostty"
 cp "$ROOT/build/ghostty/include/ghostty.h" "$ROOT/Sources/GhosttyC/include/ghostty.h"
+# Zig never prunes its cache, so every past build stays in it. Clear it once
+# it passes 5GB (the current builds alone take about 1.6GB).
+if [ "$(du -sk .zig-cache | cut -f1)" -gt $((5 * 1024 * 1024)) ]; then
+  rm -rf .zig-cache
+fi
 echo "libghostty ready: $ROOT/build/ghostty/lib/libghostty.a"

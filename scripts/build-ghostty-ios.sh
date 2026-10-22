@@ -46,4 +46,8 @@ xcodebuild -create-xcframework \
   -library "$OUT/iphoneos/lib/libghostty.a" -headers "$OUT/iphoneos/headers" \
   -library "$OUT/iphonesimulator/lib/libghostty.a" -headers "$OUT/iphonesimulator/headers" \
   -output "$XCF"
+# Clear Zig's cache once it passes 5GB (see build-ghostty.sh).
+if [ "$(du -sk .zig-cache | cut -f1)" -gt $((5 * 1024 * 1024)) ]; then
+  rm -rf .zig-cache
+fi
 echo "GhosttyKit ready: $XCF"
