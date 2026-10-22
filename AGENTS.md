@@ -16,6 +16,8 @@
   instances, or running `make install`.
 - After pushing changes that affect the app's code, bundled resources, or
   build configuration, run `make install` without asking.
+- Build the iOS app with `xcodebuild -derivedDataPath build/ios-dd`, for
+  devices and the simulator alike; don't start other derived data dirs.
 - `scripts/bundle.sh` (and so `make app` / `make install`) runs `sandbox-exec`
   internally, so it fails inside another sandbox. Run the build unsandboxed.
 

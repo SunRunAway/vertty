@@ -16,7 +16,10 @@ else
   git apply "$PATCH"
 fi
 
-OUT="$ROOT/build/ghostty-ios"
+# Install each variant into a temp dir: the xcframework below copies the
+# libraries, so nothing else needs to keep them.
+OUT="$(mktemp -d)"
+trap 'rm -rf "$OUT"' EXIT
 for variant in "iphoneos aarch64-ios" "iphonesimulator aarch64-ios-simulator"; do
   set -- $variant
   # The simulator needs an explicit Apple CPU (see GhosttyXCFramework.zig).
