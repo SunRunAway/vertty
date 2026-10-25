@@ -85,7 +85,8 @@ enum Proc {
         _ args: [String],
         cwd: String? = nil,
         timeout: TimeInterval = 10,
-        usePathEnv: Bool = true
+        usePathEnv: Bool = true,
+        extraEnv: [String: String] = [:]
     ) -> Result? {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: executable)
@@ -95,6 +96,7 @@ enum Proc {
         if usePathEnv { env["PATH"] = ShellEnvironment.path }
         env["GIT_OPTIONAL_LOCKS"] = "0"
         env["GH_PROMPT_DISABLED"] = "1"
+        env.merge(extraEnv) { _, new in new }
         p.environment = env
 
         let out = Pipe()

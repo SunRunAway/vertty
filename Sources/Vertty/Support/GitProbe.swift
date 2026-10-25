@@ -85,9 +85,16 @@ enum GitProbe {
         view(ref, cwd: cwd, key: ref.contains("://") ? ref : "\(cwd)|#\(ref)")
     }
 
+    /// `gh` on PATH may be ghapptoken's symlink, which signs each GitHub App token
+    /// in 1Password. GHAPPTOKEN_NO_SIGN keeps this background poll from raising
+    /// that prompt: ghapptoken only uses a token it already cached and exits with
+    /// this status when there is none. Plain gh ignores the variable.
+    private static let ghNoCachedToken: Int32 = 75
+
     private static func view(_ ref: String, cwd: String, key: String) -> PRInfo? {
         prLock.lock()
-        if let (cached, at) = prCache[key], Date().timeIntervalSince(at) < prTTL {
+        let previous = prCache[key]
+        if let (cached, at) = previous, Date().timeIntervalSince(at) < prTTL {
             prLock.unlock()
             return cached
         }
@@ -95,11 +102,16 @@ enum GitProbe {
 
         var info: PRInfo?
         if let gh = ShellEnvironment.which("gh"),
-           let r = Proc.run(gh, ["pr", "view", ref, "--json", "number,url,state"], cwd: cwd, timeout: 15),
-           r.status == 0,
-           let obj = (try? JSONSerialization.jsonObject(with: Data(r.stdout.utf8))) as? [String: Any],
-           let number = obj["number"] as? Int {
-            info = PRInfo(number: number, url: obj["url"] as? String ?? "", state: obj["state"] as? String ?? "OPEN")
+           let r = Proc.run(gh, ["pr", "view", ref, "--json", "number,url,state"], cwd: cwd, timeout: 15,
+                            extraEnv: ["GHAPPTOKEN_NO_SIGN": "1"]) {
+            if r.status == ghNoCachedToken {
+                // Until a foreground gh / git command caches a token, keep what we last knew.
+                info = previous?.0
+            } else if r.status == 0,
+                      let obj = (try? JSONSerialization.jsonObject(with: Data(r.stdout.utf8))) as? [String: Any],
+                      let number = obj["number"] as? Int {
+                info = PRInfo(number: number, url: obj["url"] as? String ?? "", state: obj["state"] as? String ?? "OPEN")
+            }
         }
         prLock.lock()
         prCache[key] = (info, Date())
