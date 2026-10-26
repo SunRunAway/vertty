@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// The mark of the agent a session runs: Claude's spark or Codex's ">_".
+/// The mark of the agent a session runs: Claude's spark, Codex's ">_", or
+/// DeepSeek's whale.
 public struct AgentIcon: View {
     let kind: AgentKind
     var size: CGFloat = 12
@@ -21,6 +22,10 @@ public struct AgentIcon: View {
                     .fill(LinearGradient(colors: [Color(red: 0.42, green: 0.55, blue: 1.0), Color(red: 0.55, green: 0.36, blue: 0.96)],
                                          startPoint: .topLeading, endPoint: .bottomTrailing))
                     .overlay(CodexPrompt().stroke(.white, style: StrokeStyle(lineWidth: size * 0.11, lineCap: .round, lineJoin: .round)))
+            case .deepseekClaude:
+                Image("deepseek", bundle: .verttyUIResources)
+                    .resizable()
+                    .interpolation(.high)
             }
         }
         .frame(width: size, height: size)

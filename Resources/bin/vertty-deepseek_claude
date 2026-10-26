@@ -1,0 +1,7 @@
+#!/bin/sh
+# Started by Vertty in each DeepSeek tab: the same launcher Claude Code gets
+# (hooks, session ids, background jobs), running deepseek_claude, the wrapper
+# that points Claude Code at DeepSeek's Anthropic-compatible API.
+VERTTY_AGENT=deepseek_claude
+export VERTTY_AGENT
+exec "$(dirname "$0")/vertty-claude" "$@"

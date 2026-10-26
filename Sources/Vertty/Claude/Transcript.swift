@@ -13,9 +13,17 @@ struct TranscriptInfo {
     var worktree: (name: String, path: String)??
     var cwd: String?
     var gitBranch: String?
+    /// The model of the last assistant message, e.g. "deepseek-flash[1m]".
+    var model: String?
     var modified: Date = .distantPast
 
     var bestTitle: String? { customTitle ?? aiTitle ?? summary ?? firstPrompt }
+
+    /// The agent the session ran: transcripts don't record it, but a session on
+    /// DeepSeek's API (the deepseek_claude wrapper) says so in its model name.
+    var agentKind: AgentKind {
+        model?.localizedCaseInsensitiveContains("deepseek") == true ? .deepseekClaude : .claude
+    }
 }
 
 enum Transcript {
@@ -98,6 +106,10 @@ enum Transcript {
                     needCwd = false
                 }
             }
+            if info.model == nil, s.contains("\"type\":\"assistant\""),
+               let model = (json(s)?["message"] as? [String: Any])?["model"] as? String, !model.isEmpty {
+                info.model = model
+            }
         }
 
         if info.customTitle == nil && info.aiTitle == nil && info.summary == nil {
@@ -173,7 +185,7 @@ enum Transcript {
             guard let info = read(url, tailBytes: 256 * 1024), let title = info.bestTitle else { continue }
             result.append(SessionSummary(
                 id: url.deletingPathExtension().lastPathComponent,
-                title: title, modified: date, path: url))
+                title: title, modified: date, path: url, kind: info.agentKind))
         }
         return result
     }

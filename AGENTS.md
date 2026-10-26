@@ -59,8 +59,8 @@
   814ac47. A `claude -r` typed into a tab is tracked through
   `~/.claude/sessions` (`LiveSessions`). Before re-adding any mechanism, check
   `git log -S` for whether it was removed on purpose.
-- Which agents (Claude / Codex) new sessions can start is one global setting,
-  Vertty ▸ Enabled Agents (both by default, at least one stays on). Each
+- Which agents (Claude / Codex / DeepSeek) new sessions can start is one global
+  setting, Vertty ▸ Enabled Agents (all by default, at least one stays on). Each
   project row has a new-session button per enabled agent; there is no
   per-project default setting. ⌘T starts the agent last started in the
   project (new or resumed, not by a schedule), else the first enabled one.

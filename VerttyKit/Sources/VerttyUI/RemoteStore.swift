@@ -32,7 +32,7 @@ public final class RemoteCard: SessionCardModel {
         func set<T: Equatable>(_ path: ReferenceWritableKeyPath<RemoteCard, T>, _ value: T) {
             if self[keyPath: path] != value { self[keyPath: path] = value }
         }
-        set(\.kind, AgentKind(c.kind))
+        set(\.kind, AgentKind(c.kind) ?? .claude)
         set(\.sessionID, c.sessionID)
         set(\.title, c.title)
         set(\.branch, c.branch.nonEmpty)
@@ -134,7 +134,7 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
             let kind = p.defaultKind == .unspecified ? nil : AgentKind(p.defaultKind)
             return Project(id: id, name: p.name, path: p.path, expanded: !collapsed.contains(id), lastKind: kind)
         }
-        let kinds = state.enabledKinds.filter { $0 == .claude || $0 == .codex }.map(AgentKind.init)
+        let kinds = state.enabledKinds.compactMap { AgentKind($0) }
         enabledKinds = kinds.isEmpty ? AgentKind.allCases : kinds
         var existing = Dictionary(uniqueKeysWithValues: allCards.map { ($0.id, $0) })
         allCards = state.cards.compactMap { c in
@@ -546,11 +546,25 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
 }
 
 extension AgentKind {
-    init(_ kind: Remote.AgentKind) { self = kind == .codex ? .codex : .claude }
+    /// nil for a value this build doesn't know (a newer computer, or unspecified).
+    init?(_ kind: Remote.AgentKind) {
+        switch kind {
+        case .claude: self = .claude
+        case .codex: self = .codex
+        case .deepseek: self = .deepseekClaude
+        default: return nil
+        }
+    }
 }
 
 extension Remote.AgentKind {
-    init(_ kind: AgentKind) { self = kind == .codex ? .codex : .claude }
+    init(_ kind: AgentKind) {
+        switch kind {
+        case .claude: self = .claude
+        case .codex: self = .codex
+        case .deepseekClaude: self = .deepseek
+        }
+    }
 }
 
 extension SessionStatus {
@@ -569,7 +583,7 @@ extension SessionStatus {
 extension SessionSummary {
     init(_ e: Remote.HistoryEntry) {
         self.init(id: e.sessionID, title: e.title, modified: Date(timeIntervalSince1970: Double(e.modifiedMs) / 1000),
-                  kind: AgentKind(e.kind))
+                  kind: AgentKind(e.kind) ?? .claude)
     }
 }
 

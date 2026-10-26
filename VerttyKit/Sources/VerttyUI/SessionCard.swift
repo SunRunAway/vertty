@@ -148,7 +148,12 @@ struct SessionCard<Store: SidebarStore>: View {
         if !card.sessionID.isEmpty {
             Button { Platform.copy(card.sessionID) } label: { Text("Copy Session ID", bundle: .verttyUIResources) }
             Button {
-                Platform.copy(card.kind == .claude ? "claude --resume \(card.sessionID)" : "codex resume \(card.sessionID)")
+                let command = switch card.kind {
+                case .claude: "claude --resume \(card.sessionID)"
+                case .codex: "codex resume \(card.sessionID)"
+                case .deepseekClaude: "deepseek_claude --resume \(card.sessionID)"
+                }
+                Platform.copy(command)
             } label: { Text("Copy Resume Command", bundle: .verttyUIResources) }
         }
     }

@@ -126,13 +126,18 @@ final class RemoteBridge {
     }
 
     static func kind(_ kind: AgentKind) -> Remote.AgentKind {
-        kind == .claude ? .claude : .codex
+        switch kind {
+        case .claude: return .claude
+        case .codex: return .codex
+        case .deepseekClaude: return .deepseek
+        }
     }
 
     static func kind(_ kind: Remote.AgentKind) -> AgentKind? {
         switch kind {
         case .claude: return .claude
         case .codex: return .codex
+        case .deepseek: return .deepseekClaude
         default: return nil
         }
     }
@@ -242,7 +247,7 @@ final class RemoteBridge {
         // Only resume what can be resumed: starting the agent with an
         // unknown id would quietly begin a new session instead.
         store.infoQueue.async { [weak self] in
-            let exists = kind == .claude
+            let exists = kind.isClaudeCode
                 ? Transcript.locate(sessionID: r.sessionID, projectPath: project.path) != nil
                 : CodexThreads.thread(id: r.sessionID) != nil
             DispatchQueue.main.async {
@@ -307,7 +312,7 @@ final class RemoteBridge {
             if let all, !query.isEmpty {
                 var claude = Set<String>(), codex = Set<String>()
                 for session in open + all.map({ (kind: $0.kind, id: $0.id) }) where !session.id.isEmpty {
-                    if session.kind == .claude { claude.insert(session.id) } else { codex.insert(session.id) }
+                    if session.kind.isClaudeCode { claude.insert(session.id) } else { codex.insert(session.id) }
                 }
                 prompts = Transcript.promptMatches(query, sessionIDs: claude)
                     .merging(CodexThreads.promptMatches(query, threadIDs: codex)) { first, _ in first }

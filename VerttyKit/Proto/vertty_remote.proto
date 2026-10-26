@@ -226,6 +226,8 @@ enum AgentKind {
   AGENT_KIND_UNSPECIFIED = 0;
   AGENT_KIND_CLAUDE = 1;
   AGENT_KIND_CODEX = 2;
+  // Claude Code through the deepseek_claude wrapper, on DeepSeek's API.
+  AGENT_KIND_DEEPSEEK = 3;
 }
 
 enum SessionStatus {

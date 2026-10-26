@@ -95,7 +95,7 @@ extension AppStore {
         guard let sessionID, !sessionID.isEmpty else { return .new }
         let fm = FileManager.default
         switch kind {
-        case .claude:
+        case .claude, .deepseekClaude:
             guard let url = Transcript.locate(sessionID: sessionID, projectPath: projectPath) else {
                 return confirmed ? .fail(String(localized: "The task's session record can't be found.")) : .new
             }
@@ -123,7 +123,7 @@ extension AppStore {
 
     /// The first run: a new card on top of the project, started in the background.
     private func startFirstSession(_ runID: UUID, _ task: ScheduleTask, _ project: Project) {
-        let sessionID = task.kind == .claude ? UUID().uuidString.lowercased() : ""
+        let sessionID = task.kind.isClaudeCode ? UUID().uuidString.lowercased() : ""
         let tab = TabSession(projectID: project.id, kind: task.kind, sessionID: sessionID, cwd: project.path, title: task.name)
         tab.scheduleTaskID = task.id
         insertAtTopOfProject(tab)
@@ -142,8 +142,8 @@ extension AppStore {
     private func resumeSession(_ runID: UUID, _ task: ScheduleTask, _ sessionID: String, _ project: Project) {
         let tab = tabs.first { $0.kind == task.kind && $0.sessionID == sessionID }
         infoQueue.async { [weak self] in
-            // Claude: a live process of this session outside that card is someone else's.
-            let outside = task.kind == .claude
+            // Claude Code: a live process of this session outside that card is someone else's.
+            let outside = task.kind.isClaudeCode
                 ? LiveSessions.processes(sessionID: sessionID).filter { $0.tab == nil || $0.tab != tab?.id } : []
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -226,11 +226,12 @@ extension AppStore {
         }
     }
 
-    /// The agent processes still running for a card: Claude by its session
-    /// registry, Codex by the TUI started with Vertty's title option.
+    /// The agent processes still running for a card: Claude Code (including
+    /// DeepSeek) by its session registry, Codex by the TUI started with
+    /// Vertty's title option.
     private static func agentProcesses(kind: AgentKind, tabID: UUID, sessionID: String) -> [pid_t] {
         switch kind {
-        case .claude:
+        case .claude, .deepseekClaude:
             // Also its hook helper: a SessionEnd hook still on its way would land on the resumed run.
             let helpers = ProcessScan.processes(withEnv: "VERTTY_TAB_ID", tabID.uuidString).filter { p in
                 let name = (p.args.first.map { ($0 as NSString).lastPathComponent }) ?? ""
@@ -308,7 +309,7 @@ extension AppStore {
                 continue
             }
             switch run.kind {
-            case .claude: evaluateClaude(run, tab, age)
+            case .claude, .deepseekClaude: evaluateClaude(run, tab, age)
             case .codex: evaluateCodex(run, tab, age)
             }
         }

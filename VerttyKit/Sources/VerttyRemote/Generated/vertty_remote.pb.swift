@@ -268,6 +268,9 @@ public enum Vertty_Remote_AgentKind: SwiftProtobuf.Enum, Swift.CaseIterable {
   case unspecified // = 0
   case claude // = 1
   case codex // = 2
+
+  /// Claude Code through the deepseek_claude wrapper, on DeepSeek's API.
+  case deepseek // = 3
   case UNRECOGNIZED(Int)
 
   public init() {
@@ -279,6 +282,7 @@ public enum Vertty_Remote_AgentKind: SwiftProtobuf.Enum, Swift.CaseIterable {
     case 0: self = .unspecified
     case 1: self = .claude
     case 2: self = .codex
+    case 3: self = .deepseek
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -288,6 +292,7 @@ public enum Vertty_Remote_AgentKind: SwiftProtobuf.Enum, Swift.CaseIterable {
     case .unspecified: return 0
     case .claude: return 1
     case .codex: return 2
+    case .deepseek: return 3
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -297,6 +302,7 @@ public enum Vertty_Remote_AgentKind: SwiftProtobuf.Enum, Swift.CaseIterable {
     .unspecified,
     .claude,
     .codex,
+    .deepseek,
   ]
 
 }
@@ -1265,6 +1271,7 @@ extension Vertty_Remote_AgentKind: SwiftProtobuf._ProtoNameProviding {
     0: .same(proto: "AGENT_KIND_UNSPECIFIED"),
     1: .same(proto: "AGENT_KIND_CLAUDE"),
     2: .same(proto: "AGENT_KIND_CODEX"),
+    3: .same(proto: "AGENT_KIND_DEEPSEEK"),
   ]
 }
 

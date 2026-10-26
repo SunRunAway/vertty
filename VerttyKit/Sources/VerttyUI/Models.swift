@@ -41,13 +41,29 @@ public enum ProjectPalette {
 public enum AgentKind: String, Codable, CaseIterable, Identifiable {
     case claude
     case codex
+    /// Claude Code through the `deepseek_claude` wrapper, on DeepSeek's API.
+    case deepseekClaude = "deepseek_claude"
 
     public var id: String { rawValue }
-    public var name: String { self == .claude ? "Claude" : "Codex" }
+
+    /// Whether the agent runs Claude Code (possibly through the DeepSeek
+    /// wrapper): its session ids, transcripts, hooks and status all work alike.
+    public var isClaudeCode: Bool { self == .claude || self == .deepseekClaude }
+
+    public var name: String {
+        switch self {
+        case .claude: return "Claude"
+        case .codex: return "Codex"
+        case .deepseekClaude: return "DeepSeek"
+        }
+    }
 
     public var newSessionTitle: String {
-        self == .claude ? String(localized: "New Claude Session", bundle: .verttyUIResources)
-            : String(localized: "New Codex Session", bundle: .verttyUIResources)
+        switch self {
+        case .claude: return String(localized: "New Claude Session", bundle: .verttyUIResources)
+        case .codex: return String(localized: "New Codex Session", bundle: .verttyUIResources)
+        case .deepseekClaude: return String(localized: "New DeepSeek Session", bundle: .verttyUIResources)
+        }
     }
 }
 

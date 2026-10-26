@@ -260,7 +260,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         appMenu.addItem(.separator())
         let agentMenu = NSMenu()
         for kind in AgentKind.allCases {
-            let choice = item(kind == .claude ? "Claude Code" : "Codex", #selector(toggleAgent(_:)), "")
+            let title: String.LocalizationValue
+            switch kind {
+            case .claude: title = "Claude Code"
+            case .codex: title = "Codex"
+            case .deepseekClaude: title = "DeepSeek"
+            }
+            let choice = item(title, #selector(toggleAgent(_:)), "")
             choice.representedObject = kind.rawValue
             agentMenu.addItem(choice)
         }
@@ -294,10 +300,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         addSubmenu(main, "Vertty", appMenu)
 
         let file = NSMenu()
-        newSessionItems = [
-            item("New Claude Session", #selector(newSession), "t"),
-            item("New Codex Session", #selector(newOtherSession), ""),
-        ]
+        newSessionItems = AgentKind.allCases.enumerated().map { index, kind in
+            let it = item("New Session", index == 0 ? #selector(newSession) : #selector(newSessionOfKind(_:)),
+                          index == 0 ? "t" : "")
+            it.title = kind.newSessionTitle
+            return it
+        }
         newSessionItems.forEach(file.addItem)
         file.addItem(item("Add Project…", #selector(addProject), "o", [.command, .shift]))
         file.addItem(item("Connect to Remote Computer…", #selector(connectRemote), "k", [.command, .shift]))
@@ -377,16 +385,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         }
         store.newSession()
     }
-    /// The File menu's second item: the enabled agent that isn't the project's default.
-    @objc private func newOtherSession() {
+    /// The File menu's other "New … Session" items.
+    @objc private func newSessionOfKind(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let kind = AgentKind(rawValue: raw) else { return }
         if let remote = RemoteWindowController.key {
-            if let p = remote.store.currentProject, let kind = remote.store.kindsDefaultFirst(p).dropFirst().first {
-                remote.store.newSession(in: p, kind: kind)
-            }
+            if let p = remote.store.currentProject { remote.store.newSession(in: p, kind: kind) }
             return
         }
-        guard let p = store.currentProject, let kind = store.kindsDefaultFirst(p).dropFirst().first else { return }
-        store.newSession(in: p, kind: kind)
+        store.newSession(kind: kind)
     }
     @objc private func connectRemote() { RemoteConnectWindowController.show() }
 
@@ -467,7 +473,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         for (i, item) in newSessionItems.enumerated() {
             item.isHidden = i >= kinds.count
             if i < kinds.count {
-                item.title = String(localized: kinds[i] == .claude ? "New Claude Session" : "New Codex Session")
+                item.title = kinds[i].newSessionTitle
+                item.representedObject = kinds[i].rawValue
             }
         }
     }

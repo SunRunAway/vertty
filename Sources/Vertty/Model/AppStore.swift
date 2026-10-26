@@ -86,7 +86,12 @@ final class AppStore: ObservableObject {
             tabs = state.tabs.filter { r in state.projects.contains { $0.id == r.projectID } }.map(TabSession.init(record:))
             selectedTabID = state.selectedTabID ?? tabs.first?.id
             lastProjectID = state.lastProjectID
-            if let kinds = state.enabledKinds, !kinds.isEmpty { enabledKinds = AgentKind.allCases.filter(kinds.contains) }
+            if let kinds = state.enabledKinds, !kinds.isEmpty {
+                // A build before DeepSeek saved only the agents it knew; the new
+                // one starts on rather than looking turned off.
+                let known = state.knownKinds.map { Set($0) } ?? Set([.claude, .codex])
+                enabledKinds = AgentKind.allCases.filter { kinds.contains($0) || !known.contains($0) }
+            }
             if let w = state.sidebarWidth { sidebarWidth = CGFloat(w) }
             if let v = state.sidebarVisible { sidebarVisible = v }
             if let f = state.shellFraction { shellFraction = CGFloat(f) }
@@ -162,6 +167,7 @@ final class AppStore: ObservableObject {
             selectedTabID: selectedTabID,
             lastProjectID: lastProjectID,
             enabledKinds: enabledKinds,
+            knownKinds: AgentKind.allCases,
             sidebarWidth: Double(sidebarWidth),
             sidebarVisible: sidebarVisible,
             shellFraction: Double(shellFraction))
@@ -277,7 +283,7 @@ final class AppStore: ObservableObject {
         }
         let kind = kind ?? defaultKind(project)
         // Codex can't be given a session id; it gets one once its thread shows up.
-        let sessionID = kind == .claude ? UUID().uuidString.lowercased() : ""
+        let sessionID = kind.isClaudeCode ? UUID().uuidString.lowercased() : ""
         let tab = TabSession(projectID: project.id, kind: kind, sessionID: sessionID, cwd: project.path)
         insertAtTopOfProject(tab)
         started(tab)
@@ -288,7 +294,7 @@ final class AppStore: ObservableObject {
     /// project, but the local selection stays where it is.
     func newSessionInBackground(in project: Project, kind: AgentKind?) -> TabSession {
         let kind = kind ?? defaultKind(project)
-        let sessionID = kind == .claude ? UUID().uuidString.lowercased() : ""
+        let sessionID = kind.isClaudeCode ? UUID().uuidString.lowercased() : ""
         let tab = TabSession(projectID: project.id, kind: kind, sessionID: sessionID, cwd: project.path)
         insertAtTopOfProject(tab)
         started(tab)
@@ -501,7 +507,7 @@ final class AppStore: ObservableObject {
         var transcript: URL?
         let resume: Bool
         switch tab.kind {
-        case .claude:
+        case .claude, .deepseekClaude:
             transcript = Transcript.locate(sessionID: tab.sessionID, projectPath: project.path)
             resume = transcript != nil
         case .codex:
@@ -795,7 +801,7 @@ final class AppStore: ObservableObject {
                 guard let self else { return }
                 // Codex sessions don't show up here (see confirmCodexThreads). A
                 // card started since the scan began isn't in it yet.
-                for tab in self.tabs where tab.isLaunched && tab.kind == .claude && (tab.launchedAt ?? .distantPast) < scanned {
+                for tab in self.tabs where tab.isLaunched && tab.kind.isClaudeCode && (tab.launchedAt ?? .distantPast) < scanned {
                     let entry = live[tab.id]
                     let lastPID = self.livePIDs[tab.id]
                     self.livePIDs[tab.id] = entry?.pid
@@ -832,7 +838,7 @@ final class AppStore: ObservableObject {
             var url: URL?
             let info: TranscriptInfo?
             switch kind {
-            case .claude:
+            case .claude, .deepseekClaude:
                 // The path reported by hooks can be stale: a session that entered a
                 // worktree gets its transcript relocated to that worktree's directory.
                 url = knownPath.map { URL(fileURLWithPath: $0) }
@@ -961,7 +967,7 @@ final class AppStore: ObservableObject {
         }
     }
 
-    /// Claude and Codex sessions of a project, newest first.
+    /// Claude Code (including DeepSeek) and Codex sessions of a project, newest first.
     static func history(projectPath: String, limit: Int = 40) -> [SessionSummary]? {
         guard let codex = CodexThreads.history(projectPath: projectPath, limit: limit) else { return nil }
         let all = Transcript.history(projectPath: projectPath, limit: limit)
@@ -1024,7 +1030,7 @@ final class AppStore: ObservableObject {
             let open = self.tabs.filter { $0.projectID == id }.map { (kind: $0.kind, id: $0.sessionID) }
             let past = (self.searchHistory[id] ?? self.history[id] ?? []).map { (kind: $0.kind, id: $0.id) }
             for session in open + past where !session.id.isEmpty {
-                if session.kind == .claude { claude.insert(session.id) } else { codex.insert(session.id) }
+                if session.kind.isClaudeCode { claude.insert(session.id) } else { codex.insert(session.id) }
             }
             self.searchQueue.async {
                 let sessions = Transcript.promptMatches(query, sessionIDs: claude)

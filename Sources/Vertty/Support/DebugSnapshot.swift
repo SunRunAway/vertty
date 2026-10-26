@@ -238,8 +238,10 @@ final class DebugSnapshot {
                 store.select(tab)
                 continue
             }
-            if line == "new" || line == "new claude" || line == "new codex" {
-                store.newSession(kind: line == "new" ? nil : (line.hasSuffix("codex") ? .codex : .claude))
+            if line == "new" || line == "new claude" || line == "new codex" || line == "new deepseek_claude" {
+                let kind: AgentKind? = line == "new" ? nil
+                    : (line.hasSuffix("codex") ? .codex : line.hasSuffix("deepseek_claude") ? .deepseekClaude : .claude)
+                store.newSession(kind: kind)
                 continue
             }
             if line == "search" || line.hasPrefix("search "), let project = store.currentProject ?? store.projects.first {

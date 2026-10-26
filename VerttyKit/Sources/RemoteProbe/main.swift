@@ -157,7 +157,9 @@ DispatchQueue.global().async {
                     $0.requestID = id
                     $0.resumeSession.projectID = a[1]
                     $0.resumeSession.sessionID = a[2]
-                    $0.resumeSession.kind = a.count > 3 && a[3] == "codex" ? .codex : .claude
+                    $0.resumeSession.kind = a.count > 3
+                        ? (a[3] == "codex" ? .codex : a[3] == "deepseek_claude" ? .deepseek : .claude)
+                        : .claude
                 }
             case "close":
                 let id = nextID; nextID += 1

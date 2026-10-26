@@ -95,7 +95,7 @@ extension AppStore {
         }
         var kind: AgentKind?
         if let a = str("agent") {
-            guard let k = AgentKind(rawValue: a.lowercased()) else { return .failure(APIError(message: "agent must be claude or codex.")) }
+            guard let k = AgentKind(rawValue: a.lowercased()) else { return .failure(APIError(message: "agent must be claude, codex or deepseek_claude.")) }
             kind = k
         }
         if let existing, schedules.sessionFixed(existing) {

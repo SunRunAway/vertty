@@ -1,7 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// One session card = one terminal running Claude Code or Codex (+ an optional bottom shell).
+/// One session card = one terminal running an agent (Claude Code, DeepSeek or
+/// Codex) (+ an optional bottom shell).
 final class TabSession: ObservableObject, Identifiable {
     let id: UUID
     let projectID: UUID
@@ -112,6 +113,9 @@ struct PersistedState: Codable {
     var selectedTabID: UUID?
     var lastProjectID: UUID?
     var enabledKinds: [AgentKind]?
+    /// The agents the saving build offered. An enabledKinds entry missing here
+    /// was turned off; an agent not listed here is new and starts on.
+    var knownKinds: [AgentKind]?
     var sidebarWidth: Double?
     var sidebarVisible: Bool?
     var shellFraction: Double?
