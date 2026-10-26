@@ -462,9 +462,9 @@ final class DebugSnapshot {
                 "\($0.title)=\($0.state == .on)\($0.isEnabled ? "" : " (locked)")"
             }.joined(separator: ", "))
         }
-        if let file = NSApp.mainMenu?.items.first(where: { $0.submenu?.items.contains { $0.action == NSSelectorFromString("newOtherSession") } == true })?.submenu {
+        if let file = NSApp.mainMenu?.items.first(where: { $0.submenu?.items.contains { $0.action == NSSelectorFromString("newSessionOfKind:") } == true })?.submenu {
             file.delegate?.menuNeedsUpdate?(file)
-            let new = ["newSession", "newOtherSession"].map(NSSelectorFromString)
+            let new = ["newSession", "newSessionOfKind:"].map(NSSelectorFromString)
             lines.append("new-session-menu: " + file.items.filter { !$0.isHidden && $0.action.map(new.contains) == true }
                 .map { "\($0.title)\($0.keyEquivalent.isEmpty ? "" : " ⌘" + $0.keyEquivalent.uppercased())" }.joined(separator: ", "))
         }
