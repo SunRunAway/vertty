@@ -127,8 +127,8 @@ private struct DeepSeekWhale: Shape {
         let box = p.boundingRect
         guard box.width > 0, box.height > 0 else { return p }
         let scale = min(rect.width / box.width, rect.height / box.height) * 0.98
-        return p.applying(CGAffineTransform(translationX: -box.midX, y: -box.midY)
+        return p.applying(CGAffineTransform(translationX: rect.midX, y: rect.midY)
             .scaledBy(x: scale, y: scale)
-            .translatedBy(x: rect.midX, y: rect.midY))
+            .translatedBy(x: -box.midX, y: -box.midY))
     }
 }
