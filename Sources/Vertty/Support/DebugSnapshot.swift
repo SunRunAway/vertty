@@ -330,8 +330,9 @@ final class DebugSnapshot {
                 Tailnet.shared.logout()
                 continue
             }
-            // Same as clicking Via Tailscale (tailscale) or Own Network
-            // (direct) in the Remote Connections submenu: turns it on or off.
+            // Same as clicking Via Tailscale (tailscale) or Listen on
+            // 127.0.0.1 Only (direct) in the Remote Connections submenu:
+            // turns it on or off.
             if line.hasPrefix("remotemode "), let menu = Self.remoteMenu,
                let index = menu.items.firstIndex(where: {
                    $0.action == NSSelectorFromString("toggleRemoteMode:")

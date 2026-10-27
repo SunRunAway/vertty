@@ -223,9 +223,9 @@
 /* Remote connections */
 "Remote Connections" = "远程连接";
 "Tailscale failed to start: %@" = "Tailscale 启动失败：%@";
-"Own Network failed to start: %@" = "自行组网启动失败：%@";
+"Listen on 127.0.0.1 Only failed to start: %@" = "仅监听 127.0.0.1 启动失败：%@";
 "Via Tailscale" = "通过 Tailscale";
-"Own Network" = "自行组网";
+"Listen on 127.0.0.1 Only" = "仅监听 127.0.0.1";
 "Tailscale: %@" = "Tailscale：%@";
 "Name on Tailscale: %@" = "本机名称：%@";
 "Tailscale: Waiting for sign-in" = "Tailscale：等待登录";

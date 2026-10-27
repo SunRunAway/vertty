@@ -241,14 +241,14 @@ try:
     wait(lambda: tailnet_field(server_state_txt(), "signedIn") == "true", "the server didn't sign in to Tailscale", 90)
     server_name = tailnet_field(server_state_txt(), "name")
 
-    # Own Network first, by address; the address is kept after connecting
+    # By address first (the computer's Listen on 127.0.0.1 Only way); the address is kept after connecting
     # through Tailscale (and started again), for the next time.
     address = f"ws://127.0.0.1:{port}"
     drive(f"connect {address}")
     wait(lambda: status() == "connected" and card_id in phone(), "the app didn't connect by address")
     drive("disconnect")
     wait(lambda: status() == "none", "the app didn't disconnect")
-    print("PASS the app connects by address (Own Network on alongside Via Tailscale)", flush=True)
+    print("PASS the app connects by address (Listen on 127.0.0.1 Only on alongside Via Tailscale)", flush=True)
 
     # The first command starts the app's Tailscale device; once it lists the
     # computer, the second connects.

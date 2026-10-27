@@ -78,7 +78,7 @@ public struct RemoteConnectView: View {
                 }
             }
             Section {
-                TextField(text: $address, prompt: Text(verbatim: "192.168.1.5:58563")) {
+                TextField(text: $address, prompt: Text(verbatim: "mac.local:58563")) {
                     Text("Address", bundle: .verttyUIResources)
                 }
                 #if os(iOS)
@@ -91,7 +91,7 @@ public struct RemoteConnectView: View {
                 Button(action: connectToAddress) { Text("Connect", bundle: .verttyUIResources) }
                     .disabled(address.trimmingCharacters(in: .whitespaces).isEmpty)
             } header: {
-                Text("Own Network", bundle: .verttyUIResources)
+                Text("Listen on 127.0.0.1 Only", bundle: .verttyUIResources)
             } footer: {
                 Text("Your computer's address, with the port shown under Remote Connections in its Vertty menu. The connection's security is up to you (for example a VPN).", bundle: .verttyUIResources)
             }
@@ -103,7 +103,7 @@ public struct RemoteConnectView: View {
         .alert(Text("That isn't an address Vertty can connect to.", bundle: .verttyUIResources), isPresented: $invalid) {
             Button(role: .cancel) {} label: { Text("OK", bundle: .verttyUIResources) }
         } message: {
-            Text("Enter a host and port, such as 192.168.1.5:58563 or mac.local:58563.", bundle: .verttyUIResources)
+            Text("Enter a host and port, such as mac.local:58563.", bundle: .verttyUIResources)
         }
     }
 

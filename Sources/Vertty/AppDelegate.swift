@@ -19,8 +19,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     private let updaterController = SPUStandardUpdaterController(
         startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
     private var fileMenu: NSMenu?
-    /// The "Remote Connections" submenu: Via Tailscale and Own Network,
-    /// each on or off, then the details (see updateRemoteInfoItems).
+    /// The "Remote Connections" submenu: Via Tailscale and Listen on
+    /// 127.0.0.1 Only, each on or off, then the details (see
+    /// updateRemoteInfoItems).
     private let remoteMenu = NSMenu()
     private let remoteInfoSeparator = NSMenuItem.separator()
     private let remoteInfoItems: [NSMenuItem] = (0..<5).map { _ in
@@ -277,7 +278,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         sleepProtection.menuItem = sleepItem
         appMenu.addItem(sleepItem)
         appMenu.addItem(item("Don’t Let the Display Turn Off While Tasks Run", #selector(toggleDisplayAwake), ""))
-        let modes: [(String.LocalizationValue, RemoteServer.Mode)] = [("Via Tailscale", .tailscale), ("Own Network", .direct)]
+        let modes: [(String.LocalizationValue, RemoteServer.Mode)] = [("Via Tailscale", .tailscale), ("Listen on 127.0.0.1 Only", .direct)]
         for (title, mode) in modes {
             let choice = item(title, #selector(toggleRemoteMode(_:)), "")
             choice.representedObject = mode.rawValue
@@ -433,7 +434,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
         case nil:
             break
         case .failed(let reason):
-            lines.append(String(localized: "Own Network failed to start: \(reason)"))
+            lines.append(String(localized: "Listen on 127.0.0.1 Only failed to start: \(reason)"))
         case .starting:
             if case .success(let port) = RemoteServer.configuredPort() {
                 lines.append(String(localized: "Port: \(String(port))"))

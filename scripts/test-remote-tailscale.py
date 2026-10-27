@@ -9,7 +9,7 @@ Tailscale's tsnet reads from the environment; use a key for test devices
 only (reusable, ephemeral, no tags), never the user's own login. Checks
 that the server only listens on 127.0.0.1, the menu, that the client lists
 the server and drives its card over Tailscale, that switching the server to
-Own Network takes it off the tailnet, and signing out. Build first with
+Listen on 127.0.0.1 Only takes it off the tailnet, and signing out. Build first with
 make app.
 
     TS_AUTHKEY="$(cat <key file>)" python3 scripts/test-remote-tailscale.py
@@ -220,7 +220,7 @@ try:
             dict(base, VERTTY_SUPPORT_DIR=str(client_state), VERTTY_DEBUG_SNAPSHOT=str(client_snap),
                  VERTTY_REMOTE_PORT=str(free_port())), log))
 
-    # Via Tailscale checked, Own Network not; then the account, the name,
+    # Via Tailscale checked, Listen on 127.0.0.1 Only not; then the account, the name,
     # the client and Sign Out.
     wait(lambda: menu_ways()[0] == [True, False] and len(menu_ways()[1]) == 4 and "@" in menu_ways()[1][0],
          "the server's menu doesn't show it signed in to Tailscale")
@@ -262,29 +262,33 @@ try:
     wait(lambda: "GOT 6869" in read(client_snap / "state.txt"), "echo didn't show in the remote terminal")
     print(f"PASS the card's terminal opens at the window's size ({own}) and typing round-trips", flush=True)
 
-    # Own Network as well: the port opens on every interface; the client
-    # stays connected over Tailscale.
+    # Listen on 127.0.0.1 Only as well: the port opens on the loopback and
+    # on no other interface; the client stays connected over Tailscale.
     (server_snap / "input.txt").write_text("remotemode direct\n")
     wait(lambda: menu_ways()[0] == [True, True] and any(str(port) in l for l in menu_ways()[1]),
-         "the server didn't add Own Network")
-    wait(lambda: f"*:{port}" in tcp_listeners(apps[0].pid), "Own Network's port isn't open")
+         "the server didn't add Listen on 127.0.0.1 Only")
+    wait(lambda: f"127.0.0.1:{port}" in tcp_listeners(apps[0].pid),
+         "Listen on 127.0.0.1 Only's port isn't open")
+    listeners = tcp_listeners(apps[0].pid)
+    assert not any(l.startswith("*:") for l in listeners), listeners
     try:
         socket.create_connection(("127.0.0.1", port), timeout=2).close()
     except OSError as e:
-        raise AssertionError(f"Own Network's port refused a connection: {e}")
+        raise AssertionError(f"Listen on 127.0.0.1 Only's port refused a connection: {e}")
     assert remote_line("status") == "connected" and tailnet_field(server_snap, "state") == "running", \
         tailnet_line(server_snap) + "\n" + read(client_snap / "state.txt")
-    print(f"PASS Own Network opens alongside Via Tailscale ({', '.join(tcp_listeners(apps[0].pid))}); the client stays", flush=True)
+    print(f"PASS Listen on 127.0.0.1 Only opens alongside Via Tailscale ({', '.join(tcp_listeners(apps[0].pid))}); the client stays", flush=True)
 
     # Via Tailscale off: the server leaves the tailnet and the client loses
-    # it; Own Network stays.
+    # it; Listen on 127.0.0.1 Only stays.
     (server_snap / "input.txt").write_text("remotemode tailscale\n")
     wait(lambda: menu_ways()[0] == [False, True], "the server didn't turn Via Tailscale off")
     wait(lambda: tailnet_field(server_snap, "state") == "stopped", "the server's Tailscale device kept running")
     # The client notices when its pings go unanswered.
     wait(lambda: remote_line("status") != "connected", "the client stayed connected", timeout=90)
-    assert f"*:{port}" in tcp_listeners(apps[0].pid), tcp_listeners(apps[0].pid)
-    print("PASS turning Via Tailscale off stops the device and drops its client; Own Network stays", flush=True)
+    assert f"127.0.0.1:{port}" in tcp_listeners(apps[0].pid), tcp_listeners(apps[0].pid)
+    print("PASS turning Via Tailscale off stops the device and drops its client; Listen on 127.0.0.1 Only stays",
+          flush=True)
 
     drive("tailnetlogout")
     wait(lambda: tailnet_field(client_snap, "signedIn") == "false", "the client didn't sign out")

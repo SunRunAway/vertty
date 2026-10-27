@@ -8,14 +8,15 @@ import VerttyTailnet
 /// a way in the "Remote Connections" submenu is checked; either or both:
 /// - Via Tailscale: on the embedded Tailscale device (VerttyTailnet), which
 ///   forwards the same user's connections to a port on 127.0.0.1;
-/// - Own Network: on the port on every interface.
+/// - Listen on 127.0.0.1 Only: on the port on 127.0.0.1 and nowhere else; the
+///   user's own forwarder (a VPN, a proxy) brings clients there.
 /// Each way has a listener of its own, so one failing leaves the other.
 /// Keeps one client at a time, whichever way it came: a new one replaces
 /// the previous connection.
 final class RemoteServer: ObservableObject {
     /// Present while remote connections are allowed; holds the checked
-    /// Modes, one per line (empty means Own Network, from before there was
-    /// a choice).
+    /// Modes, one per line (empty means Listen on 127.0.0.1 Only, from before
+    /// there was a choice).
     static var enabledMarker: URL { AppPaths.support.appendingPathComponent("remote-enabled") }
 
     enum Mode: String, CaseIterable {
@@ -26,8 +27,8 @@ final class RemoteServer: ObservableObject {
     /// A checked way's listener (absent while unchecked).
     enum Status: Equatable {
         case starting
-        /// Own Network: the port; Via Tailscale: the local port the device
-        /// forwards to (Tailnet.shared has the details).
+        /// Listen on 127.0.0.1 Only: the port; Via Tailscale: the local port
+        /// the device forwards to (Tailnet.shared has the details).
         case listening(UInt16)
         /// Couldn't start; the reason is shown in the menu.
         case failed(String)
@@ -125,10 +126,14 @@ final class RemoteServer: ObservableObject {
         do {
             if mode == .tailscale {
                 params.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: .any)
-                listener = try NWListener(using: params)
             } else {
-                listener = try NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
+                // 127.0.0.1 only, on the configured port: whatever brings a
+                // client's connection here (the user's own forwarder) dials
+                // the loopback, and no interface carries the port.
+                params.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback),
+                                                         port: NWEndpoint.Port(rawValue: port)!)
             }
+            listener = try NWListener(using: params)
         } catch {
             status[mode] = .failed(error.localizedDescription)
             return
