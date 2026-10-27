@@ -110,6 +110,13 @@ final class RemoteServer: ObservableObject {
         let ws = NWProtocolWebSocket.Options()
         ws.autoReplyPing = true
         ws.maximumMessageSize = Remote.maxFrameSize
+        // Browsers always send Origin and pages can't drop it; Vertty's
+        // clients (URLSessionWebSocketTask) don't send one. Without this, any
+        // web page could reach the server through 127.0.0.1.
+        ws.setClientRequestHandler(.main) { _, headers in
+            let fromBrowser = headers.contains { $0.name.caseInsensitiveCompare("Origin") == .orderedSame }
+            return .init(status: fromBrowser ? .reject : .accept, subprotocol: nil)
+        }
         let params = NWParameters.tcp
         params.defaultProtocolStack.applicationProtocols.insert(ws, at: 0)
         params.allowLocalEndpointReuse = true

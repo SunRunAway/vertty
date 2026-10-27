@@ -419,6 +419,21 @@ with (root / "app.log").open("w") as log:
         bad.cmd("badversion")
         bad.expect(lambda e: e["event"] == "error" and e["code"] == 1, "incompatible version accepted")
         print("PASS incompatible versions are refused", flush=True)
+
+        # A handshake with Origin (any browser's) is refused; one without is not.
+        def handshake(extra):
+            with socket.create_connection(("127.0.0.1", port), timeout=5) as s:
+                s.sendall((f"GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nUpgrade: websocket\r\n"
+                           "Connection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                           f"Sec-WebSocket-Version: 13\r\n{extra}\r\n").encode())
+                try:
+                    return s.recv(1024).split(b"\r\n", 1)[0].decode(errors="replace")
+                except OSError:
+                    return ""
+        assert " 101 " in handshake(""), handshake("")
+        refused = handshake("Origin: https://example.com\r\n")
+        assert " 101 " not in refused, refused
+        print(f"PASS browser handshakes are refused ({refused or 'closed'})", flush=True)
     finally:
         for p in probes:
             try:
