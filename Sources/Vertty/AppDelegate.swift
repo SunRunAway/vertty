@@ -210,7 +210,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !flag { window.makeKeyAndOrderFront(nil) }
+        // A Dock click right after launch can arrive before
+        // applicationDidFinishLaunching has created the window.
+        if !flag { window?.makeKeyAndOrderFront(nil) }
         return true
     }
 
