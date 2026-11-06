@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Launch the shipped zip in isolation, without relying on build-tree resources."""
-import json
 import os
 from pathlib import Path
 import subprocess
@@ -28,9 +27,10 @@ with tempfile.TemporaryDirectory(prefix="vertty-release-test-") as scratch:
             while time.monotonic() < deadline:
                 if app.poll() is not None:
                     raise RuntimeError("Packaged app exited during startup")
-                snapshot = state / "state.json"
+                snapshot = state / "state.txt"
                 if snapshot.exists():
-                    json.loads(snapshot.read_text())
+                    if not snapshot.read_text().startswith("windowSize="):
+                        raise RuntimeError("Packaged app produced an invalid debug snapshot")
                     time.sleep(2)
                     if app.poll() is not None:
                         raise RuntimeError("Packaged app exited after creating its UI")
