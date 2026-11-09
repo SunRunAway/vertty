@@ -18,8 +18,6 @@ public final class RemoteCard: SessionCardModel {
     @Published public private(set) var prState: String?
     @Published public private(set) var status: SessionStatus = .starting
     @Published public private(set) var attention = false
-    /// Its terminal runs a program (closing ends it).
-    public private(set) var running = false
 
     init?(_ c: Remote.Card) {
         guard let id = UUID(uuidString: c.id), let projectID = UUID(uuidString: c.projectID) else { return nil }
@@ -42,7 +40,6 @@ public final class RemoteCard: SessionCardModel {
         set(\.prState, c.prState.nonEmpty)
         set(\.status, SessionStatus(c.status))
         set(\.attention, c.attention)
-        running = c.running
     }
 }
 
@@ -256,7 +253,7 @@ public final class RemoteStore: ObservableObject, SidebarStore, SidebarLayoutMod
     }
 
     public func requestClose(_ card: RemoteCard) {
-        if card.running && state.confirmClose {
+        if card.closeNeedsConfirmation && state.confirmClose {
             confirmingClose = card
         } else {
             close(card, confirmed: false)

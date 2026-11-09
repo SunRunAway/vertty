@@ -27,6 +27,10 @@ public extension SessionCardModel {
     var shownStatus: SessionStatus {
         status == .idle && backgroundShell && !attention ? .working : status
     }
+
+    var closeNeedsConfirmation: Bool {
+        shownStatus == .working || shownStatus == .needsInput
+    }
 }
 
 /// What the sidebar offers besides browsing, starting, resuming and closing

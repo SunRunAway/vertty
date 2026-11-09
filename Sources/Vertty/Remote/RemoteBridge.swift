@@ -103,7 +103,7 @@ final class RemoteBridge {
             h.moreAvailable = all.count > Self.stateHistoryCount || (store.history[p.id]?.count ?? 0) >= Self.stateHistoryCount
             return h
         }
-        state.confirmClose = !UserDefaults.standard.bool(forKey: AppStore.skipCloseConfirmKey)
+        state.confirmClose = true
         return state
     }
 
@@ -269,8 +269,8 @@ final class RemoteBridge {
     private func closeSession(_ r: Remote.CloseSession, _ id: UInt64) {
         guard let tab = tab(r.cardID) else { return reply(id) { $0.closed = .init() } }
         let running = tab.surface.map { !$0.processExited } ?? false
-        if running && !r.confirmed && !UserDefaults.standard.bool(forKey: AppStore.skipCloseConfirmKey) {
-            return fail(id, .confirmationRequired, "Closing ends the running session.")
+        if running && tab.closeNeedsConfirmation && !r.confirmed {
+            return fail(id, .confirmationRequired, "Closing ends the agent's work.")
         }
         if attached?.tab === tab {
             detach()

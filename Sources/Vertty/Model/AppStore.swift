@@ -394,7 +394,7 @@ final class AppStore: ObservableObject {
         scheduleSave()
     }
 
-    /// Closing via UI: ask the terminal to close (it confirms if Claude is still running).
+    /// Closing via UI: ask the terminal to close (it confirms if the agent is working or needs input).
     func requestClose(_ tab: TabSession) {
         if let surface = tab.surface, !surface.processExited {
             surface.requestClose()
@@ -408,7 +408,7 @@ final class AppStore: ObservableObject {
     }
 
     func closeOtherTabs(_ keep: TabSession) {
-        let others = tabs.filter { $0 !== keep && $0.isLaunched && !($0.surface?.processExited ?? true) }
+        let others = tabs.filter { $0 !== keep && $0.closeNeedsConfirmation && !($0.surface?.processExited ?? true) }
         if !others.isEmpty {
             let alert = NSAlert()
             alert.messageText = String(localized: "Close \(others.count) other running sessions?")
@@ -459,9 +459,6 @@ final class AppStore: ObservableObject {
 
     func tab(withID id: UUID) -> TabSession? { tabs.first { $0.id == id } }
 
-    /// Set by the close confirmation's "Don't ask again" checkbox.
-    static let skipCloseConfirmKey = "SkipCloseSessionConfirmation"
-
     /// libghostty asks to close a surface (cmd+w, or the shell exited).
     func surfaceRequestedClose(_ surface: TerminalSurfaceView, processAlive: Bool) {
         if let tab = tabs.first(where: { $0.shellSurface === surface }) {
@@ -477,18 +474,13 @@ final class AppStore: ObservableObject {
             return
         }
         guard let tab = tab(for: surface) else { return }
-        if processAlive && !UserDefaults.standard.bool(forKey: Self.skipCloseConfirmKey) {
+        if processAlive && tab.closeNeedsConfirmation {
             let alert = NSAlert()
             alert.messageText = String(localized: "Close “\(tab.title)”?")
             alert.informativeText = String(localized: "\(tab.kind.name) is still running. Closing will end it. The history is kept and can be resumed from the sidebar later.")
             alert.addButton(withTitle: String(localized: "Close"))
             alert.addButton(withTitle: String(localized: "Cancel"))
-            alert.showsSuppressionButton = true
-            alert.suppressionButton?.title = String(localized: "Don’t ask again")
             guard alert.runModal() == .alertFirstButtonReturn else { return }
-            if alert.suppressionButton?.state == .on {
-                UserDefaults.standard.set(true, forKey: Self.skipCloseConfirmKey)
-            }
         }
         closeTab(tab, force: true)
     }

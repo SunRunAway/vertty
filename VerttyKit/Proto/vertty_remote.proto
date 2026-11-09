@@ -251,8 +251,8 @@ message State {
   repeated Card cards = 2;
   // Recent closed sessions per project, newest first.
   repeated ProjectHistory history = 3;
-  // Whether closing a card whose agent is still running asks first (the
-  // server's local setting). See CloseSession.
+  // Whether closing a busy card asks first. Always set by current servers;
+  // older ones let the user turn it off. See CloseSession.
   bool confirm_close = 4;
   // The agents the server offers for new sessions (its local setting), its
   // default first. Empty from servers that predate the setting: all of them.
@@ -338,9 +338,10 @@ message ResumeSession {
 
 // Closes a card on the server, exactly like closing it in the local window:
 // its program ends, and its history stays and can be resumed. If
-// State.confirm_close is set and the card is running, the client asks the
-// user first and sends confirmed = true; without it the request fails with
-// CONFIRMATION_REQUIRED.
+// State.confirm_close is set and the card is busy (its status is WORKING or
+// NEEDS_INPUT), the client asks the user first and sends confirmed = true;
+// without it the request fails with CONFIRMATION_REQUIRED. Servers before
+// that asked for every running card.
 message CloseSession {
   string card_id = 1;
   bool confirmed = 2;

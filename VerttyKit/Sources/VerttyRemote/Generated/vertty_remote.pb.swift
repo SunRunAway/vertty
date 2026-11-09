@@ -775,8 +775,8 @@ public struct Vertty_Remote_State: Sendable {
   /// Recent closed sessions per project, newest first.
   public var history: [Vertty_Remote_ProjectHistory] = []
 
-  /// Whether closing a card whose agent is still running asks first (the
-  /// server's local setting). See CloseSession.
+  /// Whether closing a busy card asks first. Always set by current servers;
+  /// older ones let the user turn it off. See CloseSession.
   public var confirmClose: Bool = false
 
   /// The agents the server offers for new sessions (its local setting), its
@@ -944,9 +944,10 @@ public struct Vertty_Remote_ResumeSession: Sendable {
 
 /// Closes a card on the server, exactly like closing it in the local window:
 /// its program ends, and its history stays and can be resumed. If
-/// State.confirm_close is set and the card is running, the client asks the
-/// user first and sends confirmed = true; without it the request fails with
-/// CONFIRMATION_REQUIRED.
+/// State.confirm_close is set and the card is busy (its status is WORKING or
+/// NEEDS_INPUT), the client asks the user first and sends confirmed = true;
+/// without it the request fails with CONFIRMATION_REQUIRED. Servers before
+/// that asked for every running card.
 public struct Vertty_Remote_CloseSession: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for

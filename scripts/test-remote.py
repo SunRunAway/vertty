@@ -38,7 +38,8 @@ for d in (home, project, support, snapshot, bin_dir, home / ".codex"):
 
 # The fake agent logs its terminal size (at start and on every resize) and
 # its input with the terminal size at the time it read it to agent.log;
-# echoes input in hex; and sends a desktop notification on "!".
+# echoes input in hex; sends a desktop notification on "!"; and shows Claude's
+# working spinner in its title on "w".
 agent_log = root / "agent.log"
 agent = f"""#!{sys.executable}
 import os, signal, sys, tty
@@ -61,6 +62,8 @@ while True:
     if b"!" in b:
         notification_count += 1
         os.write(1, f"\\x1b]9;Agent needs you {{notification_count}}\\x07".encode())
+    if b"w" in b:
+        os.write(1, "\\x1b]0;\\u2736 Working\\x07".encode())
 """
 for name in ("claude", "codex"):
     p = bin_dir / name
@@ -357,18 +360,22 @@ with (root / "app.log").open("w") as log:
         a.expect(lambda e: e["event"] == "reply" and e.get("error") == 4, "resuming a missing session didn't fail")
         print("PASS resume reuses open cards and refuses unknown sessions", flush=True)
 
-        # Closing a running card needs confirmation, like locally (unless
-        # "Don't ask again" was checked, which State reports).
-        if st["confirmClose"]:
-            a.cmd(f"close {resumed['card']}")
-            a.expect(lambda e: e["event"] == "reply" and e.get("error") == 5, "close didn't ask for confirmation")
-            a.cmd(f"close {resumed['card']} confirm")
-        else:
-            a.cmd(f"close {resumed['card']}")
-        a.expect(lambda e: e["event"] == "reply" and e.get("closed"), "close failed")
+        # Closing a card whose agent is working needs confirmation, like
+        # locally; closing one that isn't busy doesn't.
+        assert st["confirmClose"]
+        a.cmd(f"close {resumed['card']}")
+        a.expect(lambda e: e["event"] == "reply" and e.get("closed"), "closing a card that isn't busy failed")
         a.wait_state(lambda e: resumed["card"] not in [c["id"] for c in e["cards"]], "closed card still in state")
         wait(lambda: resumed["card"] not in state(), "card not closed locally")
-        print("PASS close asks for confirmation and closes the card", flush=True)
+        busy = first["card"]
+        drive(f"to {busy}", "text w")
+        a.wait_state(lambda e: any(c["id"] == busy and c["status"] == 3 for c in e["cards"]), "card didn't start working")
+        a.cmd(f"close {busy}")
+        a.expect(lambda e: e["event"] == "reply" and e.get("error") == 5, "close didn't ask for confirmation")
+        a.cmd(f"close {busy} confirm")
+        a.expect(lambda e: e["event"] == "reply" and e.get("closed"), "confirmed close failed")
+        a.wait_state(lambda e: busy not in [c["id"] for c in e["cards"]], "closed busy card still in state")
+        print("PASS close asks for confirmation only while the agent is busy", flush=True)
 
         a.cmd(f"history {project_id} 10")
         a.expect(lambda e: e["event"] == "reply" and "sessions" in e, "history request failed")
