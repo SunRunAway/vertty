@@ -2,7 +2,7 @@ import Foundation
 
 /// How often a scheduled task runs.
 enum ScheduleRepeat: String, Codable, CaseIterable, Identifiable {
-    case once, hourly, daily, weekdays, weekly
+    case once, hourly, daily, weekdays, weekly, monthly
     var id: String { rawValue }
 }
 
@@ -14,6 +14,8 @@ struct ScheduleTiming: Codable, Equatable {
     var minute = 0
     /// Calendar weekdays (1 = Sunday … 7 = Saturday) for .weekly.
     var weekdays: [Int] = [7]
+    // nil unless .monthly: a leftover list would make an unchanged schedule compare as edited.
+    var monthDays: [Int]?
     /// The day of a .once task.
     var year: Int?
     var month: Int?
@@ -58,12 +60,28 @@ struct ScheduleTiming: Codable, Equatable {
             return (2...6).compactMap { nextMatch(cal, after: date, weekday: $0) }.min()
         case .weekly:
             return Set(weekdays).compactMap { nextMatch(cal, after: date, weekday: $0) }.min()
+        case .monthly:
+            let days = Set(monthDays ?? []).filter { (1...31).contains($0) }.sorted()
+            guard !days.isEmpty, let thisMonth = cal.dateInterval(of: .month, for: date)?.start else { return nil }
+            // Every day 1…31 comes up within a few months, so a short look ahead is enough.
+            for offset in 0..<12 {
+                guard let monthStart = cal.date(byAdding: .month, value: offset, to: thisMonth),
+                      let length = cal.range(of: .day, in: .month, for: monthStart)?.count else { continue }
+                let ym = cal.dateComponents([.year, .month], from: monthStart)
+                for day in days where day <= length {
+                    if let at = wallTime(cal, year: ym.year!, month: ym.month!, day: day), at > date { return at }
+                }
+            }
+            return nil
         }
     }
 
     var onceDate: Date? {
         guard let year, let month, let day else { return nil }
-        let cal = calendar
+        return wallTime(calendar, year: year, month: month, day: day)
+    }
+
+    private func wallTime(_ cal: Calendar, year: Int, month: Int, day: Int) -> Date? {
         let comps = DateComponents(year: year, month: month, day: day, hour: hour, minute: minute, second: 0)
         guard let start = cal.date(from: DateComponents(year: year, month: month, day: day)) else { return nil }
         // Resolve through nextDate so a DST gap behaves like the repeating kinds.
@@ -81,12 +99,13 @@ struct ScheduleTiming: Codable, Equatable {
     var isValid: Bool {
         switch repeatKind {
         case .weekly: return !weekdays.isEmpty
+        case .monthly: return !(monthDays ?? []).isEmpty
         case .once: return onceDate != nil
         default: return true
         }
     }
 
-    /// "Every Sat 09:00", "Weekdays 09:00", "Hourly :15", "Once Oct 17 09:00"…
+    /// "Every Sat 09:00", "Monthly on day 1, 15 09:00", "Hourly :15", "Once Oct 17 09:00"…
     var summary: String {
         guard let timeZoneID else { return wallTimeSummary }
         return "\(wallTimeSummary) · \(timeZoneID)"
@@ -103,6 +122,9 @@ struct ScheduleTiming: Codable, Equatable {
             let days = weekdays.sorted { Self.mondayFirst($0) < Self.mondayFirst($1) }
                 .map { names[($0 - 1) % 7] }.joined(separator: String(localized: ", "))
             return String(localized: "Every \(days) \(time)")
+        case .monthly:
+            let days = (monthDays ?? []).sorted().map(String.init).joined(separator: String(localized: ", "))
+            return String(localized: "Monthly on day \(days) \(time)")
         case .once:
             let date = onceDate.map { ScheduleFormat.day($0, timeZone: timeZone) } ?? "?"
             return String(localized: "Once \(date) \(time)")

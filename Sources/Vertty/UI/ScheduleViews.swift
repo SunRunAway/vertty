@@ -406,10 +406,14 @@ struct SchedulePanelView: View {
                 PanelRow("Repeat") {
                     PanelMenu(selection: draft.timing.repeatKind,
                               options: [(.once, String(localized: "Once")), (.hourly, String(localized: "Hourly")),
-                                        (.daily, String(localized: "Daily")), (.weekdays, String(localized: "Weekdays")), (.weekly, String(localized: "Weekly"))])
+                                        (.daily, String(localized: "Daily")), (.weekdays, String(localized: "Weekdays")), (.weekly, String(localized: "Weekly")),
+                                        (.monthly, String(localized: "Monthly"))])
                 }
                 if draft.wrappedValue.timing.repeatKind == .weekly {
                     PanelRow("Days") { WeekdayPicker(weekdays: draft.timing.weekdays) }
+                }
+                if draft.wrappedValue.timing.repeatKind == .monthly {
+                    PanelRow("Days of Month") { MonthDayPicker(days: monthDays) }
                 }
                 if draft.wrappedValue.timing.repeatKind == .once {
                     PanelRow("Date") {
@@ -440,7 +444,18 @@ struct SchedulePanelView: View {
                 .font(.system(size: 12.5))
                 .foregroundStyle(.tertiary)
                 .padding(.leading, 4)
+            if draft.wrappedValue.timing.repeatKind == .monthly, (draft.wrappedValue.timing.monthDays ?? []).contains(where: { $0 > 28 }) {
+                Text("Months without the chosen day are skipped.")
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(.tertiary)
+                    .padding(.leading, 4)
+            }
         }
+    }
+
+    private var monthDays: Binding<[Int]> {
+        Binding(get: { draft.wrappedValue.timing.monthDays ?? [] },
+                set: { draft.wrappedValue.timing.monthDays = $0.sorted() })
     }
 
     private var nextLine: String {
@@ -791,6 +806,33 @@ private struct WeekdayPicker: View {
     }
 }
 
+private struct MonthDayPicker: View {
+    @Binding var days: [Int]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            ForEach(Array(stride(from: 1, through: 31, by: 7)), id: \.self) { first in
+                HStack(spacing: 3) {
+                    ForEach(first...min(first + 6, 31), id: \.self) { day in
+                        let on = days.contains(day)
+                        Button {
+                            if on { days.removeAll { $0 == day } } else { days.append(day) }
+                        } label: {
+                            Text("\(day)")
+                                .font(.system(size: 11.5, weight: on ? .semibold : .regular).monospacedDigit())
+                                .foregroundStyle(on ? Color.white : Color.secondary)
+                                .frame(width: 32, height: 24)
+                                .background(RoundedRectangle(cornerRadius: 6).fill(on ? Color.accentColor.opacity(0.75) : Color.white.opacity(0.07)))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 8)
+    }
+}
+
 // MARK: - Text
 
 enum ScheduleText {
@@ -873,8 +915,10 @@ extension AppStore {
                 timing.day = nil
             }
             if timing.repeatKind != .weekly { timing.weekdays = [] }
+            if timing.repeatKind != .monthly { timing.monthDays = nil }
             return [t.name, t.prompt, t.projectID, t.kind, timing.repeatKind, timing.hour, timing.minute,
-                    timing.weekdays.sorted(), timing.year, timing.month, timing.day, timing.timeZoneID]
+                    timing.weekdays.sorted(), timing.monthDays?.sorted(), timing.year, timing.month, timing.day,
+                    timing.timeZoneID]
         }
         return settings(panel.draft) != settings(task)
     }
@@ -887,6 +931,7 @@ extension AppStore {
         if t.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { p.append(String(localized: "Enter a prompt.")) }
         if project(t.projectID) == nil { p.append(String(localized: "Choose a project.")) }
         if t.timing.repeatKind == .weekly && t.timing.weekdays.isEmpty { p.append(String(localized: "Choose at least one day.")) }
+        if t.timing.repeatKind == .monthly && (t.timing.monthDays ?? []).isEmpty { p.append(String(localized: "Choose at least one day.")) }
         if t.timing.repeatKind == .once && !t.timing.canResume { p.append(String(localized: "Choose a time in the future.")) }
         return p
     }
@@ -905,6 +950,7 @@ extension AppStore {
             t.timing.month = nil
             t.timing.day = nil
         }
+        if t.timing.repeatKind != .monthly { t.timing.monthDays = nil }
         if panel.isNew {
             guard schedules.create(t) else { return String(localized: "Couldn’t save the task.") }
         } else if let problem = schedules.applyEdit(t) {
@@ -986,8 +1032,9 @@ extension AppStore {
 
     private func openNewScheduledTask(in project: Project) {
         var timing = ScheduleTiming()
-        let c = timing.calendar.dateComponents([.weekday], from: Date().addingTimeInterval(86400))
+        let c = timing.calendar.dateComponents([.weekday, .day], from: Date().addingTimeInterval(86400))
         timing.weekdays = [c.weekday ?? 7]
+        timing.monthDays = [c.day ?? 1]
         let task = ScheduleTask(name: "", projectID: project.id, kind: defaultKind(project), prompt: "", timing: timing)
         schedulePanel = SchedulePanel(taskID: nil, draft: Self.formDraft(task))
     }

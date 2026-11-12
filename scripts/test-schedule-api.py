@@ -132,6 +132,41 @@ try:
     assert 'once, hourly, daily' in rpc('initialize')['instructions']
     print('PASS hourly tasks run at their minute past the next hour', flush=True)
 
+    # Monthly runs on the chosen days of the month; a month without the day is skipped.
+    def next_monthly(days, hour, minute):
+        now = datetime.datetime.now(datetime.timezone.utc)
+        year, month = now.year, now.month
+        while True:
+            for day in sorted(days):
+                try:
+                    at = datetime.datetime(year, month, day, hour, minute, tzinfo=datetime.timezone.utc)
+                except ValueError:
+                    continue
+                if at > now:
+                    return at.strftime('%Y-%m-%dT%H:%M:%SZ')
+            year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+
+    monthly = call('create', dict(fields, name='Monthly', repeat='monthly', month_days='15, 1,15',
+                                  time='09:00', timezone='UTC'))['task']
+    assert monthly['month_days'] == '1,15' and monthly['nextRun'] == next_monthly([1, 15], 9, 0), monthly
+    assert monthly['schedule'] in ('Monthly on day 1, 15 09:00 · UTC', '每月 1、15 日 09:00 · UTC'), monthly
+    last = call('edit', dict(task_id=monthly['id'], month_days='31'))['task']
+    assert last['nextRun'] == next_monthly([31], 9, 0), last
+    cli_result = subprocess.run([str(cli), 'edit', monthly['id'], '--month-days', '30'],
+                                capture_output=True, text=True, check=True, env=env, cwd=project)
+    assert json.loads(cli_result.stdout)['task']['nextRun'] == next_monthly([30], 9, 0)
+    for invalid in ('0', '32', '', '1,,15', 'mon'):
+        call('edit', dict(task_id=monthly['id'], month_days=invalid), ok=False)
+    call('create', dict(fields, name='No days', repeat='monthly', time='09:00'), ok=False)
+    weekly_task = call('create', dict(fields, name='To monthly', repeat='weekly', days='sat', time='09:00'))['task']
+    call('edit', dict(task_id=weekly_task['id'], repeat='monthly'), ok=False)
+    back = call('edit', dict(task_id=monthly['id'], repeat='daily'))['task']
+    assert 'month_days' not in back and 'monthDays' not in next(t for t in saved() if t['id'] == monthly['id'])['timing']
+    for task in (monthly['id'], weekly_task['id']):
+        call('delete', {'task_id': task})
+    assert 'days of the month' in rpc('initialize')['instructions']
+    print('PASS monthly tasks run on chosen days, skip short months, and validate their days', flush=True)
+
     # Ending: done for good, until its schedule changes, even if it was paused.
     weekly = call('create', dict(fields, name='Ends', repeat='weekly', days='sat', time='09:00'))['task']['id']
     call('pause', {'task_id': weekly})

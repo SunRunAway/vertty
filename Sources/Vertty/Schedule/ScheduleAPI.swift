@@ -84,7 +84,7 @@ extension AppStore {
     /// asking session unless given, and can't change once the task has its session.
     private func filledTask(_ existing: ScheduleTask?, _ f: [String: Any], source: TabSession?,
                            cwd: String?) -> Result<ScheduleTask, APIError> {
-        let known: Set<String> = ["name", "prompt", "repeat", "days", "date", "time", "timezone", "project", "agent"]
+        let known: Set<String> = ["name", "prompt", "repeat", "days", "month_days", "date", "time", "timezone", "project", "agent"]
         if let extra = f.keys.first(where: { !known.contains($0) }) { return .failure(APIError(message: "Unknown field: \(extra)")) }
         func str(_ k: String) -> String? { (f[k] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) }
 
@@ -131,7 +131,7 @@ extension AppStore {
         if let v = f["prompt"] as? String { t.prompt = v.trimmingCharacters(in: .whitespacesAndNewlines) }
         if let v = str("repeat") {
             guard let r = ScheduleRepeat(rawValue: v.lowercased()) else {
-                return .failure(APIError(message: "repeat must be once, hourly, daily, weekdays or weekly."))
+                return .failure(APIError(message: "repeat must be once, hourly, daily, weekdays, weekly or monthly."))
             }
             t.timing.repeatKind = r
         }
@@ -160,6 +160,16 @@ extension AppStore {
             }
             t.timing.weekdays = days
         }
+        if let v = str("month_days") {
+            var days: [Int] = []
+            for d in v.split(separator: ",", omittingEmptySubsequences: false) {
+                guard let n = Int(d.trimmingCharacters(in: .whitespaces)), (1...31).contains(n) else {
+                    return .failure(APIError(message: "month_days are days of the month 1–31, e.g. 1,15."))
+                }
+                if !days.contains(n) { days.append(n) }
+            }
+            t.timing.monthDays = days.sorted()
+        }
         if let v = str("date") {
             let parts = v.split(separator: "-").compactMap { Int($0) }
             guard parts.count == 3 else { return .failure(APIError(message: "date must be YYYY-MM-DD.")) }
@@ -172,10 +182,14 @@ extension AppStore {
             t.timing.month = nil
             t.timing.day = nil
         }
+        if t.timing.repeatKind != .monthly { t.timing.monthDays = nil }
         if t.name.isEmpty { return .failure(APIError(message: "name is required.")) }
         if t.prompt.isEmpty { return .failure(APIError(message: "prompt is required.")) }
         if t.timing.repeatKind == .weekly && t.timing.weekdays.isEmpty {
             return .failure(APIError(message: "weekly needs days."))
+        }
+        if t.timing.repeatKind == .monthly && (t.timing.monthDays ?? []).isEmpty {
+            return .failure(APIError(message: "monthly needs month_days."))
         }
         if t.timing.repeatKind == .once && t.timing.onceDate == nil {
             return .failure(APIError(message: "once needs a date."))
@@ -202,6 +216,9 @@ extension AppStore {
         if t.timing.repeatKind == .weekly {
             let names = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
             d["days"] = t.timing.weekdays.sorted().map { names[$0 - 1] }.joined(separator: ",")
+        }
+        if t.timing.repeatKind == .monthly {
+            d["month_days"] = (t.timing.monthDays ?? []).map(String.init).joined(separator: ",")
         }
         if t.timing.repeatKind == .once, let y = t.timing.year, let m = t.timing.month, let day = t.timing.day {
             d["date"] = String(format: "%04d-%02d-%02d", y, m, day)

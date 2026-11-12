@@ -138,6 +138,7 @@
 "Hourly %@" = "每小时 %@";
 "Weekdays %@" = "工作日 %@";
 "Every %@ %@" = "每%@ %@";
+"Monthly on day %@ %@" = "每月 %@ 日 %@";
 ", " = "、";
 "Once %@ %@" = "单次 %@ %@";
 "%@ · Next: %@" = "%@ · 下次：%@";
@@ -152,6 +153,9 @@
 "Daily" = "每天";
 "Weekdays" = "工作日";
 "Weekly" = "每周";
+"Monthly" = "每月";
+"Days of Month" = "日期";
+"Months without the chosen day are skipped." = "没有所选日期的月份不运行。";
 "Time" = "时间";
 "Minute" = "分钟";
 "Create and Enable" = "创建并启用";
