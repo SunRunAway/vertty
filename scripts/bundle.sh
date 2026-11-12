@@ -37,6 +37,13 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 fi
 plutil -replace CFBundleShortVersionString -string "$VERSION" "$APP/Contents/Info.plist"
 plutil -replace CFBundleVersion -string "$VERSION" "$APP/Contents/Info.plist"
+# A local build mustn't take silent updates: Sparkle checks the installed version when the
+# download finishes, not when it installs on quit, so a pending release would replace a
+# newer `make install`. Releases can then only be installed by choice.
+# https://github.com/sparkle-project/Sparkle/blob/2.10.0/Autoupdate/AppInstaller.m (host read on download)
+if [ -z "${VERTTY_VERSION:-}" ]; then
+  plutil -replace SUAllowsAutomaticUpdates -bool NO "$APP/Contents/Info.plist"
+fi
 cp -R "$BIN/Sparkle.framework" "$APP/Contents/Frameworks/"
 cp "$BIN/Vertty" "$APP/Contents/MacOS/Vertty"
 cp "$BIN/vertty-sleep" "$APP/Contents/MacOS/vertty-sleep"

@@ -72,6 +72,7 @@ def app_copy(destination, version):
     info = plistlib.loads(plist.read_bytes())
     info.update(CFBundleIdentifier=bundle_id, CFBundleVersion=version, CFBundleShortVersionString=version,
                 SUPublicEDKey=public_key, SUFeedURL=url + "appcast.xml", SUEnableAutomaticChecks=False,
+                SUAllowsAutomaticUpdates=True,
                 LSEnvironment={k: env[k] for k in (
                     "HOME", "CFFIXED_USER_HOME", "ZDOTDIR", "CODEX_HOME", "VERTTY_SUPPORT_DIR",
                     "VERTTY_DEBUG_SNAPSHOT", "VERTTY_TEST_UPDATES")})
