@@ -128,7 +128,8 @@
 "Agent" = "Agent";
 "Session" = "会话";
 "Open Session" = "打开会话";
-"Created by the first run" = "首次运行时创建";
+"Latest Session" = "最近一次会话";
+"New session for each run" = "每次运行创建新会话";
 "Prompt" = "提示词";
 "Runs" = "运行记录";
 "Show Earlier Runs" = "加载更早记录";

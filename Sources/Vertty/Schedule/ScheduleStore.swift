@@ -77,9 +77,9 @@ final class ScheduleStore: ObservableObject {
         task.isBound || openRun(of: task.id) != nil
     }
 
-    /// The task whose session this is.
     func task(forSession id: String) -> ScheduleTask? {
         guard !id.isEmpty else { return nil }
+        if let run = runs.last(where: { $0.sessionID == id }), let task = task(run.taskID) { return task }
         return tasks.first { $0.sessionID == id }
     }
 

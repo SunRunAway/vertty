@@ -278,6 +278,12 @@ final class DebugSnapshot {
                 store.runScheduleNow(id)
                 continue
             }
+            if line.hasPrefix("openschedulerun "), let id = UUID(uuidString: String(line.dropFirst(16))),
+               let run = store.schedules.run(id), let sessionID = run.sessionID,
+               let task = store.schedules.task(run.taskID) {
+                store.openScheduleSession(kind: run.kind, sessionID: sessionID, projectID: task.projectID, title: task.name)
+                continue
+            }
             if line == "tickschedules" {
                 store.runDueSchedules()
                 continue

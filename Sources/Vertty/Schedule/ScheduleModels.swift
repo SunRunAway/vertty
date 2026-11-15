@@ -160,8 +160,6 @@ enum ScheduleFormat {
     }
 }
 
-/// A scheduled task. It owns one session: created by its first run and resumed
-/// by every later one.
 struct ScheduleTask: Codable, Identifiable, Equatable {
     var id = UUID()
     var name: String
@@ -174,7 +172,6 @@ struct ScheduleTask: Codable, Identifiable, Equatable {
     var enabled = true
     var createdAt = Date()
     var deletedAt: Date?
-    /// The task's session, once its first run created it.
     var sessionID: String?
     /// The next planned time not handled yet (nil: no more plans).
     var nextPlan: Date?
@@ -212,7 +209,6 @@ struct ScheduleRun: Codable, Identifiable, Equatable {
     var trigger: RunTrigger
     var plannedAt: Date?
     var startedAt = Date()
-    /// When the agent was started (after checking and stopping the session).
     var launchedAt: Date?
     var endedAt: Date?
     var state: RunState

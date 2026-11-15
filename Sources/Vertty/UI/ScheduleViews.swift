@@ -385,7 +385,7 @@ struct SchedulePanelView: View {
                 .fixedSize()
                 .disabled(fixed)
             }
-            PanelRow("Session", divider: false) {
+            PanelRow("Latest Session", divider: false) {
                 if let task, let id = task.sessionID, !id.isEmpty {
                     Button("Open Session") {
                         store.openScheduleSession(kind: task.kind, sessionID: id, projectID: task.projectID, title: task.name)
@@ -394,7 +394,7 @@ struct SchedulePanelView: View {
                     .foregroundStyle(Color.accentColor)
                     .cursor(.pointingHand)
                 } else {
-                    Text("Created by the first run").foregroundStyle(.tertiary)
+                    Text("New session for each run").foregroundStyle(.tertiary)
                 }
             }
         }

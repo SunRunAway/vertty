@@ -58,10 +58,6 @@ final class AppStore: ObservableObject {
     var scheduleTimer: Timer?
     /// Since when a scheduled Claude turn has looked idle without a Stop hook.
     var scheduleIdleSince: [UUID: Date] = [:]
-    /// Runs not launched yet: their session is being checked, or its card stopped.
-    var schedulePreparing: Set<UUID> = []
-    /// Cards whose agent a run is stopping: selecting one mustn't start it again.
-    var scheduleStoppingTabs: Set<UUID> = []
 
     var selectedTab: TabSession? { tabs.first { $0.id == selectedTabID } }
 
@@ -319,15 +315,19 @@ final class AppStore: ObservableObject {
     }
 
     func resumeSession(_ summary: SessionSummary, in project: Project) {
+        resumeSession(summary, in: project, keepingSchedulePanel: false)
+    }
+
+    func resumeSession(_ summary: SessionSummary, in project: Project, keepingSchedulePanel: Bool) {
         if let open = tabs.first(where: { $0.sessionID == summary.id }) {
-            select(open)
+            select(open, keepingSchedulePanel: keepingSchedulePanel)
             return
         }
         let tab = TabSession(projectID: project.id, kind: summary.kind, sessionID: summary.id, cwd: project.path,
                              title: summary.title)
         insertAtTopOfProject(tab)
         started(tab)
-        select(tab)
+        select(tab, keepingSchedulePanel: keepingSchedulePanel)
     }
 
     /// The user started this session (not a scheduled run): ⌘T in its
@@ -348,9 +348,12 @@ final class AppStore: ObservableObject {
     }
 
     func select(_ tab: TabSession) {
+        select(tab, keepingSchedulePanel: false)
+    }
+
+    func select(_ tab: TabSession, keepingSchedulePanel: Bool) {
         showingSchedules = false
-        // A task's panel goes with the page, unless it has changes to keep.
-        if schedulePanel != nil, !schedulePanelDirty { schedulePanel = nil }
+        if !keepingSchedulePanel, schedulePanel != nil, !schedulePanelDirty { schedulePanel = nil }
         launchIfNeeded(tab)
         if tab.shellVisible { launchShellIfNeeded(tab) }
         tab.attention = false
@@ -488,7 +491,7 @@ final class AppStore: ObservableObject {
     // MARK: - Launching Claude
 
     private func launchIfNeeded(_ tab: TabSession) {
-        guard tab.surface == nil, !scheduleStoppingTabs.contains(tab.id) else { return }
+        guard tab.surface == nil else { return }
         launch(tab)
     }
 

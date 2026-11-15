@@ -104,8 +104,7 @@ func replyOK(_ reply: Data) -> Bool {
 
 let mcpInstructions = """
 Vertty (the terminal app this session runs in) can run a prompt on a schedule: once, hourly, daily, on weekdays, \
-on chosen days of the week, or on chosen days of the month, at a wall-clock time in the task's time zone (default: this Mac). A task's first run starts a new session in its project; \
-later runs resume that same session. Runs happen only while Vertty is running and the Mac is awake. Use these \
+on chosen days of the week, or on chosen days of the month, at a wall-clock time in the task's time zone (default: this Mac). Every run starts a new session in the task's project; it has no context from earlier runs. Runs happen only while Vertty is running and the Mac is awake. Use these \
 tools for persistent, long-term or general scheduled work ("every Saturday at 9 check dependencies", "move the \
 dependency check to Sunday", "pause that task", "what's scheduled?"). For temporary follow-ups within this session, \
 you may use your built-in cron or /loop.

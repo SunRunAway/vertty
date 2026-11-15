@@ -76,6 +76,25 @@ let restored = ScheduleStore()
 restored.load()
 assert(restored.state(of: restored.task(task.id)!) == .deleted)
 print("PASS: schedule lifecycle, reruns, edits, pause/resume and deletion")
+var sessionTask = ScheduleTask(name: "Sessions", projectID: UUID(), kind: .codex, prompt: "fixture",
+    timing: ScheduleTiming())
+sessionTask.sessionID = "legacy-session"
+assert(store.create(sessionTask))
+assert(store.task(forSession: "legacy-session")?.id == sessionTask.id)
+store.add(ScheduleRun(taskID: sessionTask.id, trigger: .manual, state: .replied,
+    kind: .codex, sessionID: "earlier-session"))
+store.add(ScheduleRun(taskID: sessionTask.id, trigger: .manual, state: .replied,
+    kind: .codex, sessionID: "latest-session"))
+store.modify(sessionTask.id) { $0.sessionID = "latest-session" }
+assert(store.task(forSession: "earlier-session")?.id == sessionTask.id)
+assert(store.task(forSession: "latest-session")?.id == sessionTask.id)
+assert(store.task(forSession: "") == nil)
+assert(store.task(forSession: "unknown-session") == nil)
+let sessionsReloaded = ScheduleStore()
+sessionsReloaded.load()
+assert(sessionsReloaded.task(forSession: "earlier-session")?.id == sessionTask.id)
+print("PASS: historical session associations survive newer runs and reload")
+
 // Existing files without a zone still follow the system.
 let legacy = Data(#"{"repeatKind":"daily","hour":9,"minute":30,"weekdays":[7]}"#.utf8)
 let decodedLegacy = try JSONDecoder().decode(ScheduleTiming.self, from: legacy)
