@@ -69,7 +69,8 @@ db.execute("INSERT INTO threads VALUES (?, ?, 'Codex', 'Codex', 'feature/codex',
 db.commit()
 
 # Both login environment discovery and terminal launch use only the fake tools.
-(home / ".zshenv").write_text(f'export PATH="{bin_dir}:/usr/bin:/bin:/usr/sbin:/sbin"\nunsetopt GLOBAL_RCS\n')
+(home / ".zshenv").write_text('export PATH="/usr/bin:/bin:/usr/sbin:/sbin"\nunsetopt GLOBAL_RCS\n')
+(home / ".zshrc").write_text(f'export PATH="{bin_dir}:$PATH"\n')
 for agent in ("claude", "codex"):
     path = bin_dir / agent
     path.write_text("#!/bin/sh\nexit 0\n")

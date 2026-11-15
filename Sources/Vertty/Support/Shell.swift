@@ -38,7 +38,7 @@ enum ShellEnvironment {
 
     static func load() {
         let marker = "__VERTTY_PATH__"
-        let result = Proc.run(shell, ["-l", "-c", "printf '\(marker)%s' \"$PATH\""], timeout: 8, usePathEnv: false)
+        let result = Proc.run(shell, ["-l", "-i", "-c", "printf '\(marker)%s' \"$PATH\""], timeout: 8, usePathEnv: false)
         guard let out = result?.stdout, let range = out.range(of: marker) else { return }
         let p = String(out[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !p.isEmpty else { return }
