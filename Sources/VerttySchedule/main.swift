@@ -27,6 +27,10 @@ fields:
   --timezone ZONE          e.g. America/New_York; local (default) follows this Mac
   --project PATH|NAME       default: the project of this session
   --agent claude|codex      default: this session's agent
+  --model MODEL             one the agent's /model offers; default: the agent's own
+  --effort LEVEL            one the model offers; default: the model's own
+  --new-session-each-run true|false
+                            false: later runs resume the first run's session
 
 create, edit and delete take effect immediately and return a vertty://schedule/<id> URL.
 """
@@ -104,7 +108,7 @@ func replyOK(_ reply: Data) -> Bool {
 
 let mcpInstructions = """
 Vertty (the terminal app this session runs in) can run a prompt on a schedule: once, hourly, daily, on weekdays, \
-on chosen days of the week, or on chosen days of the month, at a wall-clock time in the task's time zone (default: this Mac). Every run starts a new session in the task's project; it has no context from earlier runs. Runs happen only while Vertty is running and the Mac is awake. Use these \
+on chosen days of the week, or on chosen days of the month, at a wall-clock time in the task's time zone (default: this Mac). By default every run starts a new session in the task's project, with no context from earlier runs; with new_session_each_run=false, the first run's session is resumed by every later run (stopping it first if it's open in Vertty). A task can also pick the agent's model and effort. Runs happen only while Vertty is running and the Mac is awake. Use these \
 tools for persistent, long-term or general scheduled work ("every Saturday at 9 check dependencies", "move the \
 dependency check to Sunday", "pause that task", "what's scheduled?"). For temporary follow-ups within this session, \
 you may use your built-in cron or /loop.
@@ -132,6 +136,9 @@ let taskFields: [String: Any] = [
     "date": ["type": "string", "description": "For once: YYYY-MM-DD, in the future."],
     "project": ["type": "string", "description": "Project path or name. Default: this session's project."],
     "agent": ["type": "string", "enum": ["claude", "codex"], "description": "Default: this session's agent. Fixed once the task has run."],
+    "model": ["type": "string", "description": "A model the agent's /model picker offers (e.g. opus, sonnet for Claude), or default for the agent's own. An unknown value is rejected with the choices."],
+    "effort": ["type": "string", "description": "An effort level the model takes (e.g. low, medium, high), or default. An unknown value is rejected with the choices."],
+    "new_session_each_run": ["type": "boolean", "description": "Default true. false: the first run's session is resumed by every later run, keeping its context."],
 ]
 let taskIDField: [String: Any] = ["task_id": ["type": "string", "description": "The task's id, from list_scheduled_tasks."]]
 
@@ -232,7 +239,8 @@ default:
 }
 
 let fieldNames = ["--name": "name", "--prompt": "prompt", "--repeat": "repeat", "--days": "days", "--month-days": "month_days", "--date": "date",
-                  "--time": "time", "--timezone": "timezone", "--project": "project", "--agent": "agent"]
+                  "--time": "time", "--timezone": "timezone", "--project": "project", "--agent": "agent",
+                  "--model": "model", "--effort": "effort", "--new-session-each-run": "new_session_each_run"]
 var fields: [String: Any] = [:]
 while !args.isEmpty {
     let flag = args.removeFirst()

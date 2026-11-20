@@ -253,6 +253,7 @@ private struct TaskStateGlyph: View {
 struct SchedulePanelView: View {
     @ObservedObject var store: AppStore
     @ObservedObject var schedules: ScheduleStore
+    @ObservedObject private var models = AgentModels.shared
     @State private var notice: String?
     @State private var visibleRuns = 15
 
@@ -374,7 +375,12 @@ struct SchedulePanelView: View {
                 AgentIcon(kind: draft.wrappedValue.kind, size: 11)
                 Menu {
                     ForEach(AgentKind.allCases) { kind in
-                        Button(kind.name) { draft.wrappedValue.kind = kind }
+                        Button(kind.name) {
+                            guard kind != draft.wrappedValue.kind else { return }
+                            draft.wrappedValue.kind = kind
+                            draft.wrappedValue.model = nil
+                            draft.wrappedValue.effort = nil
+                        }
                     }
                 } label: {
                     let name = Text(draft.wrappedValue.kind.name)
@@ -385,7 +391,24 @@ struct SchedulePanelView: View {
                 .fixedSize()
                 .disabled(fixed)
             }
-            PanelRow("Latest Session", divider: false) {
+            PanelRow("Model") {
+                PanelMenu(selection: model, options: modelOptions, fallback: draft.wrappedValue.model ?? "—")
+            }
+            if effortLevels?.isEmpty != true {
+                PanelRow("Effort") {
+                    PanelMenu(selection: draft.effort,
+                              options: [(nil, String(localized: "Default"))] + (effortLevels ?? []).map { ($0, $0) },
+                              fallback: draft.wrappedValue.effort ?? "—")
+                }
+            }
+            PanelRow("New Session Each Run") {
+                Toggle("", isOn: Binding(get: { !draft.wrappedValue.resumesSession },
+                                         set: { draft.wrappedValue.continuesSession = !$0 }))
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .labelsHidden()
+            }
+            PanelRow(draft.wrappedValue.resumesSession ? LocalizedStringKey("Session") : "Latest Session", divider: false) {
                 if let task, let id = task.sessionID, !id.isEmpty {
                     Button("Open Session") {
                         store.openScheduleSession(kind: task.kind, sessionID: id, projectID: task.projectID, title: task.name)
@@ -394,10 +417,35 @@ struct SchedulePanelView: View {
                     .foregroundStyle(Color.accentColor)
                     .cursor(.pointingHand)
                 } else {
-                    Text("New session for each run").foregroundStyle(.tertiary)
+                    (draft.wrappedValue.resumesSession ? Text("Created by the first run") : Text("New session for each run"))
+                        .foregroundStyle(.tertiary)
                 }
             }
         }
+        .task(id: draft.wrappedValue.kind) { models.refresh(draft.wrappedValue.kind) }
+    }
+
+    private var catalog: AgentCatalog? { models.catalog(draft.wrappedValue.kind) }
+
+    private var modelOptions: [(String?, String)] {
+        var options: [(String?, String)] = [(nil, String(localized: "Default"))]
+        options += (catalog?.models ?? []).map { ($0.id, $0.name) }
+        return options
+    }
+
+    // nil while the agent's list is unknown: then any effort may still apply.
+    private var effortLevels: [String]? { catalog?.efforts(for: draft.wrappedValue.model) }
+
+    // An effort the new model doesn't take goes back to the default.
+    private var model: Binding<String?> {
+        Binding(get: { draft.wrappedValue.model },
+                set: { model in
+                    draft.wrappedValue.model = model
+                    if let effort = draft.wrappedValue.effort, let levels = catalog?.efforts(for: model),
+                       !levels.contains(effort) {
+                        draft.wrappedValue.effort = nil
+                    }
+                })
     }
 
     private var scheduleGroup: some View {
@@ -916,7 +964,8 @@ extension AppStore {
             }
             if timing.repeatKind != .weekly { timing.weekdays = [] }
             if timing.repeatKind != .monthly { timing.monthDays = nil }
-            return [t.name, t.prompt, t.projectID, t.kind, timing.repeatKind, timing.hour, timing.minute,
+            return [t.name, t.prompt, t.projectID, t.kind, t.model, t.effort, t.resumesSession,
+                    timing.repeatKind, timing.hour, timing.minute,
                     timing.weekdays.sorted(), timing.monthDays?.sorted(), timing.year, timing.month, timing.day,
                     timing.timeZoneID]
         }

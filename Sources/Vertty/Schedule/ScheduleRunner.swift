@@ -28,7 +28,7 @@ extension AppStore {
 
     private func startRun(_ task: ScheduleTask, plannedAt: Date?, trigger: RunTrigger) {
         var run = ScheduleRun(taskID: task.id, trigger: trigger, plannedAt: plannedAt, state: .running, phase: .starting,
-                              kind: task.kind)
+                              kind: task.kind, sessionID: task.resumesSession ? task.sessionID : nil)
         if schedules.openRun(of: task.id) != nil {
             run.state = .skipped
             run.phase = nil
@@ -45,7 +45,78 @@ extension AppStore {
         }
         run.cwd = project.path
         schedules.add(run)
-        startNewSession(run.id, task, project)
+        guard task.resumesSession else { return startNewSession(run.id, task, project) }
+        let runID = run.id
+        schedulePreparing.insert(runID)
+        let sessionID = task.sessionID ?? ""
+        let kind = task.kind
+        // A first run whose session id wasn't confirmed: look for that session
+        // before starting yet another one.
+        let earlier = sessionID.isEmpty
+            ? schedules.runs(of: task.id).filter { $0.kind == kind }.compactMap(\.sessionID).first { !$0.isEmpty } : nil
+        infoQueue.async { [weak self] in
+            let check = sessionID.isEmpty
+                ? Self.checkSession(kind: kind, sessionID: earlier, confirmed: false, projectPath: project.path)
+                : Self.checkSession(kind: kind, sessionID: sessionID, confirmed: true, projectPath: project.path)
+            DispatchQueue.main.async {
+                guard let self, self.schedules.run(runID)?.state == .running else {
+                    self?.schedulePreparing.remove(runID)
+                    return
+                }
+                switch check {
+                case .new:
+                    self.schedulePreparing.remove(runID)
+                    self.startNewSession(runID, task, project)
+                case .resume(let id, let cwd):
+                    if task.sessionID != id { self.schedules.modify(task.id) { $0.sessionID = id } }
+                    self.schedules.modifyRun(runID) { $0.sessionID = id; $0.cwd = cwd }
+                    self.resumeSession(runID, task, id, project)
+                case .fail(let reason):
+                    self.schedulePreparing.remove(runID)
+                    self.schedules.modifyRun(runID) { self.markFailed(&$0, reason) }
+                }
+            }
+        }
+    }
+
+    private enum SessionCheck {
+        case new
+        case resume(String, cwd: String?)
+        case fail(String)
+    }
+
+    // A session running outside Vertty (another terminal, a background job)
+    // isn't touched: resuming it there would fork it. An unconfirmed id (a first
+    // run that may not have got as far as creating its session) that isn't
+    // found means starting a new one.
+    private static func checkSession(kind: AgentKind, sessionID: String?, confirmed: Bool, projectPath: String) -> SessionCheck {
+        guard let sessionID, !sessionID.isEmpty else { return .new }
+        let fm = FileManager.default
+        switch kind {
+        case .claude, .deepseekClaude:
+            guard let url = Transcript.locate(sessionID: sessionID, projectPath: projectPath) else {
+                return confirmed ? .fail(String(localized: "The task's session record can't be found.")) : .new
+            }
+            if LiveSessions.backgroundJobRunning(sessionID: sessionID) {
+                return .fail(String(localized: "The session is running as a background job (claude attach). It wasn't touched."))
+            }
+            let cwd = Transcript.read(url)?.cwd
+            if let cwd, !fm.fileExists(atPath: cwd) {
+                return .fail(String(localized: "The session's directory doesn't exist: \(cwd)"))
+            }
+            return .resume(sessionID, cwd: cwd)
+        case .codex:
+            guard let found = CodexThreads.lookUp(id: sessionID) else {
+                return .fail(String(localized: "Codex's session records couldn't be read."))
+            }
+            guard let thread = found else {
+                return confirmed ? .fail(String(localized: "The task's session record can't be found.")) : .new
+            }
+            if !thread.cwd.isEmpty, !fm.fileExists(atPath: thread.cwd) {
+                return .fail(String(localized: "The session's directory doesn't exist: \(thread.cwd)"))
+            }
+            return .resume(sessionID, cwd: thread.cwd.nonEmpty)
+        }
     }
 
     private func startNewSession(_ runID: UUID, _ task: ScheduleTask, _ project: Project) {
@@ -53,9 +124,120 @@ extension AppStore {
         let tab = TabSession(projectID: project.id, kind: task.kind, sessionID: sessionID, cwd: project.path, title: task.name)
         tab.scheduleTaskID = task.id
         insertAtTopOfProject(tab)
-        if !sessionID.isEmpty { schedules.modifyRun(runID) { $0.sessionID = sessionID } }
+        schedules.modifyRun(runID) { $0.sessionID = sessionID.nonEmpty }
+        launchRun(tab, task, runID)
+    }
+
+    private func launchRun(_ tab: TabSession, _ task: ScheduleTask, _ runID: UUID) {
+        schedulePreparing.remove(runID)
         schedules.modifyRun(runID) { $0.launchedAt = Date() }
-        launch(tab, prompt: task.prompt, scheduleRunID: runID)
+        launch(tab, prompt: task.prompt, scheduleRunID: runID, model: task.model, effort: task.effort)
+    }
+
+    // Resuming in the session's card stops its agent first, a known trade-off:
+    // it can interrupt the user working in that card.
+    private func resumeSession(_ runID: UUID, _ task: ScheduleTask, _ sessionID: String, _ project: Project) {
+        let tab = tabs.first { $0.kind == task.kind && $0.sessionID == sessionID }
+        infoQueue.async { [weak self] in
+            // Claude Code: a live process of this session outside that card is someone else's.
+            let outside = task.kind.isClaudeCode
+                ? LiveSessions.processes(sessionID: sessionID).filter { $0.tab == nil || $0.tab != tab?.id } : []
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard self.schedules.run(runID)?.state == .running else { self.schedulePreparing.remove(runID); return }
+                // Meanwhile the card may have moved to another session (/clear, /new,
+                // /resume) or another card may have opened this one: check again.
+                guard self.tabs.first(where: { $0.kind == task.kind && $0.sessionID == sessionID }) === tab,
+                      tab.map({ t in self.tabs.contains { $0 === t } }) ?? true else {
+                    return self.resumeSession(runID, task, sessionID, project)
+                }
+                guard outside.isEmpty else {
+                    self.schedulePreparing.remove(runID)
+                    return self.schedules.modifyRun(runID) {
+                        self.markFailed(&$0, String(localized: "The session is open outside this Vertty window. It wasn't touched."))
+                    }
+                }
+                guard let tab else {
+                    let card = TabSession(projectID: project.id, kind: task.kind, sessionID: sessionID, cwd: project.path,
+                                          title: task.name)
+                    card.scheduleTaskID = task.id
+                    self.insertAtTopOfProject(card)
+                    self.launchRun(card, task, runID)
+                    return
+                }
+                // Even with its terminal gone, the card's agent may not be (a stop
+                // that couldn't be confirmed): check before starting another.
+                self.stopAndResume(tab, runID: runID, task: task)
+            }
+        }
+    }
+
+    // Never starts a second instance of the session: resumes only once the
+    // card's agent is really gone.
+    private func stopAndResume(_ tab: TabSession, runID: UUID, task: ScheduleTask) {
+        scheduleStoppingTabs.insert(tab.id)
+        // The run joins the card only once it relaunches: hooks of the instance
+        // being stopped (its SessionEnd) aren't this run's.
+        tab.scheduleRunID = nil
+        let wasShown = tab.id == selectedTabID
+        if wasShown { showInContainer(nil) }
+        tab.surface = nil
+        let tabID = tab.id
+        let sessionID = tab.sessionID
+        let kind = tab.kind
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let deadline = Date().addingTimeInterval(10)
+            var signalled = false
+            var alive = Self.agentProcesses(kind: kind, tabID: tabID, sessionID: sessionID)
+            while !alive.isEmpty && Date() < deadline {
+                // The terminal hung up on it; give it a few seconds, then ask once more.
+                if !signalled && deadline.timeIntervalSinceNow < 6 {
+                    alive.forEach { kill($0, SIGTERM) }
+                    signalled = true
+                }
+                Thread.sleep(forTimeInterval: 0.25)
+                alive = Self.agentProcesses(kind: kind, tabID: tabID, sessionID: sessionID)
+            }
+            let stopped = alive.isEmpty
+            // Let hook events the old instance sent reach the app before the new one starts.
+            if stopped { Thread.sleep(forTimeInterval: 0.5) }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.scheduleStoppingTabs.remove(tabID)
+                guard self.schedules.run(runID)?.state == .running else { self.schedulePreparing.remove(runID); return }
+                guard self.tabs.contains(where: { $0 === tab }), tab.kind == kind, tab.sessionID == sessionID else {
+                    self.schedulePreparing.remove(runID)
+                    return self.schedules.modifyRun(runID) {
+                        self.markFailed(&$0, String(localized: "The session's card changed while it was being stopped, so nothing was resumed."))
+                    }
+                }
+                guard stopped else {
+                    self.schedulePreparing.remove(runID)
+                    return self.schedules.modifyRun(runID) {
+                        self.markFailed(&$0, String(localized: "The session's earlier instance couldn't be confirmed stopped, so it wasn't resumed."))
+                    }
+                }
+                self.launchRun(tab, task, runID)
+                if tab.id == self.selectedTabID { self.showInContainer(tab) }
+            }
+        }
+    }
+
+    // Claude Code (including DeepSeek) by its session registry, plus its hook
+    // helper: a SessionEnd hook still on its way would land on the resumed run.
+    // Codex by the TUI started with Vertty's title option.
+    private static func agentProcesses(kind: AgentKind, tabID: UUID, sessionID: String) -> [pid_t] {
+        switch kind {
+        case .claude, .deepseekClaude:
+            let helpers = ProcessScan.processes(withEnv: "VERTTY_TAB_ID", tabID.uuidString).filter { p in
+                let name = (p.args.first.map { ($0 as NSString).lastPathComponent }) ?? ""
+                return name == "claude" || name == "vertty-hook"
+            }.map(\.pid)
+            return Array(Set(LiveSessions.processes(sessionID: sessionID).filter { $0.tab == tabID }.map(\.pid) + helpers))
+        case .codex:
+            return ProcessScan.processes(withEnv: "VERTTY_TAB_ID", tabID.uuidString)
+                .filter { $0.args.contains { $0.contains("tui.terminal_title") } }.map(\.pid)
+        }
     }
 
     // MARK: - Following a run
@@ -90,7 +272,8 @@ extension AppStore {
     private func bindSession(_ tab: TabSession, _ run: ScheduleRun) {
         guard !tab.sessionID.isEmpty else { return }
         if run.sessionID != tab.sessionID { schedules.modifyRun(run.id) { $0.sessionID = tab.sessionID } }
-        if let task = schedules.task(run.taskID), task.sessionID != tab.sessionID {
+        // A continued session stays the task's even if its card moves on (/clear, /resume).
+        if let task = schedules.task(run.taskID), task.resumesSession ? !task.isBound : task.sessionID != tab.sessionID {
             schedules.modify(task.id) { $0.sessionID = tab.sessionID }
         }
     }
@@ -107,7 +290,7 @@ extension AppStore {
 
     /// Polled with the other card info (every few seconds): what hooks can't tell.
     func evaluateScheduleRuns() {
-        for run in schedules.runs where run.state == .running {
+        for run in schedules.runs where run.state == .running && !schedulePreparing.contains(run.id) {
             guard let tab = tabs.first(where: { $0.scheduleRunID == run.id }) else {
                 // Launched, and no card carries it any more.
                 schedules.modifyRun(run.id) { self.markFailed(&$0, String(localized: "The session's card was closed during the run.")) }

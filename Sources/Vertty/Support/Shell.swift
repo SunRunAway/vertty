@@ -86,7 +86,8 @@ enum Proc {
         cwd: String? = nil,
         timeout: TimeInterval = 10,
         usePathEnv: Bool = true,
-        extraEnv: [String: String] = [:]
+        extraEnv: [String: String] = [:],
+        input: Data? = nil
     ) -> Result? {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: executable)
@@ -102,9 +103,16 @@ enum Proc {
         let out = Pipe()
         p.standardOutput = out
         p.standardError = FileHandle.nullDevice
-        p.standardInput = FileHandle.nullDevice
+        let stdin = input.map { _ in Pipe() }
+        p.standardInput = stdin ?? FileHandle.nullDevice
 
         do { try p.run() } catch { return nil }
+        if let stdin, let input {
+            // A process that exits without reading mustn't take the app down with SIGPIPE.
+            _ = fcntl(stdin.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
+            try? stdin.fileHandleForWriting.write(contentsOf: input)
+            try? stdin.fileHandleForWriting.close()
+        }
 
         // Read concurrently so a chatty process can't fill the pipe and block.
         var data = Data()

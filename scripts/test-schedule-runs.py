@@ -24,6 +24,24 @@ fixture_state = {'projects': [{'id': project_id, 'name': 'Fixture', 'path': str(
 agent_source = '''import json, os, pathlib, signal, sqlite3, subprocess, sys, time, uuid
 args = sys.argv[1:]
 kind = pathlib.Path(sys.argv[0]).name
+if kind == 'claude' and '-p' in args:
+    request = json.loads(sys.stdin.readline())
+    levels = ['low', 'medium', 'high', 'max']
+    print(json.dumps({'type': 'control_response', 'response': {'subtype': 'success',
+        'request_id': request['request_id'], 'response': {'models': [
+            {'value': 'default', 'resolvedModel': 'fixture-big', 'displayName': 'Default', 'supportsEffort': True,
+             'supportedEffortLevels': levels},
+            {'value': 'big', 'resolvedModel': 'fixture-big', 'displayName': 'Big', 'supportsEffort': True,
+             'supportedEffortLevels': levels},
+            {'value': 'small', 'resolvedModel': 'fixture-small', 'displayName': 'Small'}]}}}), flush=True)
+    sys.exit(0)
+if kind == 'codex' and args[:2] == ['debug', 'models']:
+    print(json.dumps({'models': [
+        {'slug': 'fixture-hidden', 'display_name': 'Hidden', 'visibility': 'hide', 'priority': 0,
+         'supported_reasoning_levels': [{'effort': 'low'}]},
+        {'slug': 'fixture-codex', 'display_name': 'Fixture Codex', 'visibility': 'list', 'priority': 1,
+         'supported_reasoning_levels': [{'effort': 'low'}, {'effort': 'high'}]}]}))
+    sys.exit(0)
 run = os.environ.get('VERTTY_SCHEDULE_RUN', '')
 root = pathlib.Path(os.environ['FIXTURE_ROOT'])
 if kind == 'claude':
@@ -34,7 +52,7 @@ if kind == 'claude':
     transcript.parent.mkdir(parents=True, exist_ok=True)
     transcript.write_text(json.dumps({'type': 'assistant', 'cwd': os.getcwd(), 'sessionId': session}) + '\\n')
 else:
-    session = args[-1] if args[0] == 'resume' else str(uuid.uuid4())
+    session = (args[-2] if run else args[-1]) if args[0] == 'resume' else str(uuid.uuid4())
     with sqlite3.connect(root / 'home/.codex/state_5.sqlite') as db:
         db.execute("INSERT OR REPLACE INTO threads VALUES (?, ?, 'Fixture', 'Fixture', '', ?, '', 0, 'cli', 'user', 'fixture', '')",
                    (session, os.getcwd(), int(time.time())))
@@ -201,6 +219,44 @@ try:
                                     r['session'] == record['session']), None))
         assert '--resume' in resumed['args'] or 'resume' in resumed['args'], resumed
     print('PASS closed historical sessions resume into new cards while the task panel stays open', flush=True)
+
+    rejected = request('create', fields={'name': 'bad model', 'prompt': 'x', 'repeat': 'daily', 'time': '23:59',
+                                         'agent': 'claude', 'model': 'huge'}, ok=False)
+    assert 'default, big, small' in rejected['error'], rejected
+    rejected = request('create', fields={'name': 'bad effort', 'prompt': 'x', 'repeat': 'daily', 'time': '23:59',
+                                         'agent': 'claude', 'model': 'small', 'effort': 'high'}, ok=False)
+    assert 'no effort level' in rejected['error'], rejected
+    choices = {'claude': ('big', 'max', ['--model', 'big', '--effort', 'max']),
+               'codex': ('fixture-codex', 'high', ['-m', 'fixture-codex', '-c', 'model_reasoning_effort="high"'])}
+    for kind, (model, effort, flags) in choices.items():
+        task = request('create', fields={'name': kind + ' continued', 'prompt': 'Only reply fixture.',
+            'repeat': 'daily', 'time': '23:59', 'agent': kind, 'model': model, 'effort': effort,
+            'new-session-each-run': 'false'})['task']
+        assert (task['model'], task['effort'], task['new_session_each_run']) == (model, effort, False), task
+        task = task['id']
+        request('pause', task)
+        known = {r['run'] for r in invocations()}
+        records = []
+        for index in range(2):
+            request('run', task)
+            record = wait(lambda: next((r for r in invocations() if r['run'] and r['run'] not in known), None))
+            known.add(record['run'])
+            joined = ' '.join(record['args'])
+            assert ' '.join(flags) in joined, record
+            if records:
+                first = records[0]
+                assert record['session'] == first['session'] and record['tab'] == first['tab'], (first, record)
+                assert '--resume' in record['args'] or record['args'][0] == 'resume', record
+                wait(lambda: subprocess.run(['ps', '-o', 'stat=', '-p', str(first['pid'])],
+                                            capture_output=True, text=True).stdout.strip() in ('', 'Z'))
+            else:
+                assert '--resume' not in record['args'] and record['args'][0] != 'resume', record
+            (root / ('finish-' + record['run'])).touch()
+            wait(lambda: any(r['id'] == record['run'] and r['state'] == 'replied' and
+                             r.get('sessionID') == record['session'] for r in saved()['runs']))
+            records.append(record)
+        print(f'PASS {kind}: model and effort reach the agent; a continued task stops its card and resumes '
+              'the same session', flush=True)
 finally:
     app.terminate()
     app.wait(timeout=10)

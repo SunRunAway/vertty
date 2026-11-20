@@ -33,14 +33,20 @@ enum ClaudeLauncher {
     /// 29 characters), and AppStore.terminalTitleChanged reads the id from there.
     /// A scheduled run passes its prompt as the agent's prompt argument, never
     /// by typing into the terminal.
-    static func command(kind: AgentKind, sessionID: String, resume: Bool, prompt: String? = nil) -> String {
+    static func command(kind: AgentKind, sessionID: String, resume: Bool, prompt: String? = nil,
+                        model: String? = nil, effort: String? = nil) -> String {
         let shell = ShellQuote.quote(ShellEnvironment.shell)
         var args: String
         switch kind {
-        case .claude, .deepseekClaude: args = "\(resume ? "--resume" : "--session-id") \(sessionID)"
+        case .claude, .deepseekClaude:
+            args = "\(resume ? "--resume" : "--session-id") \(sessionID)"
+            if let model { args += " --model " + ShellQuote.quote(model) }
+            if let effort { args += " --effort " + ShellQuote.quote(effort) }
         case .codex:
-            let title = "-c " + ShellQuote.quote(#"tui.terminal_title=["activity","thread-title","thread-id"]"#)
-            args = resume ? "resume \(title) \(ShellQuote.quote(sessionID))" : title
+            var options = "-c " + ShellQuote.quote(#"tui.terminal_title=["activity","thread-title","thread-id"]"#)
+            if let model { options += " -m " + ShellQuote.quote(model) }
+            if let effort { options += " -c " + ShellQuote.quote("model_reasoning_effort=\"\(effort)\"") }
+            args = resume ? "resume \(options) \(ShellQuote.quote(sessionID))" : options
         }
         // A leading "-" would read as an option.
         if let prompt { args += " " + ShellQuote.quote(prompt.hasPrefix("-") ? " " + prompt : prompt) }

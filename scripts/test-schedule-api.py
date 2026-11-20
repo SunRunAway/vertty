@@ -62,7 +62,7 @@ try:
     wait(lambda: (support / 'hook.sock').exists() and 'schedulesShown=' in state())
     instructions = rpc('initialize')['instructions']
     assert 'You may include that URL as a Markdown link' in instructions
-    assert 'Every run starts a new session' in instructions
+    assert 'By default every run starts a new session' in instructions
     descriptions = {t['name']: t['description'] for t in rpc('tools/list')['tools']}
     for verb in ('create', 'edit', 'delete'):
         assert 'you may share the link' in descriptions[verb + '_scheduled_task']

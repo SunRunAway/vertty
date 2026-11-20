@@ -58,6 +58,10 @@ final class AppStore: ObservableObject {
     var scheduleTimer: Timer?
     /// Since when a scheduled Claude turn has looked idle without a Stop hook.
     var scheduleIdleSince: [UUID: Date] = [:]
+    // Runs not launched yet: their session is being checked, or its card stopped.
+    var schedulePreparing: Set<UUID> = []
+    // Selecting a card whose agent a run is stopping mustn't start it again.
+    var scheduleStoppingTabs: Set<UUID> = []
 
     var selectedTab: TabSession? { tabs.first { $0.id == selectedTabID } }
 
@@ -491,13 +495,14 @@ final class AppStore: ObservableObject {
     // MARK: - Launching Claude
 
     private func launchIfNeeded(_ tab: TabSession) {
-        guard tab.surface == nil else { return }
+        guard tab.surface == nil, !scheduleStoppingTabs.contains(tab.id) else { return }
         launch(tab)
     }
 
     /// Starts the card's agent: resumed when its session exists, else new. A
     /// scheduled run hands over its prompt with it.
-    func launch(_ tab: TabSession, prompt: String? = nil, scheduleRunID: UUID? = nil) {
+    func launch(_ tab: TabSession, prompt: String? = nil, scheduleRunID: UUID? = nil,
+                model: String? = nil, effort: String? = nil) {
         guard let project = project(tab.projectID) else { return }
         var transcript: URL?
         let resume: Bool
@@ -511,7 +516,8 @@ final class AppStore: ObservableObject {
         }
         let options = TerminalSurfaceView.Options(
             workingDirectory: launchDirectory(project),
-            command: ClaudeLauncher.command(kind: tab.kind, sessionID: tab.sessionID, resume: resume, prompt: prompt),
+            command: ClaudeLauncher.command(kind: tab.kind, sessionID: tab.sessionID, resume: resume, prompt: prompt,
+                                            model: model, effort: effort),
             environment: ClaudeLauncher.environment(tabID: tab.id, scheduleRunID: scheduleRunID))
         let surface = TerminalSurfaceView(options: options)
         surface.onTitleChange = { [weak self, weak tab] title in

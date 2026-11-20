@@ -20,9 +20,12 @@ struct HookEvent {
 final class HookServer {
     let socketPath: String
     private let onEvent: (HookEvent) -> Void
+    // Called off the main thread.
     var onScheduleRequest: (([String: Any]) -> [String: Any])?
     private var fd: Int32 = -1
     private let queue = DispatchQueue(label: "vertty.hooks.handle")
+    // A schedule request can wait seconds for an agent's model list; hooks mustn't wait behind it.
+    private let scheduleQueue = DispatchQueue(label: "vertty.schedule.handle")
 
     init(socketPath: String, onEvent: @escaping (HookEvent) -> Void) {
         self.socketPath = socketPath
@@ -65,7 +68,8 @@ final class HookServer {
     }
 
     private func handle(_ client: Int32) {
-        defer { close(client) }
+        var handedOff = false
+        defer { if !handedOff { close(client) } }
         var tv = timeval(tv_sec: 3, tv_usec: 0)
         setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
 
@@ -79,7 +83,13 @@ final class HookServer {
         }
 
         if let nl = data.firstIndex(of: UInt8(ascii: "\n")), data[..<nl].elementsEqual("schedule".utf8) {
-            return answerSchedule(client, data[(nl + 1)...])
+            handedOff = true
+            let body = Data(data[(nl + 1)...])
+            scheduleQueue.async {
+                self.answerSchedule(client, body)
+                close(client)
+            }
+            return
         }
         guard let nl = data.firstIndex(of: UInt8(ascii: "\n")),
               let tabID = UUID(uuidString: String(decoding: data[..<nl], as: UTF8.self).trimmingCharacters(in: .whitespaces)),
@@ -103,7 +113,7 @@ extension HookServer {
     fileprivate func answerSchedule(_ client: Int32, _ body: Data) {
         var reply: [String: Any] = ["ok": false, "error": "Bad request."]
         if let request = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any], let handler = onScheduleRequest {
-            reply = DispatchQueue.main.sync { handler(request) }
+            reply = handler(request)
         }
         guard let out = try? JSONSerialization.data(withJSONObject: reply, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]) else { return }
         out.withUnsafeBytes { raw in

@@ -67,7 +67,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Ghos
             self?.store.handleHook(event)
         }
         hookServer?.onScheduleRequest = { [weak self] request in
-            self?.store.handleScheduleRequest(request) ?? ["ok": false, "error": "Vertty is quitting."]
+            let fields = request["fields"] as? [String: Any] ?? [:]
+            if fields["model"] != nil || fields["effort"] != nil { AgentModels.shared.loadMissing() }
+            return DispatchQueue.main.sync {
+                self?.store.handleScheduleRequest(request) ?? ["ok": false, "error": "Vertty is quitting."]
+            }
         }
         hookServer?.start()
 

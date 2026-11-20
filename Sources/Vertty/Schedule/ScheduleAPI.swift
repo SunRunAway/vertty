@@ -84,7 +84,8 @@ extension AppStore {
     /// asking session unless given, and can't change once the task has its session.
     private func filledTask(_ existing: ScheduleTask?, _ f: [String: Any], source: TabSession?,
                            cwd: String?) -> Result<ScheduleTask, APIError> {
-        let known: Set<String> = ["name", "prompt", "repeat", "days", "month_days", "date", "time", "timezone", "project", "agent"]
+        let known: Set<String> = ["name", "prompt", "repeat", "days", "month_days", "date", "time", "timezone", "project", "agent",
+                                  "model", "effort", "new_session_each_run"]
         if let extra = f.keys.first(where: { !known.contains($0) }) { return .failure(APIError(message: "Unknown field: \(extra)")) }
         func str(_ k: String) -> String? { (f[k] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) }
 
@@ -126,7 +127,42 @@ extension AppStore {
         }
         if let project { t.projectID = project.id }
         if let path = self.project(t.projectID)?.path { t.projectPath = path }
-        if let kind { t.kind = kind }
+        if let kind, kind != t.kind {
+            // The other agent's model and effort mean nothing to this one.
+            t.kind = kind
+            t.model = nil
+            t.effort = nil
+        }
+        if f["new_session_each_run"] != nil {
+            switch f["new_session_each_run"] {
+            case let b as Bool: t.continuesSession = !b
+            case let v as String where ["true", "yes"].contains(v.lowercased()): t.continuesSession = false
+            case let v as String where ["false", "no"].contains(v.lowercased()): t.continuesSession = true
+            default: return .failure(APIError(message: "new_session_each_run must be true or false."))
+            }
+        }
+        if str("model") != nil || str("effort") != nil {
+            guard let catalog = AgentModels.shared.catalog(t.kind) else {
+                return .failure(APIError(message: "Couldn't read \(t.kind.name)'s model list."))
+            }
+            if let v = str("model") {
+                let choices = ["default"] + catalog.models.map(\.id)
+                guard choices.contains(v) else {
+                    return .failure(APIError(message: "model must be one of: \(choices.joined(separator: ", "))."))
+                }
+                t.model = v == "default" ? nil : v
+            }
+            if let v = str("effort") {
+                let levels = catalog.efforts(for: t.model) ?? []
+                guard v == "default" || levels.contains(v) else {
+                    return .failure(APIError(message: levels.isEmpty ? "This model takes no effort level; use default."
+                        : "effort must be one of: \((["default"] + levels).joined(separator: ", "))."))
+                }
+                t.effort = v == "default" ? nil : v
+            } else if let effort = t.effort, !(catalog.efforts(for: t.model) ?? []).contains(effort) {
+                t.effort = nil
+            }
+        }
         if let v = str("name") { t.name = v }
         if let v = f["prompt"] as? String { t.prompt = v.trimmingCharacters(in: .whitespacesAndNewlines) }
         if let v = str("repeat") {
@@ -209,6 +245,8 @@ extension AppStore {
             "schedule": t.timing.summary, "repeat": t.timing.repeatKind.rawValue,
             "timezone": t.timing.timeZoneID ?? "local",
             "time": String(format: "%02d:%02d", t.timing.hour, t.timing.minute),
+            "model": t.model ?? "default", "effort": t.effort ?? "default",
+            "new_session_each_run": !t.resumesSession,
             "enabled": t.enabled, "deleted": t.isDeleted, "state": schedules.state(of: t).rawValue,
             "nextRun": t.enabled ? (t.nextPlan.map(iso) ?? NSNull()) : NSNull(),
             "lastRunState": schedules.shownRun(of: t.id)?.state.rawValue ?? NSNull(),

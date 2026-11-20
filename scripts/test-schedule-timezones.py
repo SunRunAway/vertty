@@ -47,7 +47,7 @@ def drive(command):
     wait(lambda: not path.exists())
 
 
-def popover(y=624):
+def popover(y=762):
     width = float(re.search(r'windowSize=([\d.]+),', state())[1])
     drive(f'postclick {width - 80} {y}')
     match = wait(lambda: re.search(r'window=(\d+) class=\S*Popover\S*', state()))

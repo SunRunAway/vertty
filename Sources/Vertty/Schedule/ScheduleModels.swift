@@ -169,6 +169,10 @@ struct ScheduleTask: Codable, Identifiable, Equatable {
     var kind: AgentKind
     var prompt: String
     var timing: ScheduleTiming
+    var model: String?
+    var effort: String?
+    // Optional so task files written before this option still decode.
+    var continuesSession: Bool?
     var enabled = true
     var createdAt = Date()
     var deletedAt: Date?
@@ -179,6 +183,7 @@ struct ScheduleTask: Codable, Identifiable, Equatable {
     var endedAt: Date?
 
     var isDeleted: Bool { deletedAt != nil }
+    var resumesSession: Bool { continuesSession == true }
     /// Project and agent are fixed once the task has its session.
     var isBound: Bool { !(sessionID ?? "").isEmpty }
 }
