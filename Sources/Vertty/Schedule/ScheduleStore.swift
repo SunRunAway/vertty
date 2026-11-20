@@ -114,7 +114,7 @@ final class ScheduleStore: ObservableObject {
         return true
     }
 
-    /// Applies an edit's settings (name, prompt, schedule, project, agent) to the
+    /// Applies an edit's settings (name, prompt, schedule, project, agent, model, effort, session reuse) to the
     /// task as it is now, keeping what the scheduler changed meanwhile (next plan,
     /// session). Edits only affect later runs; a new time rule plans from now on,
     /// without catching up what the old rule missed. Returns why it can't apply.
@@ -133,6 +133,9 @@ final class ScheduleStore: ObservableObject {
         t.projectID = edit.projectID
         t.projectPath = edit.projectPath
         t.kind = edit.kind
+        t.model = edit.model
+        t.effort = edit.effort
+        t.continuesSession = edit.continuesSession
         if edit.timing != t.timing {
             t.timing = edit.timing
             // A task ended by hand starts again with its new schedule.

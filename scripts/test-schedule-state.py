@@ -51,6 +51,15 @@ edit.timing.year = 2099
 assert(store.applyEdit(edit) == nil)
 state(.active)
 assert(store.task(task.id)!.nextPlan != nil)
+edit = store.task(task.id)!
+edit.model = "fixture-model"
+edit.effort = "high"
+edit.continuesSession = true
+assert(store.applyEdit(edit) == nil)
+let options = ScheduleStore()
+options.load()
+assert(options.task(task.id)!.model == "fixture-model" && options.task(task.id)!.effort == "high"
+    && options.task(task.id)!.resumesSession)
 store.setEnabled(task.id, false)
 state(.paused)
 edit = store.task(task.id)!
